@@ -1,0 +1,76 @@
+services:
+  api:
+    build:
+      context: ./apps/api
+    ports:
+      - "${API_PORT:-8000}:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://drug:drug@postgres:5432/drug
+      REDIS_URL: redis://redis:6379/0
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      STORAGE_BACKEND: local
+      LOCAL_STORAGE_ROOT: /data/blobs
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8000}
+      USE_MODAL_DOCKING: ${USE_MODAL_DOCKING:-false}
+    volumes:
+      - blob_data:/data/blobs
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  worker:
+    build:
+      context: ./apps/api
+    command: ["uv", "run", "arq", "api.workers.settings.WorkerSettings"]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://drug:drug@postgres:5432/drug
+      REDIS_URL: redis://redis:6379/0
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      STORAGE_BACKEND: local
+      LOCAL_STORAGE_ROOT: /data/blobs
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8000}
+      USE_MODAL_DOCKING: ${USE_MODAL_DOCKING:-false}
+    volumes:
+      - blob_data:/data/blobs
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 2s
+      retries: 10
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: drug
+      POSTGRES_PASSWORD: drug
+      POSTGRES_DB: drug
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U drug -d drug"]
+      interval: 2s
+      timeout: 2s
+      retries: 10
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
+  blob_data:
