@@ -73,16 +73,22 @@ GENES: dict[str, GeneEntry] = {
         "symbol": "BRCA1",
         "name": "Breast cancer type 1 susceptibility protein",
         "uniprot_id": "P38398",
-        "role": "DNA double-strand break repair (homologous recombination). "
-        "Germline pathogenic variants → elevated breast/ovarian cancer risk "
-        "and PARP-inhibitor eligibility (synthetic lethality).",
+        "role": "DNA double-strand break repair via homologous recombination. "
+        "Germline pathogenic variants drive roughly 55-70% lifetime breast "
+        "cancer risk and 40-45% lifetime ovarian cancer risk. Loss of BRCA1 "
+        "function creates the HR-deficient state that PARP inhibitors "
+        "(olaparib, niraparib, rucaparib) exploit via synthetic lethality "
+        "in both breast AND ovarian tumors.",
     },
     "BRCA2": {
         "symbol": "BRCA2",
         "name": "Breast cancer type 2 susceptibility protein",
         "uniprot_id": "P51587",
         "role": "DNA double-strand break repair. Germline pathogenic variants "
-        "→ elevated breast/ovarian cancer risk and PARP-inhibitor eligibility.",
+        "confer ~45-70% lifetime breast cancer risk and ~15-25% lifetime "
+        "ovarian cancer risk. Like BRCA1, BRCA2 loss creates HR deficiency, "
+        "qualifying the tumor for PARP-inhibitor therapy across breast, "
+        "ovarian, pancreatic, and prostate indications.",
     },
     "ESR1": {
         "symbol": "ESR1",
@@ -133,15 +139,6 @@ GENES: dict[str, GeneEntry] = {
         "anastrozole, exemestane in postmenopausal ER+ breast cancer. Rare "
         "variants modestly affect estrogen levels and AI response.",
     },
-    # Added for cross-oncology demo patients — imatinib/ABL1 + capecitabine/TYMS.
-    "ABL1": {
-        "symbol": "ABL1",
-        "name": "Tyrosine-protein kinase ABL1",
-        "uniprot_id": "P00519",
-        "role": "Non-receptor tyrosine kinase. In chronic myeloid leukemia, "
-        "the BCR-ABL1 fusion protein drives constitutive kinase activity and "
-        "leukemogenesis. Target of imatinib, dasatinib, nilotinib, ponatinib.",
-    },
     "TYMS": {
         "symbol": "TYMS",
         "name": "Thymidylate synthase",
@@ -150,23 +147,32 @@ GENES: dict[str, GeneEntry] = {
         "by 5-fluorouracil (5-FU), the active metabolite of capecitabine. "
         "TS-inhibition is the primary mechanism of fluoropyrimidine cytotoxicity.",
     },
-    "TPMT": {
-        "symbol": "TPMT",
-        "name": "Thiopurine S-methyltransferase",
-        "uniprot_id": "P51580",
-        "role": "Inactivates thiopurine drugs (mercaptopurine, thioguanine, "
-        "azathioprine). Patients with low or absent TPMT activity accumulate "
-        "toxic metabolites and suffer life-threatening myelosuppression at "
-        "standard doses. CPIC Level A guidance.",
+    "PALB2": {
+        "symbol": "PALB2",
+        "name": "Partner and localizer of BRCA2",
+        "uniprot_id": "Q86YC2",
+        "role": "Bridges BRCA1 and BRCA2 during homologous-recombination DNA "
+        "repair. Germline pathogenic variants confer ~50% lifetime breast "
+        "cancer risk and qualify tumors for PARP-inhibitor therapy. Third "
+        "major HR gene after BRCA1 and BRCA2.",
     },
-    "UGT1A1": {
-        "symbol": "UGT1A1",
-        "name": "UDP-glucuronosyltransferase 1A1",
-        "uniprot_id": "P22309",
-        "role": "Conjugates SN-38 (the active metabolite of irinotecan) for "
-        "biliary excretion. Reduced UGT1A1 activity (as in UGT1A1*28/*28, "
-        "Gilbert's syndrome) causes SN-38 accumulation, severe neutropenia "
-        "and diarrhea. FDA label indicates dose reduction.",
+    "CHEK2": {
+        "symbol": "CHEK2",
+        "name": "Checkpoint kinase 2",
+        "uniprot_id": "O96017",
+        "role": "DNA-damage-response kinase activated by ATM. Germline "
+        "pathogenic variants (most commonly c.1100delC) approximately double "
+        "breast cancer risk. Moderate-penetrance gene; routinely screened "
+        "on clinical hereditary-cancer panels.",
+    },
+    "AKT1": {
+        "symbol": "AKT1",
+        "name": "RAC-alpha serine/threonine-protein kinase",
+        "uniprot_id": "P31749",
+        "role": "Central node of the PI3K/AKT/mTOR survival pathway. The "
+        "E17K hotspot mutation locks AKT1 at the plasma membrane in an "
+        "active conformation and drives ER+ breast cancer growth. Target "
+        "of capivasertib (FDA 2023, CAPItello-291).",
     },
     "PARP1": {
         "symbol": "PARP1",
@@ -252,9 +258,31 @@ DRUGS: dict[str, DrugEntry] = {
         "mechanism": "Traps PARP1/2 on DNA, causing double-strand breaks "
         "that require BRCA-mediated homologous repair to fix. In BRCA1/2-"
         "deficient cells, those breaks are lethal (synthetic lethality).",
-        "context_genes": ["BRCA1", "BRCA2"],
-        "breast_cancer_indication":"Germline BRCA1/2-mutated HER2-negative "
-        "metastatic breast cancer; adjuvant therapy in high-risk early BRCA+ disease.",
+        "context_genes": ["BRCA1", "BRCA2", "PALB2"],
+        "breast_cancer_indication": "FDA-approved across both breast AND "
+        "ovarian cancer. Breast: germline BRCA1/2-mutated HER2-negative "
+        "metastatic or high-risk early disease (OlympiA, OlympiAD). "
+        "Ovarian: first-line maintenance in BRCA1/2-mutated advanced "
+        "ovarian cancer after platinum response (SOLO-1).",
+    },
+    "niraparib": {
+        "id": "niraparib",
+        "name": "Niraparib (Zejula)",
+        "smiles": (
+            "C1CCC(CC1)C2=CC3=C(C=C2)N(NC3=O)CC4=CC=C(C=C4)C(=N)N"
+        ),
+        "category": "parp_inhibitor",
+        "primary_target_gene": "PARP1",
+        "metabolizing_gene": None,
+        "mechanism": "PARP1/2 inhibitor. Broader ovarian approval than "
+        "olaparib — works as maintenance after platinum response regardless "
+        "of BRCA status, though BRCA+/HRD+ tumors benefit most.",
+        "context_genes": ["BRCA1", "BRCA2", "PALB2"],
+        "breast_cancer_indication": "Primarily used in advanced ovarian "
+        "cancer (first-line and later-line maintenance, both BRCA-mutated "
+        "and HR-proficient). Included here as the prototypical ovarian "
+        "PARP inhibitor in the broader HR-deficient cancer framework this "
+        "tool covers alongside olaparib.",
     },
     "alpelisib": {
         "id": "alpelisib",
@@ -285,9 +313,9 @@ DRUGS: dict[str, DrugEntry] = {
     },
     "capecitabine": {
         "id": "capecitabine",
-        "name": "Capecitabine",
+        "name": "Capecitabine (Xeloda)",
         # For the 3D view we dock 5-fluorouracil (the active metabolite) into
-        # thymidylate synthase — capecitabine itself is a prodrug and doesn't
+        # thymidylate synthase. Capecitabine itself is a prodrug and doesn't
         # bind TS directly. This gives a biologically meaningful docking pose.
         "smiles": "C1=C(C(=O)NC(=O)N1)F",  # 5-FU
         "category": "chemotherapy",
@@ -297,55 +325,62 @@ DRUGS: dict[str, DrugEntry] = {
         "synthase inhibition → disrupts DNA synthesis. DPYD deficiency causes "
         "5-FU accumulation and severe, sometimes fatal toxicity.",
         "context_genes": [],
-        "breast_cancer_indication":"Metastatic breast cancer after anthracycline/"
-        "taxane failure, or in triple-negative disease. Also standard of care "
-        "in metastatic colorectal cancer (demo Patient C).",
+        "breast_cancer_indication": "Metastatic breast cancer, especially "
+        "triple-negative disease, after anthracycline/taxane failure. DPYD "
+        "genotyping before starting is increasingly standard of care.",
     },
-    "imatinib": {
-        "id": "imatinib",
-        "name": "Imatinib",
-        "smiles": "CC1=C(C=C(C=C1)NC(=O)C2=CC=C(C=C2)CN3CCN(CC3)C)NC4=NC=CC(=N4)C5=CN=CC=C5",
-        "category": "her2_targeted",  # reused category tag; it's a TKI
-        "primary_target_gene": "ABL1",
+    "elacestrant": {
+        "id": "elacestrant",
+        "name": "Elacestrant (Orserdu)",
+        "smiles": (
+            "CCN(CC1)CCC1(C2=CC=CC(=C2)O)C3=CC=C(C(=C3)O)C(CCN4CCCCC4)C"
+        ),
+        "category": "hormone_therapy",
+        "primary_target_gene": "ESR1",
         "metabolizing_gene": None,
-        "mechanism": "ATP-competitive inhibitor of BCR-ABL1, KIT, and PDGFR "
-        "tyrosine kinases. Locks ABL1 in an inactive conformation, blocking "
-        "phosphorylation of downstream survival/proliferation signals.",
+        "mechanism": "Oral selective estrogen receptor degrader (SERD). "
+        "Binds ER, induces receptor degradation, and remains active against "
+        "ESR1 ligand-binding-domain mutants (Y537S, D538G) that drive "
+        "resistance to aromatase inhibitors.",
         "context_genes": [],
-        "breast_cancer_indication":"Standard of care for Chronic Myeloid "
-        "Leukemia (CML) and GIST. The classic BCR-ABL1 targeted therapy.",
+        "breast_cancer_indication": "FDA-approved 2023 for ER+/HER2- "
+        "advanced breast cancer with an ESR1 mutation, after one prior "
+        "line of endocrine therapy.",
     },
-    "mercaptopurine": {
-        "id": "mercaptopurine",
-        "name": "Mercaptopurine (6-MP)",
-        "smiles": "C1=NC2=C(N1)C(=S)N=CN2",
-        "category": "chemotherapy",
-        "primary_target_gene": "TPMT",
-        "metabolizing_gene": "TPMT",
-        "mechanism": "Purine analog that, after intracellular activation, "
-        "interferes with DNA and RNA synthesis in rapidly dividing cells. "
-        "TPMT inactivates the drug; low TPMT activity causes toxic "
-        "accumulation.",
-        "context_genes": [],
-        "breast_cancer_indication":"Standard of care for pediatric acute "
-        "lymphoblastic leukemia (ALL) maintenance therapy and some "
-        "inflammatory bowel disease regimens.",
+    "capivasertib": {
+        "id": "capivasertib",
+        "name": "Capivasertib (Truqap)",
+        "smiles": (
+            "C1CC(NC(=O)C1)C2=CC=C(C=C2)C3=NC=NC4=C3C=CN4CC(=O)NC5CCCCC5N"
+        ),
+        "category": "pi3k_inhibitor",  # reuses the bucket; it's technically AKT
+        "primary_target_gene": "AKT1",
+        "metabolizing_gene": None,
+        "mechanism": "ATP-competitive, selective inhibitor of all three AKT "
+        "isoforms (AKT1/2/3). Blocks the AKT node in the PI3K/AKT/mTOR "
+        "pathway that drives ER+ breast cancer growth, especially in tumors "
+        "with activating AKT1, PIK3CA, or PTEN alterations.",
+        "context_genes": ["PIK3CA", "PTEN"],
+        "breast_cancer_indication": "FDA-approved 2023 with fulvestrant for "
+        "HR+/HER2- advanced breast cancer harboring AKT1/PIK3CA/PTEN "
+        "alterations, after endocrine-therapy progression (CAPItello-291).",
     },
-    "irinotecan": {
-        "id": "irinotecan",
-        "name": "Irinotecan (Camptosar)",
-        "smiles": "CCC1=C2CN3C(=CC4=C(C3=O)COC(=O)C4(CC)O)C2=NC5=CC(=CC=C51)OC(=O)N6CCC(CC6)N7CCCCC7",
-        "category": "chemotherapy",
-        "primary_target_gene": "UGT1A1",
-        "metabolizing_gene": "UGT1A1",
-        "mechanism": "Topoisomerase-I inhibitor. Its active metabolite SN-38 "
-        "traps topoisomerase-DNA complexes, causing double-strand breaks in "
-        "dividing cells. UGT1A1 conjugates SN-38 for excretion; reduced "
-        "UGT1A1 activity causes SN-38 accumulation and severe toxicity.",
+    "trastuzumab_deruxtecan": {
+        "id": "trastuzumab_deruxtecan",
+        "name": "Trastuzumab deruxtecan (Enhertu)",
+        "smiles": "",  # antibody-drug conjugate; don't dock
+        "category": "her2_targeted",
+        "primary_target_gene": "ERBB2",
+        "metabolizing_gene": None,
+        "mechanism": "HER2-targeted antibody-drug conjugate. Trastuzumab "
+        "carries a topoisomerase-I-inhibitor payload (DXd) directly to "
+        "HER2-expressing cells, where it's cleaved and kills the cell. "
+        "Active even against HER2-LOW (IHC 1+ or 2+/ISH-) tumors, expanding "
+        "the treatable HER2 population beyond classical HER2+.",
         "context_genes": [],
-        "breast_cancer_indication":"First-line / second-line therapy for "
-        "metastatic colorectal cancer (often as FOLFIRI) and pancreatic "
-        "cancer.",
+        "breast_cancer_indication": "FDA-approved 2022 (DESTINY-Breast04) "
+        "for HER2-low metastatic breast cancer and for classical HER2+ "
+        "disease after prior anti-HER2 therapy.",
     },
 }
 
@@ -494,39 +529,89 @@ VARIANTS: dict[str, VariantEntry] = {
         "effect_summary": "Reduced DPD activity. CPIC recommends ~50% "
         "capecitabine dose reduction in heterozygotes.",
     },
-    # --- TPMT (thiopurine toxicity) ---
-    "TPMT_star3A": {
-        "id": "TPMT_star3A",
-        "gene_symbol": "TPMT",
-        "name": "TPMT*3A (p.Ala154Thr + p.Tyr240Cys)",
-        "hgvs_protein": "p.A154T+p.Y240C",
-        "residue_positions": [154, 240],
-        "clinical_significance": "drug_response",
-        "effect_summary": "Most common TPMT deficiency allele. Homozygotes "
-        "have essentially absent TPMT activity and accumulate toxic "
-        "thiopurine metabolites. Heterozygotes have intermediate activity.",
+    # --- PALB2 (hereditary breast cancer, PARPi eligibility) ---
+    "PALB2_1592delT": {
+        "id": "PALB2_1592delT",
+        "gene_symbol": "PALB2",
+        "name": "PALB2 c.1592delT (Finnish founder)",
+        "hgvs_protein": "p.Leu531CysfsTer30",
+        "residue_positions": [531],
+        "clinical_significance": "pathogenic",
+        "effect_summary": "Frameshift variant prevalent in Finnish populations. "
+        "Truncates PALB2 before its WD40 BRCA2-binding domain, abolishing "
+        "homologous-recombination repair. ~50% lifetime breast cancer risk "
+        "in heterozygous carriers.",
     },
-    "TPMT_star2": {
-        "id": "TPMT_star2",
-        "gene_symbol": "TPMT",
-        "name": "TPMT*2 (p.Ala80Pro)",
-        "hgvs_protein": "p.A80P",
-        "residue_positions": [80],
-        "clinical_significance": "drug_response",
-        "effect_summary": "Loss-of-function TPMT variant. Heterozygotes "
-        "are intermediate metabolizers.",
+    "PALB2_3113G_A": {
+        "id": "PALB2_3113G_A",
+        "gene_symbol": "PALB2",
+        "name": "PALB2 c.3113G>A (p.Trp1038Ter)",
+        "hgvs_protein": "p.W1038*",
+        "residue_positions": [1038],
+        "clinical_significance": "pathogenic",
+        "effect_summary": "Nonsense variant in the WD40 domain disrupts the "
+        "BRCA2 interaction surface. Recurrently observed in hereditary "
+        "breast and pancreatic cancer families.",
     },
-    # --- UGT1A1 (irinotecan toxicity / Gilbert's) ---
-    "UGT1A1_star28": {
-        "id": "UGT1A1_star28",
-        "gene_symbol": "UGT1A1",
-        "name": "UGT1A1*28 (TA7 promoter repeat)",
-        "hgvs_protein": None,
-        "residue_positions": [],
+    # --- CHEK2 (moderate-penetrance breast cancer) ---
+    "CHEK2_1100delC": {
+        "id": "CHEK2_1100delC",
+        "gene_symbol": "CHEK2",
+        "name": "CHEK2 c.1100delC (Northern European founder)",
+        "hgvs_protein": "p.Thr367MetfsTer15",
+        "residue_positions": [367],
+        "clinical_significance": "pathogenic",
+        "effect_summary": "Frameshift in the kinase domain truncates CHEK2. "
+        "Approximately doubles lifetime breast cancer risk in female "
+        "carriers and modestly elevates risk in male carriers. Common "
+        "founder variant on routine hereditary-cancer panels.",
+    },
+    "CHEK2_I157T": {
+        "id": "CHEK2_I157T",
+        "gene_symbol": "CHEK2",
+        "name": "CHEK2 p.Ile157Thr",
+        "hgvs_protein": "p.I157T",
+        "residue_positions": [157],
+        "clinical_significance": "pathogenic",
+        "effect_summary": "Missense change in the FHA domain. Lower penetrance "
+        "than 1100delC but still elevates breast and prostate cancer risk. "
+        "Most common in Slavic populations.",
+    },
+    # --- AKT1 (hotspot, capivasertib biomarker) ---
+    "AKT1_E17K": {
+        "id": "AKT1_E17K",
+        "gene_symbol": "AKT1",
+        "name": "AKT1 p.Glu17Lys",
+        "hgvs_protein": "p.E17K",
+        "residue_positions": [17],
         "clinical_significance": "drug_response",
-        "effect_summary": "Extra TA repeat in the promoter reduces UGT1A1 "
-        "expression. Homozygotes (*28/*28) have Gilbert's syndrome and "
-        "accumulate SN-38, the active metabolite of irinotecan.",
+        "effect_summary": "Activating hotspot in the PH domain. Locks AKT1 "
+        "at the membrane in a constitutively active conformation. Occurs "
+        "in ~6% of ER+ breast cancers and is an FDA-recognized biomarker "
+        "for capivasertib (CAPItello-291).",
+    },
+    # --- ESR1 (additional resistance mutations, elacestrant biomarkers) ---
+    "ESR1_Y537N": {
+        "id": "ESR1_Y537N",
+        "gene_symbol": "ESR1",
+        "name": "ESR1 p.Tyr537Asn",
+        "hgvs_protein": "p.Y537N",
+        "residue_positions": [537],
+        "clinical_significance": "drug_response",
+        "effect_summary": "Ligand-independent ER activation, same mechanism "
+        "as Y537S. Confers aromatase-inhibitor resistance. Retains partial "
+        "response to elacestrant (EMERALD).",
+    },
+    "ESR1_L536P": {
+        "id": "ESR1_L536P",
+        "gene_symbol": "ESR1",
+        "name": "ESR1 p.Leu536Pro",
+        "hgvs_protein": "p.L536P",
+        "residue_positions": [536],
+        "clinical_significance": "drug_response",
+        "effect_summary": "Helix 12 mutation that stabilizes the agonist "
+        "conformation without estrogen. Less common than Y537S/D538G but "
+        "same clinical implication of endocrine resistance.",
     },
 }
 
@@ -605,19 +690,21 @@ PGX_RULES: list[PGxRule] = [
         "evidence_level": "A",
         "source": "CPIC 2017 fluoropyrimidines/DPYD guideline",
     },
-    # --- Olaparib / BRCA1 / BRCA2 (FDA label, OlympiA trial) ---
+    # --- Olaparib / BRCA1 / BRCA2 (FDA label, OlympiA + SOLO-1) ---
     {
         "drug_id": "olaparib",
         "gene_symbol": "BRCA1",
         "variant_ids": ["BRCA1_185delAG", "BRCA1_C61G"],
         "genotype": "heterozygous",
         "phenotype": "germline BRCA1 pathogenic carrier",
-        "recommendation": "FDA-approved indication. Olaparib is eligible for "
-        "HER2-negative high-risk early or metastatic breast cancer with a "
-        "germline BRCA1/2 pathogenic variant. Tumor second-hit confers "
-        "HR-deficiency and synthetic lethality.",
+        "recommendation": "FDA-approved across both breast AND ovarian "
+        "cancer for germline BRCA1 pathogenic carriers. Breast: HER2-negative "
+        "high-risk early or metastatic disease (OlympiA, OlympiAD). Ovarian: "
+        "first-line maintenance after platinum response (SOLO-1). The tumor "
+        "second-hit BRCA1 inactivation creates HR deficiency and synthetic "
+        "lethality with PARP inhibition.",
         "evidence_level": "A",
-        "source": "FDA olaparib label + OlympiA (NEJM 2021)",
+        "source": "FDA olaparib label; OlympiA (NEJM 2021); SOLO-1 (NEJM 2018)",
     },
     {
         "drug_id": "olaparib",
@@ -625,10 +712,36 @@ PGX_RULES: list[PGxRule] = [
         "variant_ids": ["BRCA2_6174delT"],
         "genotype": "heterozygous",
         "phenotype": "germline BRCA2 pathogenic carrier",
-        "recommendation": "FDA-approved indication (see BRCA1 note, applies "
-        "to either gene).",
+        "recommendation": "FDA-approved indication. Same breast + ovarian "
+        "eligibility as germline BRCA1. BRCA2 carriers additionally qualify "
+        "for olaparib in BRCA-mutated pancreatic (POLO) and metastatic "
+        "castration-resistant prostate cancer (PROfound).",
         "evidence_level": "A",
-        "source": "FDA olaparib label + OlympiA",
+        "source": "FDA olaparib label; OlympiA; POLO; PROfound",
+    },
+    # --- Niraparib / BRCA1 / BRCA2 (ovarian maintenance) ---
+    {
+        "drug_id": "niraparib",
+        "gene_symbol": "BRCA1",
+        "variant_ids": ["BRCA1_185delAG", "BRCA1_C61G"],
+        "genotype": "heterozygous",
+        "phenotype": "germline BRCA1 pathogenic carrier",
+        "recommendation": "FDA-approved for ovarian cancer maintenance "
+        "therapy. BRCA-mutated carriers had the largest progression-free "
+        "survival benefit in PRIMA and NOVA.",
+        "evidence_level": "A",
+        "source": "FDA niraparib label; PRIMA (NEJM 2019); NOVA (NEJM 2016)",
+    },
+    {
+        "drug_id": "niraparib",
+        "gene_symbol": "BRCA2",
+        "variant_ids": ["BRCA2_6174delT"],
+        "genotype": "heterozygous",
+        "phenotype": "germline BRCA2 pathogenic carrier",
+        "recommendation": "FDA-approved for ovarian cancer maintenance "
+        "(same as BRCA1).",
+        "evidence_level": "A",
+        "source": "FDA niraparib label; PRIMA; NOVA",
     },
     # --- Alpelisib / PIK3CA (FDA SOLAR-1) ---
     {
@@ -669,53 +782,72 @@ PGX_RULES: list[PGxRule] = [
         "evidence_level": "B",
         "source": "MutHER, SUMMIT basket trials",
     },
-    # --- Mercaptopurine / TPMT (CPIC Level A) ---
+    # --- Olaparib / PALB2 (FDA 2023 expansion of PARPi biomarker panel) ---
     {
-        "drug_id": "mercaptopurine",
-        "gene_symbol": "TPMT",
-        "variant_ids": ["TPMT_star3A", "TPMT_star2"],
-        "genotype": "homozygous",
-        "phenotype": "TPMT poor metabolizer",
-        "recommendation": "CPIC: start with drastically reduced dose (often "
-        "about 10% of standard) or choose alternative agents. Full dose can "
-        "cause fatal myelosuppression.",
-        "evidence_level": "A",
-        "source": "CPIC 2019 thiopurines/TPMT guideline",
-    },
-    {
-        "drug_id": "mercaptopurine",
-        "gene_symbol": "TPMT",
-        "variant_ids": ["TPMT_star3A", "TPMT_star2"],
+        "drug_id": "olaparib",
+        "gene_symbol": "PALB2",
+        "variant_ids": ["PALB2_1592delT", "PALB2_3113G_A"],
         "genotype": "heterozygous",
-        "phenotype": "TPMT intermediate metabolizer",
-        "recommendation": "CPIC: start at 30 to 80 percent of the standard "
-        "dose and adjust based on complete blood counts.",
-        "evidence_level": "A",
-        "source": "CPIC 2019 thiopurines/TPMT guideline",
-    },
-    # --- Irinotecan / UGT1A1 (FDA label) ---
-    {
-        "drug_id": "irinotecan",
-        "gene_symbol": "UGT1A1",
-        "variant_ids": ["UGT1A1_star28"],
-        "genotype": "homozygous",
-        "phenotype": "UGT1A1*28/*28 (Gilbert's syndrome)",
-        "recommendation": "FDA label advises reducing the starting dose by at "
-        "least one level in UGT1A1*28 homozygotes due to increased risk of "
-        "severe neutropenia and diarrhea.",
-        "evidence_level": "A",
-        "source": "FDA irinotecan label",
-    },
-    {
-        "drug_id": "irinotecan",
-        "gene_symbol": "UGT1A1",
-        "variant_ids": ["UGT1A1_star28"],
-        "genotype": "heterozygous",
-        "phenotype": "UGT1A1*1/*28",
-        "recommendation": "Heterozygotes tolerate standard doses in most "
-        "studies, but monitor neutrophil counts closely early in therapy.",
+        "phenotype": "germline PALB2 pathogenic carrier",
+        "recommendation": "PALB2 loss phenocopies BRCA2 loss and creates HR "
+        "deficiency. Olaparib eligibility has been supported by NCCN "
+        "guidelines and FDA biomarker expansion. Consider PARPi therapy "
+        "alongside guideline-concordant management.",
         "evidence_level": "B",
-        "source": "FDA irinotecan label; DPWG guidance",
+        "source": "NCCN Breast v4.2024; Tung et al. JCO 2020",
+    },
+    # --- Capivasertib / AKT1 + PIK3CA + PTEN (FDA 2023, CAPItello-291) ---
+    {
+        "drug_id": "capivasertib",
+        "gene_symbol": "AKT1",
+        "variant_ids": ["AKT1_E17K"],
+        "genotype": "heterozygous",
+        "phenotype": "AKT1 E17K-mutated tumor",
+        "recommendation": "FDA-approved indication. Capivasertib + "
+        "fulvestrant in HR+/HER2- advanced breast cancer with an AKT1, "
+        "PIK3CA, or PTEN alteration after endocrine progression.",
+        "evidence_level": "A",
+        "source": "FDA capivasertib label (CAPItello-291, NEJM 2023)",
+    },
+    {
+        "drug_id": "capivasertib",
+        "gene_symbol": "PIK3CA",
+        "variant_ids": ["PIK3CA_H1047R", "PIK3CA_E545K"],
+        "genotype": "heterozygous",
+        "phenotype": "PIK3CA-altered tumor",
+        "recommendation": "FDA-approved biomarker. Alpelisib is the longer-"
+        "established PI3K-alpha-selective option for the same indication; "
+        "capivasertib is often chosen when PI3K-alpha-specific toxicity "
+        "(hyperglycemia, rash) is a concern.",
+        "evidence_level": "A",
+        "source": "FDA capivasertib label (CAPItello-291)",
+    },
+    # --- Elacestrant / ESR1 (FDA 2023, EMERALD) ---
+    {
+        "drug_id": "elacestrant",
+        "gene_symbol": "ESR1",
+        "variant_ids": ["ESR1_Y537S", "ESR1_D538G", "ESR1_Y537N", "ESR1_L536P"],
+        "genotype": "any",
+        "phenotype": "ESR1-mutated tumor",
+        "recommendation": "FDA-approved indication. Elacestrant is approved "
+        "for ER+/HER2-, ESR1-mutated advanced breast cancer after at least "
+        "one prior line of endocrine therapy.",
+        "evidence_level": "A",
+        "source": "FDA elacestrant label (EMERALD, NEJM 2022)",
+    },
+    # --- Trastuzumab deruxtecan / ERBB2 (HER2-low expansion) ---
+    {
+        "drug_id": "trastuzumab_deruxtecan",
+        "gene_symbol": "ERBB2",
+        "variant_ids": ["ERBB2_L755S", "ERBB2_V777L"],
+        "genotype": "any",
+        "phenotype": "HER2-expressing or HER2-mutant tumor",
+        "recommendation": "FDA-approved for HER2-low (IHC 1+ or 2+/ISH-) "
+        "metastatic disease and for classical HER2+ disease after prior "
+        "anti-HER2 therapy. Active even at low HER2 protein levels thanks "
+        "to the bystander effect of the deruxtecan payload.",
+        "evidence_level": "A",
+        "source": "FDA trastuzumab deruxtecan label (DESTINY-Breast04 / -06)",
     },
 ]
 
@@ -793,8 +925,18 @@ class DemoPatient(TypedDict):
     persona_name: str   # first name used in patient-friendly narrative ("Maya")
     scenario: str
     indication: str
+    # Tumor subtype so the UI + the future drug-relevance filter can reason
+    # about it. Covers both breast (HR+/HER2-, HER2+, HER2-low, TNBC) and
+    # ovarian (high-grade serous — the dominant subtype for BRCA+ patients).
+    subtype: Literal[
+        "HR+/HER2-",
+        "HER2+",
+        "HER2-low",
+        "TNBC",
+        "ovarian_HGSOC",
+    ]
     drug_id: str
-    medication_display: str  # e.g. "Imatinib (Gleevec)"
+    medication_display: str  # e.g. "Olaparib (Lynparza)"
     status: str  # "expected" | "reduced" | "dose-adjustment" — maps to StatusBadge
     status_color: str  # "success" | "warning" | "info"
     genotype_summary: dict[str, str]
@@ -804,27 +946,34 @@ class DemoPatient(TypedDict):
 
 
 DEMO_PATIENTS: list[DemoPatient] = [
+    # Three preset patients covering the three major breast cancer subtypes
+    # (triple-negative, hormone-receptor positive, HER2-positive) and the
+    # three severity levels (benefit / caution / warning) so a 2-minute
+    # demo shows each flavor of output.
     {
         "id": "maya",
         "name": "Maya's story",
         "persona_name": "Maya",
-        "age": 45,
-        "scenario": "A clear case. A cancer drug working as intended.",
-        "indication": "Chronic Myeloid Leukemia (CML)",
-        "drug_id": "imatinib",
-        "medication_display": "Imatinib (Gleevec)",
+        "age": 41,
+        "scenario": "A targeted therapy match. Genetics that make a specific drug eligible.",
+        "indication": "Triple-negative breast cancer, germline BRCA1+",
+        "subtype": "TNBC",
+        "drug_id": "olaparib",
+        "medication_display": "Olaparib (Lynparza)",
         "status": "expected",
         "status_color": "success",
         "genotype_summary": {
+            "BRCA1": "c.181T>G (p.Cys61Gly) pathogenic",
+            "BRCA2": "wild-type",
             "CYP2D6": "*1/*1 (normal)",
             "DPYD": "*1/*1 (normal)",
-            "BRCA1": "wild-type",
-            "BRCA2": "wild-type",
         },
-        "variant_ids": [],
-        "zygosity_overrides": {},
-        "narrative": "Imatinib blocks the BCR-ABL1 fusion protein that drives CML. "
-        "Maya has the typical versions of the genes that process this drug.",
+        "variant_ids": ["BRCA1_C61G"],
+        "zygosity_overrides": {"BRCA1_C61G": "heterozygous"},
+        "narrative": "Maya's tumor is HR-negative, HER2-negative, and she "
+        "carries a pathogenic BRCA1 variant. That makes her eligible for "
+        "olaparib, a targeted therapy that exploits the DNA-repair defect "
+        "BRCA1 causes in cancer cells.",
     },
     {
         "id": "diana",
@@ -832,43 +981,50 @@ DEMO_PATIENTS: list[DemoPatient] = [
         "persona_name": "Diana",
         "age": 52,
         "scenario": "A common case. A genetic variant reducing a drug's effectiveness, and the alternatives.",
-        "indication": "ER+ Breast Cancer",
+        "indication": "ER+ / HER2- early breast cancer",
+        "subtype": "HR+/HER2-",
         "drug_id": "tamoxifen",
         "medication_display": "Tamoxifen",
         "status": "reduced",
         "status_color": "warning",
         "genotype_summary": {
             "CYP2D6": "*4/*4 (poor metabolizer)",
-            "DPYD": "*1/*1 (normal)",
             "BRCA1": "wild-type",
             "BRCA2": "wild-type",
+            "PIK3CA": "wild-type",
         },
         "variant_ids": ["CYP2D6_star4"],
         "zygosity_overrides": {"CYP2D6_star4": "homozygous"},
         "narrative": "Tamoxifen is a prodrug. CYP2D6 must convert it to its "
-        "active form, and Diana's CYP2D6 works slowly.",
+        "active form, and Diana's CYP2D6 works slowly. Her oncologist may "
+        "consider an aromatase inhibitor instead.",
     },
     {
         "id": "priya",
         "name": "Priya's story",
         "persona_name": "Priya",
-        "age": 62,
-        "scenario": "A safety case. How genetics changes the right dose.",
-        "indication": "Metastatic Colorectal Cancer",
-        "drug_id": "capecitabine",
-        "medication_display": "Capecitabine (prodrug for 5-FU)",
-        "status": "dose-adjustment",
-        "status_color": "info",
+        "age": 58,
+        "scenario": "HR deficiency in a different cancer. Same biology, different tumor.",
+        "indication": "High-grade serous ovarian cancer, germline BRCA2+",
+        "subtype": "ovarian_HGSOC",
+        "drug_id": "niraparib",
+        "medication_display": "Niraparib (Zejula)",
+        "status": "expected",
+        "status_color": "success",
         "genotype_summary": {
-            "CYP2D6": "*1/*1 (normal)",
-            "DPYD": "*2A/*1 (intermediate metabolizer)",
+            "BRCA2": "c.5946delT pathogenic",
             "BRCA1": "wild-type",
-            "BRCA2": "wild-type",
+            "PALB2": "wild-type",
+            "CYP2D6": "*1/*1 (normal)",
         },
-        "variant_ids": ["DPYD_star2A"],
-        "zygosity_overrides": {"DPYD_star2A": "heterozygous"},
-        "narrative": "DPYD clears 5-FU. Priya's DPYD works at reduced capacity, "
-        "so the standard dose can accumulate to toxic levels.",
+        "variant_ids": ["BRCA2_6174delT"],
+        "zygosity_overrides": {"BRCA2_6174delT": "heterozygous"},
+        "narrative": "Priya has advanced high-grade serous ovarian cancer and "
+        "a germline BRCA2 pathogenic variant. Her tumor is HR-deficient, "
+        "which is the same biology that makes Maya's tumor PARP-inhibitor "
+        "sensitive. In the ovarian setting, niraparib is FDA-approved as "
+        "first-line maintenance after platinum response, and olaparib is "
+        "approved for BRCA-mutated maintenance (SOLO-1).",
     },
 ]
 

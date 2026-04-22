@@ -20,13 +20,10 @@ from cyvcf2 import VCF, Writer
 # package installed. Keeping these in sync is on us; a production codebase
 # would import from one shared module and use that for both.
 CATALOG_LOCI: list[tuple[str, int]] = [
-    ("22", 42128945),   # CYP2D6*4 (rs3892097)
-    ("1",  97573863),   # DPYD*2A (rs3918290)
-    ("1",  97450058),   # DPYD c.2846A>T (rs67376798)
-    ("6",  18139228),   # TPMT*3A marker (rs1800460)
-    ("6",  18130918),   # TPMT*3A marker (rs1142345)
-    ("6",  18143955),   # TPMT*2 (rs1800462)
-    ("17", 43124097),   # BRCA1 p.Cys61Gly (c.181T>G)
+    ("22", 42128945),   # CYP2D6*4 (rs3892097) — tamoxifen metabolism
+    ("1",  97573863),   # DPYD*2A (rs3918290) — capecitabine toxicity
+    ("1",  97450058),   # DPYD c.2846A>T (rs67376798) — capecitabine toxicity
+    ("17", 43124097),   # BRCA1 p.Cys61Gly (c.181T>G) — BRCA1 pathogenic
 ]
 FLANK = 1000  # bp window around each locus to keep, for linked SNPs
 

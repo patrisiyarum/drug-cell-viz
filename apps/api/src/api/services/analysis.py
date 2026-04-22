@@ -20,12 +20,14 @@ from uuid import uuid4
 
 from api.models import (
     AnalysisResult,
+    HrdEvidence,
+    HrdResult,
     PGxVerdict,
     PocketResidue,
     SuggestedDrug,
     VariantInput,
 )
-from api.services import alphafold, docking, plain_language, pocket, storage, variants
+from api.services import alphafold, docking, hrd as hrd_service, plain_language, pocket, storage, variants
 from api.services.bc_catalog import (
     DRUGS,
     GENES,
@@ -143,6 +145,26 @@ async def run_analysis(
     # --- 4c) BRCA1 variants the Tier-3 classifier can handle ---
     classifiable_brca1 = _extract_classifiable_brca1(resolved)
 
+    # --- 4d) HR deficiency composite — the headline HRD call for PARPi ---
+    hrd_raw = hrd_service.compute_hrd(resolved, classifiable_brca1)
+    hrd_result = HrdResult(
+        label=hrd_raw.label,
+        score=hrd_raw.score,
+        evidence=[
+            HrdEvidence(
+                gene=e.gene,
+                variant_label=e.variant_label,
+                source=e.source,
+                weight=e.weight,
+                detail=e.detail,
+            )
+            for e in hrd_raw.evidence
+        ],
+        summary=hrd_raw.summary,
+        parp_inhibitor_context=hrd_raw.parp_inhibitor_context,
+        caveats=hrd_raw.caveats,
+    )
+
     # --- 5) Plain-language translation for patients ---
     plain = plain_language.build_plain_language(
         drug_id=drug["id"],
@@ -170,6 +192,7 @@ async def run_analysis(
         relevance_warning=relevance_warning,
         suggested_drugs=suggested_drugs,
         classifiable_brca1_variants=classifiable_brca1,
+        hrd=hrd_result,
         disclaimers=DISCLAIMERS,
         created_at=datetime.utcnow(),
     )

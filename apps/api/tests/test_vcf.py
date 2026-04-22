@@ -27,21 +27,20 @@ def test_fixture_exists() -> None:
     assert FIXTURE.exists(), "synthetic VCF fixture is missing"
 
 
-def test_ingests_all_six_records() -> None:
+def test_ingests_all_records() -> None:
     r = _ingest()
-    assert r.total_records == 6
-    # 5 PASS + 1 LowQual
-    assert r.records_pass == 5
+    assert r.total_records == 5
+    # 4 PASS + 1 LowQual
+    assert r.records_pass == 4
 
 
 def test_detects_every_catalog_variant_in_fixture() -> None:
     r = _ingest()
     ids = {d.catalog_id for d in r.detections}
-    # Every coordinate in the fixture should resolve.
+    # Every BC-relevant coordinate in the fixture should resolve.
     assert ids == {
         "DPYD_c2846A_T",
         "DPYD_star2A",
-        "TPMT_star2",
         "BRCA1_C61G",
         "CYP2D6_star4",
     }
@@ -53,7 +52,6 @@ def test_zygosity_read_from_gt_field() -> None:
     # Fixture INFO note documents the intended genotype per record.
     assert zyg["DPYD_c2846A_T"] == "heterozygous"
     assert zyg["DPYD_star2A"] == "heterozygous"
-    assert zyg["TPMT_star2"] == "homozygous"
     assert zyg["BRCA1_C61G"] == "heterozygous"
     assert zyg["CYP2D6_star4"] == "homozygous"
 
@@ -63,8 +61,8 @@ def test_detections_flow_into_variant_inputs() -> None:
 
     r = _ingest()
     variants = detections_to_variant_inputs(r.detections)
-    # 5 distinct catalog_ids → 5 VariantInputs (no duplicates).
-    assert len(variants) == 5
+    # 4 distinct catalog_ids → 4 VariantInputs (no duplicates).
+    assert len(variants) == 4
     catalog_ids = {v.catalog_id for v in variants}
     assert "CYP2D6_star4" in catalog_ids
     assert "BRCA1_C61G" in catalog_ids
@@ -88,6 +86,6 @@ async def test_fixture_plus_tamoxifen_produces_caution_verdict() -> None:
 def test_count_supported_coordinates_is_stable() -> None:
     from api.services.vcf import count_supported_coordinates
 
-    # 5 distinct catalog variants reachable via chrom/pos: CYP2D6*4, DPYD*2A,
-    # DPYD c.2846A>T, TPMT*3A (2 SNV markers collapsed), TPMT*2, BRCA1_C61G.
-    assert count_supported_coordinates() == 6
+    # 4 distinct catalog variants reachable via chrom/pos: CYP2D6*4, DPYD*2A,
+    # DPYD c.2846A>T, BRCA1_C61G.
+    assert count_supported_coordinates() == 4

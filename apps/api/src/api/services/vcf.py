@@ -81,36 +81,6 @@ _COORDS: list[CatalogCoordinate] = [
         alt="T",
         display_name="DPYD c.2846A>T (rs67376798)",
     ),
-    # TPMT*3A — this allele is the combination of rs1800460 + rs1142345.
-    # We register both SNVs; caller-side we merge when both appear.
-    CatalogCoordinate(
-        catalog_id="TPMT_star3A",
-        gene="TPMT",
-        chrom="6",
-        pos=18139228,
-        ref="C",
-        alt="T",
-        display_name="TPMT*3A marker (rs1800460)",
-    ),
-    CatalogCoordinate(
-        catalog_id="TPMT_star3A",
-        gene="TPMT",
-        chrom="6",
-        pos=18130918,
-        ref="T",
-        alt="C",
-        display_name="TPMT*3A marker (rs1142345)",
-    ),
-    # TPMT*2 — rs1800462.
-    CatalogCoordinate(
-        catalog_id="TPMT_star2",
-        gene="TPMT",
-        chrom="6",
-        pos=18143955,
-        ref="G",
-        alt="C",
-        display_name="TPMT*2 (rs1800462)",
-    ),
     # BRCA1 p.Cys61Gly — chr17:43124097 A>C (hg38, minus strand → BRCA1 cDNA T→G).
     CatalogCoordinate(
         catalog_id="BRCA1_C61G",

@@ -65,12 +65,11 @@ def test_pipeline_runs_end_to_end_against_fixture(tmp_path) -> None:
     assert report_path.exists(), f"missing report.json; stderr: {result.stderr}"
     report = json.loads(report_path.read_text())
 
-    # Five PASS records, five catalog detections.
+    # Four PASS records, four catalog detections (breast/ovarian focus).
     detection_ids = {d["catalog_id"] for d in report["detections"]}
     assert detection_ids == {
         "DPYD_c2846A_T",
         "DPYD_star2A",
-        "TPMT_star2",
         "BRCA1_C61G",
         "CYP2D6_star4",
     }

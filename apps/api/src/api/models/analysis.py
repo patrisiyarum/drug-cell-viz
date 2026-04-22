@@ -74,6 +74,31 @@ class PlainLanguage(BaseModel):
     glossary: list[GlossaryTerm]
 
 
+class HrdEvidence(BaseModel):
+    """One evidence line feeding the HRD composite score."""
+
+    gene: str
+    variant_label: str
+    source: Literal["catalog_pathogenic", "ml_prediction", "catalog_moderate"]
+    weight: int
+    detail: str
+
+
+class HrdResult(BaseModel):
+    """Homologous-recombination deficiency composite score.
+
+    The single clinically actionable output for PARP-inhibitor eligibility
+    in HR-deficient breast, ovarian, pancreatic, and prostate cancer.
+    """
+
+    label: Literal["hr_deficient", "hr_proficient", "indeterminate"]
+    score: int                           # 0-100
+    evidence: list[HrdEvidence]
+    summary: str
+    parp_inhibitor_context: str
+    caveats: list[str]
+
+
 class SuggestedDrug(BaseModel):
     """A drug that's actually relevant to the patient's pasted genes.
 
@@ -113,6 +138,10 @@ class AnalysisResult(BaseModel):
     # Protein-level HGVS strings like "p.C61G". Frameshift / splice variants
     # are excluded because the classifier only handles point AA changes.
     classifiable_brca1_variants: list[str] = []
+    # Homologous-recombination deficiency composite. THE headline clinical
+    # output for this app — PARP-inhibitor eligibility across breast,
+    # ovarian, pancreatic, and prostate cancer.
+    hrd: HrdResult | None = None
     disclaimers: list[str]
     created_at: datetime
 
