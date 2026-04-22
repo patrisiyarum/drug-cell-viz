@@ -246,15 +246,15 @@ export default function ScreenPage() {
 
           {result ? (
             <>
-              <ResultsTable
-                result={result}
-                selectedId={selectedId}
-                onSelect={setSelectedId}
-              />
               <BindingPoseCard
                 result={result}
                 selectedId={selectedId}
                 onClose={() => setSelectedId(null)}
+              />
+              <ResultsTable
+                result={result}
+                selectedId={selectedId}
+                onSelect={setSelectedId}
               />
             </>
           ) : null}
