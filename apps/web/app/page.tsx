@@ -40,6 +40,12 @@ export default function LandingPage() {
               >
                 Upload 23andMe or build a custom query
               </Link>
+              <Link
+                href="/screen"
+                className="inline-flex items-center gap-2 px-7 py-4 border border-border rounded-xl hover:bg-accent transition-colors text-sm"
+              >
+                Virtual screening (experimental)
+              </Link>
             </div>
           </div>
         </section>

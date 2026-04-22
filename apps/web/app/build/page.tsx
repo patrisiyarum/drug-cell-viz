@@ -313,9 +313,10 @@ function ParseSummary({
         <div className="text-sm flex-1">
           <span className="font-medium">File read.</span>{" "}
           <span className="text-muted-foreground">
-            {parsed.validCalls.toLocaleString()} genotype calls scanned for the{" "}
-            {countSupportedSnps()} drug-metabolism SNPs 23andMe reliably types
-            (CYP2D6, DPYD). Found {parsed.detectedVariants.length}.
+            Matched <strong>{parsed.detectedVariants.length} of{" "}
+            {countSupportedSnps()}</strong> clinically actionable CYP2D6 / DPYD
+            SNPs in your file (scanned {parsed.validCalls.toLocaleString()}{" "}
+            genotype calls).
           </span>
         </div>
         <button

@@ -24,6 +24,7 @@ from api.routes import (
     jobs_router,
     molecular_router,
     morphology_router,
+    screening_router,
     vcf_router,
 )
 from api.telemetry import configure_telemetry
@@ -66,6 +67,7 @@ app.include_router(bc_router)
 app.include_router(brca1_router)
 app.include_router(brca2_router)
 app.include_router(vcf_router)
+app.include_router(screening_router)
 
 # Serve local blob storage so the frontend can fetch PDBs and thumbnails by URL.
 if settings.storage_backend == "local":

@@ -1,0 +1,346 @@
+"use client";
+
+import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { FlaskConical, Trash2 } from "lucide-react";
+
+import { api, type CandidateScore, type ScreeningResponse } from "@/lib/api";
+import type { Catalog } from "@/lib/bc-types";
+
+/**
+ * Virtual-screening playground.
+ *
+ * Pick an HR-panel target (BRCA1, BRCA2, PARP1, ESR1, CDK4/6, PIK3CA, …),
+ * paste a short list of candidate SMILES (one per line, optional name and
+ * id), and see them ranked by a composite pocket-fit + chemical-similarity
+ * score. This mirrors the core Bioptic product story in miniature: score
+ * compounds against a pocket on a computer before ever touching the lab.
+ */
+
+interface CandidateRow {
+  id: string;
+  name: string;
+  smiles: string;
+}
+
+const STARTER_LIBRARIES: Record<string, CandidateRow[]> = {
+  PARP1: [
+    { id: "olaparib", name: "Olaparib", smiles: "C1CC1C(=O)N2CCN(CC2)C(=O)C3=CC=CC(=C3CC4=NNC(=O)C5=CC=CC=C54)F" },
+    { id: "niraparib", name: "Niraparib", smiles: "C1CC(C1)N2CCC(CC2)C3=CC4=C(C=C3)C=CC=C4C(=O)N" },
+    { id: "talazoparib", name: "Talazoparib", smiles: "C1CC2=C(C1=O)C3=CC(=CC=C3N=C2C4=CC=C(C=C4)F)C5=NNC=N5" },
+    { id: "rucaparib", name: "Rucaparib", smiles: "CNCC1=CC=C(C=C1)C2=C3C(=CC=C2F)C(=O)NCC3" },
+    { id: "aspirin", name: "Aspirin (negative control)", smiles: "CC(=O)Oc1ccccc1C(=O)O" },
+  ],
+  ESR1: [
+    { id: "tamoxifen", name: "Tamoxifen", smiles: "CCC(=C(c1ccccc1)c1ccc(OCCN(C)C)cc1)c1ccccc1" },
+    { id: "fulvestrant", name: "Fulvestrant", smiles: "CC1CC2C3CCC4=CC(=CC=C4C3CCC2(C1O)CCCCCCCCCS(=O)CCCC(F)(F)C(F)(F)F)O" },
+    { id: "elacestrant", name: "Elacestrant", smiles: "CCc1ccc(CCN2CCC[C@@H]2[C@@H](O)c2ccc3OCCc3c2)cc1" },
+    { id: "aspirin", name: "Aspirin (negative control)", smiles: "CC(=O)Oc1ccccc1C(=O)O" },
+  ],
+  CDK4: [
+    { id: "palbociclib", name: "Palbociclib", smiles: "CC(=O)C1=C(C)C2=CN=C(NC3=NC=C(C=C3)N3CCNCC3)N=C2N(C2CCCC2)C1=O" },
+    { id: "ribociclib", name: "Ribociclib", smiles: "CC1(C)c2nc3c(cnc(Nc4ccc(N5CCNCC5)cn4)n3)cc2N(C)C1=O" },
+    { id: "abemaciclib", name: "Abemaciclib", smiles: "CCN1CCN(Cc2ccc(Nc3ncc(F)c(-c4cc5cc(F)ccc5[nH]4)n3)nc2C)CC1" },
+    { id: "aspirin", name: "Aspirin (negative control)", smiles: "CC(=O)Oc1ccccc1C(=O)O" },
+  ],
+};
+
+export default function ScreenPage() {
+  const { data: catalog } = useQuery<Catalog>({
+    queryKey: ["bc-catalog"],
+    queryFn: () => api.getCatalog(),
+  });
+
+  const [targetGene, setTargetGene] = useState<string>("PARP1");
+  const [rawSmiles, setRawSmiles] = useState<string>("");
+  const [result, setResult] = useState<ScreeningResponse | null>(null);
+  const [running, setRunning] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Seed the textarea with a starter library whenever the target changes and
+  // the user hasn't typed anything.
+  useEffect(() => {
+    if (rawSmiles.trim()) return;
+    const starter = STARTER_LIBRARIES[targetGene];
+    if (starter) {
+      setRawSmiles(starter.map((c) => `${c.smiles}\t${c.name}`).join("\n"));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [targetGene]);
+
+  const parsed = useMemo<CandidateRow[]>(() => {
+    return parseSmilesList(rawSmiles);
+  }, [rawSmiles]);
+
+  async function onRun() {
+    if (parsed.length === 0) {
+      setError("add at least one SMILES");
+      return;
+    }
+    setRunning(true);
+    setError(null);
+    try {
+      const resp = await api.runScreening({
+        target_gene: targetGene,
+        candidates: parsed,
+      });
+      setResult(resp);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "screening failed");
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  function onClear() {
+    setResult(null);
+    setRawSmiles("");
+  }
+
+  const screenableTargets = [
+    "PARP1",
+    "ESR1",
+    "ERBB2",
+    "PIK3CA",
+    "CDK4",
+    "CDK6",
+    "CYP19A1",
+    "AKT1",
+    "BRCA1",
+    "BRCA2",
+  ];
+
+  return (
+    <div className="flex flex-col bg-white min-h-screen">
+      <header className="border-b bg-card">
+        <div className="max-w-[1600px] mx-auto px-6 md:px-8 py-5 flex items-center justify-between gap-4">
+          <Link href="/" className="text-muted-foreground hover:text-foreground text-sm">
+            ← Back
+          </Link>
+          <div className="flex items-center gap-4 text-sm">
+            <Link href="/demo" className="text-muted-foreground hover:text-foreground">
+              Cases
+            </Link>
+            <Link href="/build" className="text-muted-foreground hover:text-foreground">
+              Build your own
+            </Link>
+          </div>
+        </div>
+      </header>
+
+      <main className="flex-1 px-6 md:px-8 py-10 md:py-14">
+        <div className="max-w-4xl mx-auto space-y-8">
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 text-primary">
+              <FlaskConical className="w-5 h-5" aria-hidden />
+              <span className="text-xs font-semibold uppercase tracking-wide">
+                Virtual screening · experimental
+              </span>
+            </div>
+            <h1 className="text-3xl md:text-4xl font-semibold">
+              Rank compounds against an HR-panel target
+            </h1>
+            <p className="text-muted-foreground leading-relaxed">
+              Pick a target protein from the HR-repair + hormone-signalling
+              panel, paste one or more candidate SMILES, and we&apos;ll score
+              each by how well it packs into the binding pocket (3D fit) and
+              how structurally similar it is to known binders of this target
+              (Morgan-fingerprint Tanimoto). Composite rank =
+              0.6 × pocket fit + 0.4 × chemical similarity.
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Docking is an RDKit stub by default; set{" "}
+              <code className="bg-slate-100 px-1 rounded">USE_MODAL_DOCKING=true</code>{" "}
+              to route through DiffDock on Modal GPU. This is not a
+              binding-affinity calculation.
+            </p>
+          </div>
+
+          <section className="bg-card border rounded-2xl p-5 md:p-6 space-y-4">
+            <div>
+              <label className="text-sm font-medium mb-1 block">
+                Target gene
+              </label>
+              <select
+                className="w-full md:w-80 border rounded-lg px-3 py-2 text-sm bg-white"
+                value={targetGene}
+                onChange={(e) => {
+                  setTargetGene(e.target.value);
+                  setResult(null);
+                  setRawSmiles("");
+                }}
+              >
+                {screenableTargets.map((sym) => {
+                  const gene = catalog?.genes.find((g) => g.symbol === sym);
+                  return (
+                    <option key={sym} value={sym}>
+                      {sym}
+                      {gene ? ` — ${gene.name}` : ""}
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+
+            <div>
+              <label className="text-sm font-medium mb-1 block">
+                Candidate compounds
+                <span className="text-xs text-muted-foreground ml-2">
+                  one per line · format: <code>SMILES</code> or <code>SMILES</code>{" "}
+                  <kbd>\t</kbd> <code>name</code>
+                </span>
+              </label>
+              <textarea
+                value={rawSmiles}
+                onChange={(e) => setRawSmiles(e.target.value)}
+                rows={10}
+                placeholder="O=C(N1CCN(CC1)C(=O)c1cc2c(...))...    Olaparib"
+                className="w-full text-xs font-mono border rounded-lg p-3 bg-white"
+              />
+              <div className="text-xs text-muted-foreground mt-1">
+                {parsed.length} compound{parsed.length === 1 ? "" : "s"} parsed
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 flex-wrap pt-2 border-t">
+              <button
+                type="button"
+                onClick={onRun}
+                disabled={running || parsed.length === 0}
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 disabled:opacity-50 transition-opacity"
+              >
+                {running ? "Scoring…" : `Screen ${parsed.length} compound${parsed.length === 1 ? "" : "s"}`}
+              </button>
+              <button
+                type="button"
+                onClick={onClear}
+                className="inline-flex items-center gap-1.5 px-3 py-2 text-xs text-muted-foreground hover:text-foreground"
+              >
+                <Trash2 className="w-3.5 h-3.5" aria-hidden /> Clear
+              </button>
+              {error ? <span className="text-sm text-red-600">{error}</span> : null}
+            </div>
+          </section>
+
+          {result ? <ResultsTable result={result} /> : null}
+        </div>
+      </main>
+    </div>
+  );
+}
+
+function ResultsTable({ result }: { result: ScreeningResponse }) {
+  return (
+    <section className="bg-card border rounded-2xl overflow-hidden">
+      <div className="p-5 md:p-6 border-b space-y-1">
+        <h2 className="text-lg md:text-xl font-semibold">
+          Ranked against {result.target_gene}{" "}
+          <span className="text-xs font-normal text-muted-foreground">
+            ({result.target_uniprot})
+          </span>
+        </h2>
+        <p className="text-xs text-muted-foreground">
+          Reference binders used for chemical similarity:{" "}
+          {result.reference_binders.length > 0
+            ? result.reference_binders.join(", ")
+            : "none (BRCA1/BRCA2 have no druggable pocket; scoring falls back to pocket fit only)"}
+          {" · "}
+          pocket radius = {result.pocket_radius_angstrom} Å
+        </p>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="bg-muted/40 text-xs uppercase tracking-wide">
+            <tr>
+              <th className="px-4 py-3 text-left font-semibold">Rank</th>
+              <th className="px-4 py-3 text-left font-semibold">Compound</th>
+              <th className="px-4 py-3 text-right font-semibold">Fit score</th>
+              <th className="px-4 py-3 text-right font-semibold">Pocket fit</th>
+              <th className="px-4 py-3 text-right font-semibold">Chem sim.</th>
+              <th className="px-4 py-3 text-left font-semibold">Closest ref</th>
+            </tr>
+          </thead>
+          <tbody>
+            {result.ranked.map((s) => (
+              <ResultRow key={s.candidate_id} s={s} />
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function ResultRow({ s }: { s: CandidateScore }) {
+  const topClass = s.rank === 1 ? "bg-success/5" : "";
+  return (
+    <tr className={`border-t ${topClass}`}>
+      <td className="px-4 py-3 font-semibold">{s.rank}</td>
+      <td className="px-4 py-3">
+        <div className="font-medium">{s.name}</div>
+        <div className="text-[10px] text-muted-foreground font-mono truncate max-w-[260px]">
+          {s.smiles}
+        </div>
+      </td>
+      <td className="px-4 py-3 text-right font-semibold">
+        <ScoreBar score={s.fit_score} />
+      </td>
+      <td className="px-4 py-3 text-right text-muted-foreground">
+        {(s.pocket_fit * 100).toFixed(0)}%
+      </td>
+      <td className="px-4 py-3 text-right text-muted-foreground">
+        {(s.chem_similarity * 100).toFixed(0)}%
+      </td>
+      <td className="px-4 py-3 text-xs text-muted-foreground">
+        {s.closest_reference ?? "—"}
+      </td>
+    </tr>
+  );
+}
+
+function ScoreBar({ score }: { score: number }) {
+  const pct = Math.min(100, Math.max(0, score * 100));
+  return (
+    <div className="inline-flex items-center gap-2">
+      <div className="w-20 h-1.5 bg-muted rounded-full overflow-hidden">
+        <div
+          className="h-full bg-primary"
+          style={{ width: `${pct}%` }}
+          aria-hidden
+        />
+      </div>
+      <span>{score.toFixed(2)}</span>
+    </div>
+  );
+}
+
+/**
+ * Parse a newline-separated list of candidates.
+ *
+ * Accepts either:
+ *   SMILES
+ *   SMILES<TAB>Name
+ *   SMILES<TAB>Name<TAB>Id
+ *
+ * Auto-generates an id from the name (or "cpd_N") when not supplied.
+ */
+function parseSmilesList(raw: string): CandidateRow[] {
+  const out: CandidateRow[] = [];
+  let n = 0;
+  for (const line of raw.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const parts = trimmed.split(/\t+/);
+    const smiles = parts[0]?.trim();
+    if (!smiles) continue;
+    n += 1;
+    const name = parts[1]?.trim() ?? `Compound ${n}`;
+    const id =
+      parts[2]?.trim() ??
+      (name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "") ||
+        `cpd_${n}`);
+    out.push({ id, name, smiles });
+  }
+  return out;
+}

@@ -6,6 +6,7 @@ from api.routes.jobs import limiter as jobs_limiter
 from api.routes.jobs import router as jobs_router
 from api.routes.molecular import router as molecular_router
 from api.routes.morphology import router as morphology_router
+from api.routes.screening import router as screening_router
 from api.routes.vcf import router as vcf_router
 
 __all__ = [
@@ -17,5 +18,6 @@ __all__ = [
     "jobs_router",
     "molecular_router",
     "morphology_router",
+    "screening_router",
     "vcf_router",
 ]

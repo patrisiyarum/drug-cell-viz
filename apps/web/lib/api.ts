@@ -70,6 +70,22 @@ export const api = {
   },
 
   /**
+   * Virtual screening: rank a compound library against one HR-panel target.
+   *
+   * The backend uses RDKit docking + Morgan-fingerprint Tanimoto similarity
+   * against a curated reference set, and returns candidates ranked by a
+   * composite pocket_fit + chem_similarity score.
+   */
+  runScreening: (body: {
+    target_gene: string;
+    candidates: { id: string; name: string; smiles: string }[];
+  }) =>
+    request<ScreeningResponse>("/api/screening/run", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  /**
    * Request the doctor-visit PDF for an analysis.
    *
    * The backend returns binary PDF; we hand it back as a Blob so the caller
@@ -112,4 +128,24 @@ export interface VcfAnalyzeResponse {
   detections: VcfDetectionDTO[];
   novel_brca1_missense: string[];
   analysis: AnalysisResult | null;
+}
+
+export interface CandidateScore {
+  candidate_id: string;
+  name: string;
+  smiles: string;
+  pocket_fit: number;
+  chem_similarity: number;
+  closest_reference: string | null;
+  fit_score: number;
+  heavy_atom_count: number;
+  rank: number;
+}
+
+export interface ScreeningResponse {
+  target_gene: string;
+  target_uniprot: string;
+  pocket_radius_angstrom: number;
+  reference_binders: string[];
+  ranked: CandidateScore[];
 }
