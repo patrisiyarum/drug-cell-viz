@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRef, useState } from "react";
-import { CheckCircle2, FileUp, ShieldCheck } from "lucide-react";
+import { CheckCircle2, FileUp } from "lucide-react";
 
 import { BCAnalysisForm } from "@/components/BCAnalysisForm";
 import { ResultsReport } from "@/components/ResultsReport";
@@ -231,15 +231,6 @@ function UploadCard({
           </button>
         </div>
 
-        <div className="border rounded-lg p-3 bg-green-50 border-green-200 flex items-start gap-2 text-xs">
-          <ShieldCheck className="w-4 h-4 text-success flex-shrink-0 mt-0.5" aria-hidden />
-          <div>
-            <span className="font-medium">Your raw data never leaves your browser.</span>{" "}
-            The file is parsed locally in this tab; we only send the variant
-            IDs we recognize to the analysis server.
-          </div>
-        </div>
-
         {err ? <div className="text-sm text-red-600">{err}</div> : null}
         {parseResult ? <ParseSummary parsed={parseResult} onClear={onClear} /> : null}
       </div>
@@ -289,28 +280,6 @@ function ParseSummary({
           ))}
         </ul>
       ) : null}
-      <div
-        className="text-xs rounded-lg border p-3 space-y-2"
-        style={{ background: "rgba(217,119,6,0.06)", borderColor: "rgba(217,119,6,0.25)" }}
-      >
-        <p className="font-medium text-foreground">
-          What 23andMe files can&apos;t tell you
-        </p>
-        <p className="text-muted-foreground leading-relaxed">
-          This tool&apos;s focus is HR-deficiency (BRCA1, BRCA2, PALB2, ATM,
-          RAD51C/D, BRIP1, BARD1, FANC family). SNP chips like 23andMe&apos;s
-          don&apos;t reliably cover those genes — most pathogenic variants are
-          private or rare, and the common Ashkenazi founder variants
-          (185delAG, 6174delT, 5382insC) are indels that 23andMe reports in a
-          separate health report, not in the raw TSV.
-        </p>
-        <p className="text-muted-foreground leading-relaxed">
-          <span className="font-medium text-foreground">For HR assessment:</span>{" "}
-          upload a clinical VCF (from a CLIA lab like Invitae, Myriad, Color,
-          Ambry) in the section below, or pick a variant from the curated
-          catalog.
-        </p>
-      </div>
     </div>
   );
 }

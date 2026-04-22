@@ -52,7 +52,6 @@ export function ResultsReport({ result, patient, onSwitchDrug }: Props) {
             <CurrentDrugAssessmentCard
               drugName={result.drug_name}
               assessment={result.current_drug_assessment}
-              pgxVerdicts={result.pgx_verdicts}
               onSwitchDrug={onSwitchDrug}
             />
           ) : null}
