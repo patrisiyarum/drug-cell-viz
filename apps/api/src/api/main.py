@@ -14,6 +14,7 @@ from slowapi.middleware import SlowAPIMiddleware
 
 from api.config import settings
 from api.db import check_db, init_db
+from api.events import close as close_events
 from api.routes import (
     bc_router,
     brca1_router,
@@ -25,14 +26,17 @@ from api.routes import (
     morphology_router,
     vcf_router,
 )
+from api.telemetry import configure_telemetry
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logging.basicConfig(level=settings.log_level)
     settings.local_storage_root.mkdir(parents=True, exist_ok=True)
+    configure_telemetry(app)
     await init_db()
     yield
+    await close_events()
 
 
 app = FastAPI(title="drug-cell-viz API", version="0.1.0", lifespan=lifespan)

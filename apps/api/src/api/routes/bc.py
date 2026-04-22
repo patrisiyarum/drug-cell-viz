@@ -2,17 +2,23 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
+import logging
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel
+from sse_starlette.sse import EventSourceResponse
 
 from api.db import session_scope
+from api.events import publish_analysis_completed
 from api.models import AnalysisCreate, AnalysisResult, AnalysisRow
 from api.services import analysis as analysis_service
 from api.services import pdf_report as pdf_report_service
 from api.services.bc_catalog import DEMO_NOTE, DEMO_PATIENTS, DRUGS, GENES, VARIANTS
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/bc", tags=["breast-cancer"])
 
@@ -248,7 +254,93 @@ async def analyze(payload: AnalysisCreate) -> AnalysisResult:
         )
         session.add(row)
         await session.commit()
+
+    # Fire-and-forget event publish. Any RabbitMQ connection failure is logged
+    # but not surfaced to the caller — the analysis itself already succeeded.
+    try:
+        await publish_analysis_completed(result)
+    except Exception:  # noqa: BLE001
+        logger.exception("failed to publish analysis.completed event")
+
     return result
+
+
+@router.post("/analyze/stream")
+async def analyze_stream(payload: AnalysisCreate) -> EventSourceResponse:
+    """Stream the analysis progress as Server-Sent Events.
+
+    The analysis runs inline in a background task; each phase boundary pushes
+    a `progress` event onto an asyncio.Queue which we drain into the SSE
+    response. On completion we emit a single `complete` event carrying the
+    full AnalysisResult JSON. On failure, an `error` event with the message.
+
+    Client consumption pattern (fetch + ReadableStream, since EventSource
+    doesn't support POST bodies):
+
+        const resp = await fetch("/api/bc/analyze/stream", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+        });
+        for await (const line of resp.body.getReader()) { ... }
+    """
+    queue: asyncio.Queue[dict | None] = asyncio.Queue()
+
+    async def progress(stage: str, label: str, pct: float) -> None:
+        await queue.put(
+            {
+                "event": "progress",
+                "data": json.dumps({"stage": stage, "label": label, "progress": pct}),
+            }
+        )
+
+    async def run_task() -> None:
+        try:
+            result = await analysis_service.run_analysis(
+                payload.drug_id, payload.variants, progress_cb=progress,
+            )
+            async with session_scope() as session:
+                row = AnalysisRow(
+                    id=result.id,
+                    drug_id=result.drug_id,
+                    target_gene=result.target_gene,
+                    payload_json=result.model_dump_json(),
+                )
+                session.add(row)
+                await session.commit()
+            try:
+                await publish_analysis_completed(result)
+            except Exception:  # noqa: BLE001
+                logger.exception("failed to publish analysis.completed event")
+            await queue.put(
+                {"event": "complete", "data": result.model_dump_json()}
+            )
+        except analysis_service.AnalysisError as exc:
+            await queue.put(
+                {"event": "error", "data": json.dumps({"detail": str(exc)})}
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("analyze/stream failed")
+            await queue.put(
+                {"event": "error", "data": json.dumps({"detail": str(exc)})}
+            )
+        finally:
+            await queue.put(None)
+
+    task = asyncio.create_task(run_task())
+
+    async def event_gen():
+        try:
+            while True:
+                msg = await queue.get()
+                if msg is None:
+                    break
+                yield msg
+        finally:
+            if not task.done():
+                task.cancel()
+
+    return EventSourceResponse(event_gen())
 
 
 @router.get("/analysis/{result_id}", response_model=AnalysisResult)

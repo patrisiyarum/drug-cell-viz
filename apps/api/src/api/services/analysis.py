@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
+from typing import Awaitable, Callable
 from uuid import uuid4
 
 from api.models import (
@@ -28,6 +29,16 @@ from api.models import (
     SuggestedDrug,
     VariantInput,
 )
+
+# Progress callback for the streaming endpoint. Called at each major phase
+# boundary with (stage_id, human_label, progress_0_1). Implementations publish
+# to SSE queues, RabbitMQ, logs, etc. Must be cheap and must not raise —
+# analysis failures should come through the main return path, not the callback.
+ProgressCallback = Callable[[str, str, float], Awaitable[None]]
+
+
+async def _noop(_stage: str, _label: str, _pct: float) -> None:
+    return None
 from api.services import alphafold, docking, hrd as hrd_service, plain_language, pocket, storage, variants
 from api.services.bc_catalog import (
     DRUGS,
@@ -61,7 +72,10 @@ class AnalysisError(ValueError):
 async def run_analysis(
     drug_id: str,
     variant_inputs: list[VariantInput],
+    progress_cb: ProgressCallback | None = None,
 ) -> AnalysisResult:
+    cb = progress_cb or _noop
+
     drug = DRUGS.get(drug_id)
     if drug is None:
         raise AnalysisError(f"unknown drug id {drug_id!r}")
@@ -74,9 +88,11 @@ async def run_analysis(
         )
 
     # --- 1) Resolve input variants into (gene, positions, catalog_ids) ---
+    await cb("resolve", "Finding your variants", 0.05)
     resolved = await _resolve_variants(variant_inputs)
 
     # --- 2) Match pharmacogenomic rules ---
+    await cb("rules", "Matching pharmacogenomic rules", 0.15)
     pgx_verdicts = _match_rules(drug_id, resolved)
 
     # --- 3) Structural analysis on the drug's primary target ---
@@ -87,6 +103,7 @@ async def run_analysis(
         if r.get("gene_symbol") == target_gene
     ]
 
+    await cb("structure", f"Fetching {target_gene} protein structure", 0.30)
     protein_pdb_bytes, protein_url = await alphafold.fetch_structure(gene_entry["uniprot_id"])
     pose_url: str | None = None
     pocket_residues: list[PocketResidue] = []
@@ -94,6 +111,7 @@ async def run_analysis(
     pose_pdb_text: str | None = None
     if drug["smiles"]:
         # Reuse the docking service (RDKit stub or Modal DiffDock depending on flag).
+        await cb("dock", f"Simulating {drug['name']} binding pose", 0.50)
         poses = await docking.dock(protein_pdb_bytes, drug["smiles"])
         if poses:
             top = poses[0]
@@ -105,6 +123,7 @@ async def run_analysis(
 
     # Residue distances: prefer measuring against the docked pose (has ligand);
     # if no docking was performed (e.g. antibody drug), report positions without pocket flags.
+    await cb("pocket", "Measuring variant distance to drug pocket", 0.70)
     if pose_pdb_text and target_positions:
         positions_only = [p for p, _ in target_positions]
         distances = pocket.compute_distances(pose_pdb_text, positions_only)
@@ -138,6 +157,7 @@ async def run_analysis(
             )
 
     # --- 4) Headline ---
+    await cb("headline", "Building headline verdict", 0.80)
     headline, severity = _headline(drug["name"], pgx_verdicts, pocket_residues)
 
     # --- 4b) Drug-vs-variants relevance check ---
@@ -156,6 +176,7 @@ async def run_analysis(
     )
 
     # --- 4f) HR deficiency composite — the headline HRD call for PARPi ---
+    await cb("hrd", "Computing HR-deficiency composite score", 0.88)
     hrd_raw = hrd_service.compute_hrd(resolved, classifiable_brca1)
     hrd_result = HrdResult(
         label=hrd_raw.label,
@@ -176,6 +197,7 @@ async def run_analysis(
     )
 
     # --- 5) Plain-language translation for patients ---
+    await cb("plain_language", "Writing plain-English report", 0.95)
     plain = plain_language.build_plain_language(
         drug_id=drug["id"],
         target_gene=target_gene,
@@ -186,7 +208,7 @@ async def run_analysis(
         has_pose=pose_url is not None,
     )
 
-    return AnalysisResult(
+    result = AnalysisResult(
         id=uuid4().hex,
         drug_id=drug["id"],
         drug_name=drug["name"],
@@ -207,6 +229,8 @@ async def run_analysis(
         disclaimers=DISCLAIMERS,
         created_at=datetime.utcnow(),
     )
+    await cb("done", "Complete", 1.0)
+    return result
 
 
 async def _resolve_variants(

@@ -69,5 +69,18 @@ class Settings(BaseSettings):
     # Rate limiting
     rate_limit_jobs_per_hour: int = 10
 
+    # RabbitMQ event bus. Unset = publishes are no-ops (dev + tests skip the
+    # broker). In production this is the connection string to CloudAMQP,
+    # Cloud Memorystore for RabbitMQ, or a self-hosted node.
+    rabbitmq_url: str = ""
+    rabbitmq_exchange: str = "drug_cell_viz"
+
+    # Observability. Unset = traces are dropped (no console noise in tests).
+    # In production, set to an OTLP HTTP endpoint (Logfire, Tempo, Grafana
+    # Cloud, Honeycomb, etc). LOGFIRE_TOKEN also auto-configures Logfire.
+    otel_exporter_otlp_endpoint: str = ""
+    otel_service_name: str = "drug-cell-viz-api"
+    logfire_token: str = ""
+
 
 settings = Settings()

@@ -36,6 +36,19 @@ dependencies = [
     # PDF export for doctor-visit report (cf. /api/bc/report.pdf). reportlab
     # is pure-Python, no system deps, wheel ships on all platforms.
     "reportlab>=4.0",
+    # RabbitMQ event bus (async). We publish `analysis.completed` events so
+    # downstream audit / notification consumers can subscribe without
+    # coupling to the API's Postgres write path. Optional at runtime — if
+    # RABBITMQ_URL is unset, publishes are no-ops.
+    "aio-pika>=9.4",
+    # Observability. OpenTelemetry traces the FastAPI + SQLAlchemy stack;
+    # Logfire is a drop-in OTel-compatible sink (Pydantic-flavored) when a
+    # LOGFIRE_TOKEN is available, otherwise we export to the console.
+    "opentelemetry-api>=1.27",
+    "opentelemetry-sdk>=1.27",
+    "opentelemetry-instrumentation-fastapi>=0.48b0",
+    "opentelemetry-instrumentation-sqlalchemy>=0.48b0",
+    "opentelemetry-exporter-otlp-proto-http>=1.27",
 ]
 
 [project.optional-dependencies]
