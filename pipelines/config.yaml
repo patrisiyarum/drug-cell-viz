@@ -1,0 +1,21 @@
+# drug-cell-viz Snakemake pipeline configuration.
+#
+# Replace `samples.*.vcf` paths with paths to your VCF files. Each sample can
+# optionally override `drug_id` to ask a different pharmacogenomic question.
+
+results_dir: results
+
+# The drug every sample is analyzed against unless overridden below.
+default_drug: tamoxifen
+
+samples:
+  # Ships with the repo: synthetic VCF exercising the catalog coordinates.
+  # Runs end-to-end in ~2 seconds on a laptop.
+  test_sample:
+    vcf: apps/api/tests/fixtures/test_sample.vcf
+    drug_id: tamoxifen
+
+  # Add your own samples here, e.g.:
+  # NA12878:
+  #   vcf: /data/giab/NA12878.vcf.gz
+  #   drug_id: olaparib

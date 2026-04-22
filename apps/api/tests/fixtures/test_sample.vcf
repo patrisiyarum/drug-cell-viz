@@ -1,0 +1,19 @@
+##fileformat=VCFv4.2
+##source=drug-cell-viz synthetic fixture
+##reference=GRCh38
+##INFO=<ID=NOTE,Number=1,Type=String,Description="Synthetic variant notes">
+##FILTER=<ID=PASS,Description="All filters passed">
+##FILTER=<ID=LowQual,Description="Low quality">
+##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
+##FORMAT=<ID=DP,Number=1,Type=Integer,Description="Read depth">
+##contig=<ID=1,length=248956422>
+##contig=<ID=6,length=170805979>
+##contig=<ID=17,length=83257441>
+##contig=<ID=22,length=50818468>
+#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO	FORMAT	NA12345
+1	97450058	rs67376798	A	T	99	PASS	NOTE=DPYD_c2846A_T_het	GT:DP	0/1:42
+1	97573863	rs3918290	T	C	99	PASS	NOTE=DPYD_star2A_het	GT:DP	0/1:50
+6	18143955	rs1800462	G	C	60	PASS	NOTE=TPMT_star2_hom	GT:DP	1/1:35
+17	43124097	rs80357382	A	C	80	PASS	NOTE=BRCA1_Cys61Gly_het	GT:DP	0/1:55
+22	42128945	rs3892097	C	T	90	PASS	NOTE=CYP2D6_star4_hom	GT:DP	1/1:60
+22	42128999	rs999999	A	G	20	LowQual	NOTE=non-catalog_low_quality	GT:DP	0/1:8

@@ -101,6 +101,13 @@ export default function BuildPage() {
             }}
           />
 
+          <VcfUploadCard
+            onResult={(r, drugId) => {
+              setResult(r);
+              setLastContext({ drugId, variants: [] });
+            }}
+          />
+
           <div className="bg-card border rounded-2xl p-6 md:p-8">
             <BCAnalysisForm
               onResult={(r, ctx) => {
@@ -293,3 +300,128 @@ function ParseSummary({
 }
 
 export type { Detection };
+
+
+/**
+ * VCF upload card. Mirrors the 23andMe uploader but targets clinical-grade
+ * VCFs and calls /api/vcf/analyze on the server (cyvcf2 runtime). The whole
+ * analysis comes back in one shot, including the detected variant list and
+ * the full AnalysisResult.
+ */
+function VcfUploadCard({
+  onResult,
+}: {
+  onResult: (result: AnalysisResult, drugId: string) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [drugId, setDrugId] = useState("tamoxifen");
+  const [parsing, setParsing] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [lastResp, setLastResp] = useState<{
+    total: number;
+    pass: number;
+    sample: string;
+    detections: number;
+  } | null>(null);
+
+  async function onFile(ev: React.ChangeEvent<HTMLInputElement>) {
+    const file = ev.target.files?.[0];
+    if (!file) return;
+    setParsing(true);
+    setErr(null);
+    try {
+      const resp = await api.analyzeVcf(file, drugId);
+      setLastResp({
+        total: resp.total_records,
+        pass: resp.records_pass,
+        sample: resp.analyzed_sample,
+        detections: resp.detections.length,
+      });
+      if (resp.analysis) {
+        onResult(resp.analysis, drugId);
+      } else if (resp.detections.length === 0) {
+        setErr(
+          "No catalog variants detected in this VCF. Try a different drug or check that your VCF uses hg38 coordinates.",
+        );
+      }
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "VCF upload failed");
+    } finally {
+      setParsing(false);
+    }
+  }
+
+  return (
+    <details className="bg-card border rounded-2xl overflow-hidden group">
+      <summary className="cursor-pointer px-5 md:px-6 py-4 flex items-center gap-3 hover:bg-muted/40 transition-colors list-none">
+        <span className="w-6 h-6 rounded-full bg-primary text-primary-foreground text-xs font-semibold flex items-center justify-center flex-shrink-0">
+          B
+        </span>
+        <div className="flex-1">
+          <div className="font-medium">Have a clinical VCF? Upload it here.</div>
+          <div className="text-xs text-muted-foreground">
+            Server-side cyvcf2 parser. Matches your variants against our catalog
+            and runs the full analysis in one request.
+          </div>
+        </div>
+        <span className="text-xs text-muted-foreground group-open:hidden">
+          (optional — click to open)
+        </span>
+      </summary>
+      <div className="border-t px-5 md:px-6 py-5 space-y-4">
+        <input
+          ref={inputRef}
+          type="file"
+          accept=".vcf,.vcf.gz,application/gzip,text/plain"
+          onChange={onFile}
+          className="sr-only"
+        />
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="text-sm">
+            Drug:
+            <select
+              value={drugId}
+              onChange={(e) => setDrugId(e.target.value)}
+              className="ml-2 text-sm border rounded px-2 py-1 bg-white"
+            >
+              <option value="tamoxifen">Tamoxifen</option>
+              <option value="olaparib">Olaparib</option>
+              <option value="capecitabine">Capecitabine</option>
+              <option value="imatinib">Imatinib</option>
+              <option value="mercaptopurine">Mercaptopurine</option>
+              <option value="irinotecan">Irinotecan</option>
+            </select>
+          </label>
+          <button
+            type="button"
+            onClick={() => inputRef.current?.click()}
+            disabled={parsing}
+            className="px-5 py-2 rounded-lg bg-primary text-primary-foreground text-sm hover:opacity-90 disabled:opacity-50"
+          >
+            {parsing ? "Analyzing…" : "Choose VCF file"}
+          </button>
+        </div>
+
+        <div className="border rounded-lg p-3 bg-slate-50 text-xs">
+          <div className="font-medium mb-1">Accepts: .vcf, .vcf.gz</div>
+          <div className="text-muted-foreground">
+            Coordinates must be on GRCh38 / hg38. Multi-sample VCFs analyze the
+            first sample. Your file is sent to the API, parsed with cyvcf2, and
+            deleted immediately after the response.
+          </div>
+        </div>
+
+        {err ? <div className="text-sm text-red-600">{err}</div> : null}
+        {lastResp ? (
+          <div className="text-sm bg-green-50 border border-green-200 rounded-lg p-3">
+            Read <span className="font-mono">{lastResp.total}</span> records
+            (<span className="font-mono">{lastResp.pass}</span> PASS) from
+            sample <span className="font-mono">{lastResp.sample}</span>. Matched{" "}
+            <span className="font-mono">{lastResp.detections}</span> catalog
+            variant{lastResp.detections === 1 ? "" : "s"}. Full report below.
+          </div>
+        ) : null}
+      </div>
+    </details>
+  );
+}

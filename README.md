@@ -87,6 +87,26 @@ The API is stateless except for Postgres + Redis + the blob disk.
 
 ---
 
+## Variant report pipeline (Snakemake)
+
+Same evidence + same ML classifier as the web app, exposed as a Snakemake
+workflow you can point at a directory of VCFs.
+
+```bash
+uv sync --extra pipeline --package api
+uv run --package api snakemake \
+    --snakefile pipelines/Snakefile \
+    --configfile pipelines/config.yaml \
+    --cores 1
+```
+
+Ships with a synthetic test VCF that runs end-to-end in ~4 seconds. Four
+rules: **normalize** → **filter_catalog** → **classify** → **render_text_report**.
+Outputs per sample: `detections.tsv`, `classifications.tsv`, `report.json`,
+`report.txt`. Full docs in [`pipelines/README.md`](./pipelines/README.md).
+
+---
+
 ## Quick start (local)
 
 ```bash
@@ -119,7 +139,9 @@ from the curated variant catalog.
 | BRCA1 variant effect | ✅ XGBoost + AlphaMissense ensemble + conformal (AUROC 0.933) | retrain with ESM2 embeddings on Modal GPU |
 | BRCA2 DBD variant effect | ✅ XGBoost baseline (AUROC 0.842) | retrain with BRCA2-aware domain features |
 | Expert-panel classification | ✅ BRCA Exchange / ENIGMA lookup (graceful fallback) | n/a |
-| 23andMe SNP parse | ✅ client-side (data never leaves the browser) | VCF upload (cyvcf2, planned) |
+| 23andMe SNP parse | ✅ client-side (data never leaves the browser) | n/a |
+| Clinical VCF upload | ✅ server-side cyvcf2, zygosity + PASS filter | VEP annotation pre-pass |
+| Snakemake batch pipeline | ✅ 4 rules, ships with test VCF | bcftools norm + FASTA reference |
 | 3D viewer | ✅ Mol* with variant highlighting + ligand auto-zoom | n/a |
 | Rate limit, SSE, zip export | ✅ | n/a |
 
@@ -133,13 +155,16 @@ uv sync --extra dev
 uv run pytest -q
 ```
 
-31 tests covering:
+38 tests covering:
 - BRCA1 / BRCA2 classifiers (known pathogenic/benign variants)
 - Drug/gene relevance check (including the synthetic-lethality
   olaparib/BRCA1 case that's the subject of several regression tests)
 - Plain-language translator (severity mapping, recommendation translation,
   drug-specific question generation, glossary triggers)
 - Variant resolver (alignment, auto-detect gene from sequence)
+- VCF ingestion (cyvcf2 parse → catalog match → zygosity → analysis)
+- Snakemake pipeline end-to-end (runs the whole workflow against the
+  fixture, asserts report.json contents)
 - Morphology retrieval (Morgan fingerprints + SVG render)
 - Docking stub (centroid placement + combined PDB emission)
 

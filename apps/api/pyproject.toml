@@ -29,6 +29,10 @@ dependencies = [
     "scikit-learn>=1.3",
     "xgboost>=2.0",
     "openpyxl>=3.1",  # training-time: read Findlay supplementary .xlsx
+    # Clinical-grade VCF ingestion. cyvcf2 wraps htslib; wheels ship for
+    # manylinux + macOS arm64 so CI and Render builds don't need a system
+    # bcftools install at API runtime.
+    "cyvcf2>=0.31",
 ]
 
 [project.optional-dependencies]
@@ -38,6 +42,9 @@ dev = [
     "mypy>=1.13",
     "ruff>=0.7",
     "httpx>=0.27",
+]
+pipeline = [
+    "snakemake>=8.0",
 ]
 modal = [
     "modal>=0.64",

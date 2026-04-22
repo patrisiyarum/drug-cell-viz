@@ -51,4 +51,44 @@ export const api = {
     request<BrcaExchangeRecord | null>(
       `/api/brca1/exchange?hgvs_protein=${encodeURIComponent(hgvsProtein)}`,
     ),
+
+  // VCF: multipart upload → backend runs cyvcf2 ingest + full drug analysis.
+  // Returns the same AnalysisResult shape used everywhere else, plus VCF-level
+  // metadata (record counts, detected sample, per-catalog-variant detections).
+  analyzeVcf: async (
+    file: File,
+    drugId: string,
+  ): Promise<VcfAnalyzeResponse> => {
+    const form = new FormData();
+    form.append("file", file);
+    const url = `${API_BASE}/api/vcf/analyze?drug_id=${encodeURIComponent(drugId)}`;
+    const res = await fetch(url, { method: "POST", body: form });
+    if (!res.ok) {
+      throw new Error(`VCF analyze failed: ${res.status} ${await res.text()}`);
+    }
+    return (await res.json()) as VcfAnalyzeResponse;
+  },
 };
+
+export interface VcfDetectionDTO {
+  catalog_id: string;
+  gene: string;
+  display_name: string;
+  chrom: string;
+  pos: number;
+  ref: string;
+  alt: string;
+  zygosity: "heterozygous" | "homozygous";
+  sample: string;
+  vcf_filter: string;
+}
+
+export interface VcfAnalyzeResponse {
+  total_records: number;
+  records_pass: number;
+  samples: string[];
+  analyzed_sample: string;
+  detections: VcfDetectionDTO[];
+  novel_brca1_missense: string[];
+  analysis: AnalysisResult | null;
+}

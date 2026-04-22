@@ -1,0 +1,99 @@
+"""drug-cell-viz variant-report pipeline.
+
+Run with:
+    snakemake --cores 1 --configfile pipelines/config.yaml
+
+What it does:
+    VCF in  →  normalize (left-align, split multiallelic)
+           →  filter (PASS only, variants in catalog loci)
+           →  classify (catalog match + BRCA1 ensemble ML classifier)
+           →  report (per-sample JSON + human-readable TSV)
+
+All steps are Python using cyvcf2 + our api.services modules. No system
+bcftools required; the normalize step reuses cyvcf2's representation and
+emits a canonicalised VCF. If you want true bcftools-based normalisation
+(recommended for production VCFs with complex indels), swap the shell
+command in `rules/normalize.smk` — it's a drop-in replacement.
+
+Outputs end up in `results/{sample}/...`:
+    normalized.vcf        post-normalisation VCF
+    filtered.vcf          PASS + catalog-region variants only
+    detections.tsv        one row per detected catalog variant
+    classifications.tsv   one row per BRCA1 variant with ML prediction
+    report.json           full structured report (detections + PGx + ML)
+    report.txt            human-readable summary
+
+Configure which VCFs to process via `pipelines/config.yaml`.
+"""
+
+from pathlib import Path
+
+configfile: "pipelines/config.yaml"
+
+PIPELINE_DIR = Path(workflow.basedir)
+SAMPLES = list(config["samples"].keys())
+RESULTS = Path(config.get("results_dir", "results"))
+
+
+rule all:
+    input:
+        expand(str(RESULTS / "{sample}" / "report.json"), sample=SAMPLES),
+        expand(str(RESULTS / "{sample}" / "report.txt"),  sample=SAMPLES),
+
+
+rule normalize:
+    """Canonicalise the VCF: left-align indels, split multi-allelic records.
+
+    We do this in Python via cyvcf2 so the pipeline runs on any machine with
+    the project installed. A production pipeline would use:
+        bcftools norm -m-any -f {reference_fa} -o {output} {input}
+    """
+    input:
+        vcf = lambda wildcards: config["samples"][wildcards.sample]["vcf"],
+    output:
+        vcf = str(RESULTS / "{sample}" / "normalized.vcf"),
+    log:
+        str(RESULTS / "{sample}" / "logs" / "normalize.log"),
+    script:
+        "scripts/normalize.py"
+
+
+rule filter_catalog:
+    """Keep only PASS records at coordinates in our catalog loci."""
+    input:
+        vcf = str(RESULTS / "{sample}" / "normalized.vcf"),
+    output:
+        vcf = str(RESULTS / "{sample}" / "filtered.vcf"),
+    log:
+        str(RESULTS / "{sample}" / "logs" / "filter.log"),
+    script:
+        "scripts/filter_catalog.py"
+
+
+rule classify:
+    """Match records to catalog variants + run BRCA1 ML classifier."""
+    input:
+        vcf = str(RESULTS / "{sample}" / "filtered.vcf"),
+    output:
+        detections      = str(RESULTS / "{sample}" / "detections.tsv"),
+        classifications = str(RESULTS / "{sample}" / "classifications.tsv"),
+        json_report     = str(RESULTS / "{sample}" / "report.json"),
+    log:
+        str(RESULTS / "{sample}" / "logs" / "classify.log"),
+    params:
+        sample  = lambda w: w.sample,
+        drug_id = lambda w: config["samples"][w.sample].get(
+            "drug_id", config.get("default_drug", "tamoxifen"),
+        ),
+    script:
+        "scripts/classify.py"
+
+
+rule render_text_report:
+    """Render a human-readable summary from the JSON report."""
+    input:
+        json_report = str(RESULTS / "{sample}" / "report.json"),
+    output:
+        txt = str(RESULTS / "{sample}" / "report.txt"),
+    script:
+        "scripts/render_text.py"
