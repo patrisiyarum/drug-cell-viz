@@ -123,6 +123,38 @@ export interface SuggestedDrug {
   reason: string;
 }
 
+export interface HrdEvidence {
+  gene: string;
+  variant_label: string;
+  source: "catalog_pathogenic" | "ml_prediction" | "catalog_moderate";
+  weight: number;
+  detail: string;
+}
+
+export type HrdLabel = "hr_deficient" | "hr_proficient" | "indeterminate";
+
+export interface HrdResult {
+  label: HrdLabel;
+  score: number;
+  evidence: HrdEvidence[];
+  summary: string;
+  parp_inhibitor_context: string;
+  caveats: string[];
+}
+
+export type CurrentDrugVerdict =
+  | "well_matched"
+  | "acceptable"
+  | "review_needed"
+  | "unknown";
+
+export interface CurrentDrugAssessment {
+  verdict: CurrentDrugVerdict;
+  headline: string;
+  rationale: string;
+  better_options: SuggestedDrug[];
+}
+
 export interface AnalysisResult {
   id: string;
   drug_id: string;
@@ -139,6 +171,8 @@ export interface AnalysisResult {
   relevance_warning: string | null;
   suggested_drugs: SuggestedDrug[];
   classifiable_brca1_variants: string[];
+  hrd: HrdResult | null;
+  current_drug_assessment: CurrentDrugAssessment | null;
   disclaimers: string[];
   created_at: string;
 }

@@ -68,6 +68,27 @@ export const api = {
     }
     return (await res.json()) as VcfAnalyzeResponse;
   },
+
+  /**
+   * Request the doctor-visit PDF for an analysis.
+   *
+   * The backend returns binary PDF; we hand it back as a Blob so the caller
+   * can wire it into a download link or new-tab view.
+   */
+  downloadReportPdf: async (
+    result: AnalysisResult,
+    patientLabel?: string | null,
+  ): Promise<Blob> => {
+    const res = await fetch(`${API_BASE}/api/bc/report.pdf`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ result, patient_label: patientLabel ?? null }),
+    });
+    if (!res.ok) {
+      throw new Error(`PDF failed: ${res.status} ${await res.text()}`);
+    }
+    return res.blob();
+  },
 };
 
 export interface VcfDetectionDTO {

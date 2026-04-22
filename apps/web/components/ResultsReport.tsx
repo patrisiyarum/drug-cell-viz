@@ -4,6 +4,9 @@ import { useState } from "react";
 import { AlertTriangle, ArrowRight, ChevronDown, Copy, HelpCircle, Printer } from "lucide-react";
 
 import { Brca1FunctionCard } from "./Brca1FunctionCard";
+import { CurrentDrugAssessmentCard } from "./CurrentDrugAssessmentCard";
+import { DoctorVisitPdfButton } from "./DoctorVisitPdfButton";
+import { HrdCard } from "./HrdCard";
 import { MolViewer } from "./MolViewer";
 import { StatusBadge, type PatientStatus } from "./StatusBadge";
 import type { AnalysisResult, DemoPatient, SuggestedDrug } from "@/lib/bc-types";
@@ -39,6 +42,27 @@ export function ResultsReport({ result, patient, onSwitchDrug }: Props) {
 
         <div className="lg:col-span-3 space-y-6 md:space-y-8">
           <StatusBadge status={status}>{result.headline}</StatusBadge>
+
+          {result.hrd ? <HrdCard hrd={result.hrd} /> : null}
+
+          {result.current_drug_assessment ? (
+            <CurrentDrugAssessmentCard
+              drugName={result.drug_name}
+              assessment={result.current_drug_assessment}
+              onSwitchDrug={onSwitchDrug}
+            />
+          ) : null}
+
+          <div className="flex flex-wrap items-center gap-3 no-print">
+            <DoctorVisitPdfButton
+              result={result}
+              patientLabel={patient?.persona_name ?? null}
+            />
+            <span className="text-xs text-muted-foreground">
+              Printable. Mirrors this whole page + questions for your doctor.
+            </span>
+          </div>
+
           {result.classifiable_brca1_variants.length > 0
             ? result.classifiable_brca1_variants.map((hgvs) => (
                 <Brca1FunctionCard key={hgvs} hgvsProtein={hgvs} />

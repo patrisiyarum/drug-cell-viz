@@ -2,18 +2,31 @@
 
 [![CI](https://github.com/patrisiyarum/drug-cell-viz/actions/workflows/ci.yml/badge.svg)](https://github.com/patrisiyarum/drug-cell-viz/actions/workflows/ci.yml)
 
-A patient-facing pharmacogenomic variant interpreter. Takes a cancer drug and
-a patient's genetic variants (curated catalog, protein sequence paste, or
-23andMe raw file) and returns:
+A patient-facing **HR-deficiency (HRD) cancer interpreter**. Takes a patient's
+genetic variants (catalog, protein-sequence paste, 23andMe file, or clinical
+VCF) and returns everything they need to walk into an oncology appointment
+prepared:
 
-1. **A plain-English clinical report** with CPIC / FDA evidence, questions to
-   ask your oncologist, and printable output
-2. **A 3D molecular view** of the drug on its target protein (AlphaFold DB)
-   with the patient's variant residues highlighted
-3. **A BRCA1 / BRCA2 variant-effect prediction** from an XGBoost + AlphaMissense
+1. **Homologous-recombination deficiency composite score** — the headline
+   clinical output. Aggregates BRCA1/BRCA2/PALB2 pathogenic calls, FDA-
+   recognized moderate-penetrance genes (RAD51C/D, BRIP1, BARD1), Fanconi
+   anemia family, and ML-predicted BRCA1 loss-of-function into a single
+   HR-deficient / HR-proficient / indeterminate call. Drives PARP-inhibitor
+   eligibility across breast, ovarian, pancreatic, and prostate cancer.
+2. **"Is my current drug the right match?" assessment** — the second-opinion
+   feature. For a patient already on a medication, gives an explicit verdict
+   (well-matched / acceptable / review-needed / unknown) plus better-matched
+   alternatives when they exist. Built for patients who can't always afford
+   a second oncology opinion.
+3. **3D molecular view** of the drug on its target protein (AlphaFold DB)
+   with the patient's variant residues highlighted.
+4. **BRCA1 / BRCA2 variant-effect prediction** from an XGBoost + AlphaMissense
    ensemble classifier trained on saturation genome editing data, with
    calibrated conformal prediction intervals and expert panel cross-reference
-   (ENIGMA / BRCA Exchange)
+   (ENIGMA / BRCA Exchange).
+5. **Downloadable doctor-visit PDF** — one click generates a full report
+   (HRD result + current-drug assessment + PGx verdicts + questions to ask +
+   sources) suitable for printing and bringing to an appointment.
 
 Explicitly positioned as an **educational tool** that helps patients walk into
 oncology appointments prepared. Never makes treatment recommendations of its

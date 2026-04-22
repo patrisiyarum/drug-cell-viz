@@ -1,0 +1,95 @@
+"use client";
+
+import type { CurrentDrugAssessment } from "@/lib/bc-types";
+
+interface Props {
+  drugName: string;
+  assessment: CurrentDrugAssessment;
+  onSwitchDrug?: (drugId: string) => void;
+}
+
+/**
+ * "Is my current drug right for me?" card — the second-opinion feature.
+ *
+ * For a patient who already knows their variants AND which drug they've been
+ * prescribed, this card gives a one-sentence verdict (well matched / review
+ * needed / etc) rather than making them parse CPIC rule text. Any strictly
+ * better-matched drugs show as quick-switch chips.
+ */
+export function CurrentDrugAssessmentCard({
+  drugName,
+  assessment,
+  onSwitchDrug,
+}: Props) {
+  const style = {
+    well_matched: {
+      bg: "bg-success/10",
+      border: "border-success/40",
+      pill: "bg-success/20 text-success",
+      label: "Well matched",
+    },
+    acceptable: {
+      bg: "bg-muted",
+      border: "border-border",
+      pill: "bg-muted text-foreground",
+      label: "Acceptable",
+    },
+    review_needed: {
+      bg: "bg-warning/10",
+      border: "border-warning/40",
+      pill: "bg-warning/20 text-warning",
+      label: "Review needed",
+    },
+    unknown: {
+      bg: "bg-muted",
+      border: "border-border",
+      pill: "bg-muted text-foreground",
+      label: "Not enough data",
+    },
+  }[assessment.verdict];
+
+  return (
+    <section
+      className={`rounded-2xl border p-5 md:p-6 space-y-4 ${style.bg} ${style.border}`}
+    >
+      <header className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <div className="text-xs uppercase tracking-wide text-muted-foreground mb-1">
+            Is {drugName} the right drug for you?
+          </div>
+          <h3 className="text-lg md:text-xl font-semibold">
+            {assessment.headline}
+          </h3>
+        </div>
+        <div className={`px-3 py-1.5 rounded-full text-sm font-semibold ${style.pill}`}>
+          {style.label}
+        </div>
+      </header>
+
+      <p className="text-sm leading-relaxed">{assessment.rationale}</p>
+
+      {assessment.better_options.length > 0 ? (
+        <div className="rounded-lg border bg-white/70 p-3 md:p-4 space-y-2">
+          <div className="text-xs font-medium uppercase text-muted-foreground">
+            Drugs worth asking your oncologist about
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {assessment.better_options.map((opt) => (
+              <button
+                key={opt.id}
+                onClick={() => onSwitchDrug?.(opt.id)}
+                disabled={!onSwitchDrug}
+                className="text-sm rounded-full border border-primary/30 bg-primary/5 px-3 py-1.5 hover:bg-primary/10 disabled:opacity-60 disabled:cursor-default transition-colors text-left"
+                title={opt.reason}
+                type="button"
+              >
+                <span className="font-medium">{opt.name}</span>
+                <span className="text-muted-foreground"> — {opt.reason}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </section>
+  );
+}
