@@ -13,6 +13,9 @@ node_modules/
 .turbo/
 dist/
 build/
+# BUT: the /build Next.js route is source, not a build artifact. Exempt it.
+!apps/web/app/build/
+!apps/web/app/build/**
 
 # Env / secrets
 .env

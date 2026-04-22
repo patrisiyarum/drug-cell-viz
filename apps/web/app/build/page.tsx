@@ -1,0 +1,295 @@
+"use client";
+
+import Link from "next/link";
+import { useRef, useState } from "react";
+import { CheckCircle2, FileUp, ShieldCheck } from "lucide-react";
+
+import { BCAnalysisForm } from "@/components/BCAnalysisForm";
+import { ResultsReport } from "@/components/ResultsReport";
+import { api } from "@/lib/api";
+import type { AnalysisResult, VariantInput, Zygosity } from "@/lib/bc-types";
+import {
+  countSupportedSnps,
+  detectionsToVariantInputs,
+  parse23andMe,
+  type Detection,
+  type ParseResult,
+} from "@/lib/twenty-three-and-me";
+
+interface SelectedVariant {
+  catalog_id: string;
+  zygosity: Zygosity;
+}
+
+export default function BuildPage() {
+  const [result, setResult] = useState<AnalysisResult | null>(null);
+  const [lastContext, setLastContext] = useState<
+    { drugId: string; variants: VariantInput[] } | null
+  >(null);
+  const [switching, setSwitching] = useState(false);
+  const [switchError, setSwitchError] = useState<string | null>(null);
+
+  const [uploadDetected, setUploadDetected] = useState<SelectedVariant[]>([]);
+  const [parseResult, setParseResult] = useState<ParseResult | null>(null);
+
+  async function onSwitchDrug(newDrugId: string) {
+    if (!lastContext) return;
+    setSwitching(true);
+    setSwitchError(null);
+    try {
+      const next = await api.analyze({
+        drug_id: newDrugId,
+        variants: lastContext.variants,
+      });
+      setResult(next);
+      setLastContext({ drugId: newDrugId, variants: lastContext.variants });
+    } catch (err) {
+      setSwitchError(err instanceof Error ? err.message : "switch failed");
+    } finally {
+      setSwitching(false);
+    }
+  }
+
+  function onDetected(parsed: ParseResult) {
+    setParseResult(parsed);
+    const variants = detectionsToVariantInputs(parsed.detectedVariants);
+    setUploadDetected(
+      variants
+        .filter((v): v is { catalog_id: string; zygosity: Zygosity } =>
+          Boolean(v.catalog_id),
+        )
+        .map((v) => ({ catalog_id: v.catalog_id, zygosity: v.zygosity })),
+    );
+  }
+
+  return (
+    <div className="flex flex-col bg-white">
+      <header className="border-b bg-card">
+        <div className="max-w-[1600px] mx-auto px-6 md:px-8 py-5 flex items-center justify-between gap-4">
+          <Link href="/" className="text-muted-foreground hover:text-foreground text-sm">
+            ← Back
+          </Link>
+          <Link href="/demo" className="text-sm text-primary hover:underline">
+            Or pick a preset case
+          </Link>
+        </div>
+      </header>
+
+      <main className="flex-1 px-6 md:px-8 py-12 md:py-16">
+        <div className="max-w-3xl mx-auto space-y-8">
+          <div className="space-y-3 text-center">
+            <h1 className="text-3xl md:text-4xl font-semibold">
+              See how a medication might affect you
+            </h1>
+            <p className="text-muted-foreground text-base md:text-lg leading-relaxed max-w-2xl mx-auto">
+              Pick the medication your doctor is considering, tell us about any
+              variants you know about, and we'll show a plain-English report
+              plus a 3D view of how the drug interacts with your body.
+            </p>
+            <p className="text-sm text-muted-foreground">
+              It doesn't replace your doctor. It helps you have a better
+              conversation with them.
+            </p>
+          </div>
+
+          <UploadCard
+            onDetected={onDetected}
+            parseResult={parseResult}
+            onClear={() => {
+              setUploadDetected([]);
+              setParseResult(null);
+            }}
+          />
+
+          <div className="bg-card border rounded-2xl p-6 md:p-8">
+            <BCAnalysisForm
+              onResult={(r, ctx) => {
+                setResult(r);
+                setLastContext(ctx);
+              }}
+              drugIdOverride={lastContext?.drugId}
+              presetVariants={uploadDetected}
+            />
+          </div>
+
+          {switching ? (
+            <div className="text-sm text-muted-foreground text-center">
+              Re-running with the new drug…
+            </div>
+          ) : null}
+          {switchError ? (
+            <div className="text-sm text-red-600 text-center">{switchError}</div>
+          ) : null}
+        </div>
+
+        {result ? (
+          <div className="max-w-[1600px] mx-auto mt-10 md:mt-14">
+            <ResultsReport result={result} onSwitchDrug={onSwitchDrug} />
+          </div>
+        ) : null}
+      </main>
+    </div>
+  );
+}
+
+function UploadCard({
+  onDetected,
+  parseResult,
+  onClear,
+}: {
+  onDetected: (parsed: ParseResult) => void;
+  parseResult: ParseResult | null;
+  onClear: () => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [parsing, setParsing] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [dragActive, setDragActive] = useState(false);
+
+  async function onFile(ev: React.ChangeEvent<HTMLInputElement>) {
+    const file = ev.target.files?.[0];
+    if (!file) return;
+    setParsing(true);
+    setErr(null);
+    try {
+      const text = await file.text();
+      const parsed = parse23andMe(text);
+      if (parsed.validCalls < 100) {
+        throw new Error(
+          "That doesn't look like a 23andMe raw data file. Upload the .txt export, not the PDF report.",
+        );
+      }
+      onDetected(parsed);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "couldn't read the file");
+    } finally {
+      setParsing(false);
+    }
+  }
+
+  return (
+    <details className="bg-card border rounded-2xl overflow-hidden group">
+      <summary className="cursor-pointer px-5 md:px-6 py-4 flex items-center gap-3 hover:bg-muted/40 transition-colors list-none">
+        <span className="w-6 h-6 rounded-full bg-primary text-primary-foreground text-xs font-semibold flex items-center justify-center flex-shrink-0">
+          A
+        </span>
+        <div className="flex-1">
+          <div className="font-medium">Have your 23andMe file? Start here.</div>
+          <div className="text-xs text-muted-foreground">
+            We'll scan it for {countSupportedSnps()} clinically actionable
+            variants and pre-fill the form below.
+          </div>
+        </div>
+        <span className="text-xs text-muted-foreground group-open:hidden">
+          (optional — click to open)
+        </span>
+      </summary>
+      <div className="border-t px-5 md:px-6 py-5 space-y-4">
+        <input
+          ref={inputRef}
+          type="file"
+          accept=".txt,.tsv,text/plain,text/tab-separated-values"
+          onChange={onFile}
+          className="sr-only"
+        />
+        <div
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragActive(true);
+          }}
+          onDragLeave={() => setDragActive(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDragActive(false);
+            if (e.dataTransfer.files[0] && inputRef.current) {
+              inputRef.current.files = e.dataTransfer.files;
+              inputRef.current.dispatchEvent(new Event("change", { bubbles: true }));
+            }
+          }}
+          className={`border-2 border-dashed rounded-xl p-5 text-center transition-colors ${
+            dragActive ? "border-primary bg-primary/5" : "border-slate-300 bg-slate-50"
+          }`}
+        >
+          <FileUp className="w-7 h-7 mx-auto text-muted-foreground" aria-hidden />
+          <p className="mt-2 text-sm text-gray-700">
+            Drop your 23andMe raw data file here, or click to pick it.
+          </p>
+          <button
+            type="button"
+            onClick={() => inputRef.current?.click()}
+            disabled={parsing}
+            className="mt-3 px-5 py-2 rounded-lg bg-primary text-primary-foreground text-sm hover:opacity-90 disabled:opacity-50"
+          >
+            {parsing ? "Reading…" : "Choose file"}
+          </button>
+        </div>
+
+        <div className="border rounded-lg p-3 bg-green-50 border-green-200 flex items-start gap-2 text-xs">
+          <ShieldCheck className="w-4 h-4 text-success flex-shrink-0 mt-0.5" aria-hidden />
+          <div>
+            <span className="font-medium">Your raw data never leaves your browser.</span>{" "}
+            The file is parsed locally in this tab; we only send the variant
+            IDs we recognize to the analysis server.
+          </div>
+        </div>
+
+        {err ? <div className="text-sm text-red-600">{err}</div> : null}
+        {parseResult ? <ParseSummary parsed={parseResult} onClear={onClear} /> : null}
+      </div>
+    </details>
+  );
+}
+
+function ParseSummary({
+  parsed,
+  onClear,
+}: {
+  parsed: ParseResult;
+  onClear: () => void;
+}) {
+  return (
+    <div className="space-y-3">
+      <div className="flex items-start gap-2">
+        <CheckCircle2 className="w-4 h-4 text-success flex-shrink-0 mt-0.5" aria-hidden />
+        <div className="text-sm flex-1">
+          <span className="font-medium">File read successfully.</span>{" "}
+          <span className="text-muted-foreground">
+            {parsed.validCalls.toLocaleString()} genotype calls. Detected{" "}
+            {parsed.detectedVariants.length}/{countSupportedSnps()} of the
+            actionable variants we support.
+          </span>
+        </div>
+        <button
+          onClick={onClear}
+          className="text-xs text-muted-foreground hover:text-foreground underline"
+          type="button"
+        >
+          Clear
+        </button>
+      </div>
+      {parsed.detectedVariants.length > 0 ? (
+        <ul className="space-y-1">
+          {parsed.detectedVariants.map((d) => (
+            <li key={d.rsid} className="text-xs border rounded p-2 bg-white">
+              <span className="font-medium">{d.displayName}</span>
+              <span className="text-muted-foreground">
+                {" "}
+                · {d.gene} ·{" "}
+                {d.copiesOfRiskAllele === 2 ? "both copies" : "one copy"} ·{" "}
+                pre-selected below
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-xs text-muted-foreground">
+          No matching variants — that's common. Most people don't carry these
+          specific SNPs. See the notes in the form below about what this test
+          doesn't cover.
+        </p>
+      )}
+    </div>
+  );
+}
+
+export type { Detection };
