@@ -139,6 +139,7 @@ export interface CandidateScore {
   closest_reference: string | null;
   fit_score: number;
   heavy_atom_count: number;
+  pose_pdb_url: string | null;
   rank: number;
 }
 
@@ -147,5 +148,6 @@ export interface ScreeningResponse {
   target_uniprot: string;
   pocket_radius_angstrom: number;
   reference_binders: string[];
+  protein_pdb_url: string;
   ranked: CandidateScore[];
 }

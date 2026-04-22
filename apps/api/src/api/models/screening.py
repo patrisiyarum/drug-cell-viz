@@ -28,6 +28,10 @@ class CandidateScoreOut(BaseModel):
     closest_reference: str | None
     fit_score: float
     heavy_atom_count: int
+    pose_pdb_url: str | None = Field(
+        default=None,
+        description="Combined protein+ligand PDB URL for the Mol* viewer.",
+    )
     rank: int
 
 
@@ -36,4 +40,9 @@ class ScreeningResponse(BaseModel):
     target_uniprot: str
     pocket_radius_angstrom: float
     reference_binders: list[str]
+    protein_pdb_url: str = Field(
+        ...,
+        description="Apo AlphaFold structure URL. Useful as a fallback when "
+        "a per-candidate pose is unavailable.",
+    )
     ranked: list[CandidateScoreOut]

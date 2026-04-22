@@ -53,6 +53,7 @@ async def run(payload: ScreeningRequest) -> ScreeningResponse:
         target_uniprot=result.target_uniprot,
         pocket_radius_angstrom=result.pocket_radius_angstrom,
         reference_binders=result.reference_binders,
+        protein_pdb_url=result.protein_pdb_url,
         ranked=[
             CandidateScoreOut(
                 candidate_id=s.candidate_id,
@@ -63,6 +64,7 @@ async def run(payload: ScreeningRequest) -> ScreeningResponse:
                 closest_reference=s.closest_reference,
                 fit_score=s.fit_score,
                 heavy_atom_count=s.heavy_atom_count,
+                pose_pdb_url=s.pose_pdb_url,
                 rank=s.rank,
             )
             for s in result.ranked

@@ -33,12 +33,13 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass
+from uuid import uuid4
 
 import numpy as np
 from rdkit import Chem, DataStructs
 from rdkit.Chem import AllChem
 
-from api.services import alphafold, docking
+from api.services import alphafold, docking, storage
 from api.services.bc_catalog import DRUGS, GENES
 from api.services.pocket import POCKET_RADIUS_ANGSTROM, parse_atoms
 
@@ -108,6 +109,10 @@ class CandidateScore:
     closest_reference: str | None
     fit_score: float           # 0..1 composite
     heavy_atom_count: int
+    # URL the frontend can hand to Mol* to render the protein + docked ligand
+    # as one combined PDB. Persisted under analysis/{screening_id}/{id}.pdb
+    # in blob storage; lifetime is tied to the storage backend's retention.
+    pose_pdb_url: str | None
     rank: int
 
 
@@ -117,6 +122,7 @@ class ScreeningResult:
     target_uniprot: str
     pocket_radius_angstrom: float
     reference_binders: list[str]   # names of references used for chem similarity
+    protein_pdb_url: str            # apo AlphaFold structure (useful as a fallback in the UI)
     ranked: list[CandidateScore]
 
 
@@ -135,8 +141,14 @@ async def run_screening(
             f"({sorted(GENES.keys())!r})"
         )
 
+    # One screening run → one blob folder so every pose for this batch lives
+    # together. Useful when debugging or re-rendering poses later.
+    screening_id = uuid4().hex
+
     # Fetch the AlphaFold structure once; we reuse it across candidates.
-    protein_pdb_bytes, _ = await alphafold.fetch_structure(gene_entry["uniprot_id"])
+    protein_pdb_bytes, protein_url = await alphafold.fetch_structure(
+        gene_entry["uniprot_id"]
+    )
 
     # Pre-compute the reference fingerprints so we don't rebuild them on every
     # candidate comparison.
@@ -147,7 +159,7 @@ async def run_screening(
     # naturally concurrent.
     scores = await asyncio.gather(
         *(
-            _score_candidate(protein_pdb_bytes, c, ref_names, ref_fps)
+            _score_candidate(protein_pdb_bytes, c, ref_names, ref_fps, screening_id)
             for c in candidates
         ),
         return_exceptions=True,
@@ -180,6 +192,7 @@ async def run_screening(
             closest_reference=s.closest_reference,
             fit_score=s.fit_score,
             heavy_atom_count=s.heavy_atom_count,
+            pose_pdb_url=s.pose_pdb_url,
             rank=i + 1,
         )
         for i, s in enumerate(ranked)
@@ -190,6 +203,7 @@ async def run_screening(
         target_uniprot=gene_entry["uniprot_id"],
         pocket_radius_angstrom=POCKET_RADIUS_ANGSTROM,
         reference_binders=ref_names,
+        protein_pdb_url=protein_url,
         ranked=ranked,
     )
 
@@ -199,6 +213,7 @@ async def _score_candidate(
     candidate: CandidateInput,
     ref_names: list[str],
     ref_fps: list[object],
+    screening_id: str,
 ) -> CandidateScore:
     # --- pocket fit via docking ---
     poses = await docking.dock(protein_pdb_bytes, candidate.smiles)
@@ -230,6 +245,19 @@ async def _score_candidate(
 
     fit_score = 0.6 * pocket_fit + 0.4 * chem_similarity
 
+    # --- persist the combined protein+ligand PDB so the frontend can render it ---
+    # Blob key encodes screening_id + candidate_id so the folder is diagnostic
+    # and multiple runs don't collide.
+    safe_id = "".join(c if c.isalnum() or c in ("-", "_") else "_" for c in candidate.id)
+    pose_key = f"screening/{screening_id}/{safe_id}.pdb"
+    try:
+        pose_pdb_url: str | None = await storage.put(
+            pose_key, pose.pose_pdb.encode("utf-8"), "chemical/x-pdb"
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("screening: failed to persist pose for %s: %s", candidate.id, exc)
+        pose_pdb_url = None
+
     return CandidateScore(
         candidate_id=candidate.id,
         name=candidate.name,
@@ -239,6 +267,7 @@ async def _score_candidate(
         closest_reference=closest_ref,
         fit_score=round(fit_score, 4),
         heavy_atom_count=heavy_atom_count,
+        pose_pdb_url=pose_pdb_url,
         rank=0,  # overwritten by caller after ranking
     )
 

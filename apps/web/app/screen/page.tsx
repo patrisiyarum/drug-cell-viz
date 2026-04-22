@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { FlaskConical, Trash2 } from "lucide-react";
+import { FlaskConical, Trash2, X } from "lucide-react";
 
+import { MolViewer } from "@/components/MolViewer";
 import { api, type CandidateScore, type ScreeningResponse } from "@/lib/api";
 import type { Catalog } from "@/lib/bc-types";
 
@@ -57,6 +58,9 @@ export default function ScreenPage() {
   const [result, setResult] = useState<ScreeningResponse | null>(null);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Which candidate's 3D binding pose is currently being inspected. Auto-
+  // selects the top ranked after a successful run.
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   // Seed the textarea with a starter library whenever the target changes and
   // the user hasn't typed anything.
@@ -86,6 +90,8 @@ export default function ScreenPage() {
         candidates: parsed,
       });
       setResult(resp);
+      // Default to inspecting the top-ranked candidate's binding pose.
+      setSelectedId(resp.ranked[0]?.candidate_id ?? null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "screening failed");
     } finally {
@@ -96,6 +102,7 @@ export default function ScreenPage() {
   function onClear() {
     setResult(null);
     setRawSmiles("");
+    setSelectedId(null);
   }
 
   const screenableTargets = [
@@ -223,14 +230,35 @@ export default function ScreenPage() {
             </div>
           </section>
 
-          {result ? <ResultsTable result={result} /> : null}
+          {result ? (
+            <>
+              <ResultsTable
+                result={result}
+                selectedId={selectedId}
+                onSelect={setSelectedId}
+              />
+              <BindingPoseCard
+                result={result}
+                selectedId={selectedId}
+                onClose={() => setSelectedId(null)}
+              />
+            </>
+          ) : null}
         </div>
       </main>
     </div>
   );
 }
 
-function ResultsTable({ result }: { result: ScreeningResponse }) {
+function ResultsTable({
+  result,
+  selectedId,
+  onSelect,
+}: {
+  result: ScreeningResponse;
+  selectedId: string | null;
+  onSelect: (id: string) => void;
+}) {
   return (
     <section className="bg-card border rounded-2xl overflow-hidden">
       <div className="p-5 md:p-6 border-b space-y-1">
@@ -246,7 +274,8 @@ function ResultsTable({ result }: { result: ScreeningResponse }) {
             ? result.reference_binders.join(", ")
             : "none (BRCA1/BRCA2 have no druggable pocket; scoring falls back to pocket fit only)"}
           {" · "}
-          pocket radius = {result.pocket_radius_angstrom} Å
+          pocket radius = {result.pocket_radius_angstrom} Å · click a row to
+          see the 3D binding pose
         </p>
       </div>
       <div className="overflow-x-auto">
@@ -263,7 +292,12 @@ function ResultsTable({ result }: { result: ScreeningResponse }) {
           </thead>
           <tbody>
             {result.ranked.map((s) => (
-              <ResultRow key={s.candidate_id} s={s} />
+              <ResultRow
+                key={s.candidate_id}
+                s={s}
+                selected={s.candidate_id === selectedId}
+                onSelect={() => onSelect(s.candidate_id)}
+              />
             ))}
           </tbody>
         </table>
@@ -272,10 +306,25 @@ function ResultsTable({ result }: { result: ScreeningResponse }) {
   );
 }
 
-function ResultRow({ s }: { s: CandidateScore }) {
-  const topClass = s.rank === 1 ? "bg-success/5" : "";
+function ResultRow({
+  s,
+  selected,
+  onSelect,
+}: {
+  s: CandidateScore;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const base = selected
+    ? "bg-primary/10"
+    : s.rank === 1
+      ? "bg-success/5"
+      : "";
   return (
-    <tr className={`border-t ${topClass}`}>
+    <tr
+      className={`border-t cursor-pointer hover:bg-muted/40 transition-colors ${base}`}
+      onClick={onSelect}
+    >
       <td className="px-4 py-3 font-semibold">{s.rank}</td>
       <td className="px-4 py-3">
         <div className="font-medium">{s.name}</div>
@@ -296,6 +345,87 @@ function ResultRow({ s }: { s: CandidateScore }) {
         {s.closest_reference ?? "—"}
       </td>
     </tr>
+  );
+}
+
+/**
+ * 3D view of the selected candidate's docked binding pose. Falls back to the
+ * apo AlphaFold structure when the per-candidate pose URL is missing (e.g. a
+ * transient storage failure during screening).
+ */
+function BindingPoseCard({
+  result,
+  selectedId,
+  onClose,
+}: {
+  result: ScreeningResponse;
+  selectedId: string | null;
+  onClose: () => void;
+}) {
+  if (!selectedId) return null;
+  const selected = result.ranked.find((s) => s.candidate_id === selectedId);
+  if (!selected) return null;
+  const pdbUrl = selected.pose_pdb_url ?? result.protein_pdb_url;
+  const isPose = Boolean(selected.pose_pdb_url);
+
+  return (
+    <section className="bg-card border rounded-2xl overflow-hidden">
+      <div className="p-5 md:p-6 border-b flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <div className="text-xs uppercase tracking-wide text-muted-foreground">
+            3D binding pose · rank {selected.rank}
+          </div>
+          <h3 className="text-lg font-semibold">
+            {selected.name} bound to {result.target_gene}
+          </h3>
+          <p className="text-xs text-muted-foreground mt-1">
+            Fit score {selected.fit_score.toFixed(2)} · pocket fit{" "}
+            {(selected.pocket_fit * 100).toFixed(0)}% ·{" "}
+            {selected.heavy_atom_count} heavy atoms
+            {!isPose ? (
+              <>
+                {" · "}
+                <span className="text-warning">
+                  pose unavailable — showing apo structure
+                </span>
+              </>
+            ) : null}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+          aria-label="Close 3D viewer"
+        >
+          <X className="w-4 h-4" aria-hidden /> Close
+        </button>
+      </div>
+      <div className="relative h-[480px] bg-slate-50">
+        <MolViewer pdbUrl={pdbUrl} />
+        <div className="absolute top-2 left-2 bg-white/95 backdrop-blur-sm border rounded-md px-3 py-2 text-[11px] space-y-1 shadow-sm pointer-events-none">
+          <div className="font-semibold text-muted-foreground uppercase tracking-wide text-[10px]">
+            Legend
+          </div>
+          <LegendRow color="bg-slate-400" label={`${result.target_gene} protein`} />
+          {isPose ? (
+            <LegendRow color="bg-pink-500" label={`${selected.name} ligand`} />
+          ) : null}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function LegendRow({ color, label }: { color: string; label: string }) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <span
+        className={`inline-block w-2.5 h-2.5 rounded-full ${color}`}
+        aria-hidden
+      />
+      <span>{label}</span>
+    </div>
   );
 }
 
