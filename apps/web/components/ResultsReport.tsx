@@ -1,9 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { AlertTriangle, ArrowRight, FlaskConical, HelpCircle } from "lucide-react";
+import { AlertTriangle, ArrowRight, HelpCircle } from "lucide-react";
 
-import { Brca1FunctionCard } from "./Brca1FunctionCard";
 import { CurrentDrugAssessmentCard } from "./CurrentDrugAssessmentCard";
 import { DoctorVisitPdfButton } from "./DoctorVisitPdfButton";
 import { HrdCard } from "./HrdCard";
@@ -41,7 +40,12 @@ export function ResultsReport({ result, patient, onSwitchDrug }: Props) {
         </div>
 
         <div className="lg:col-span-3 space-y-6 md:space-y-8">
-          {result.hrd ? <HrdCard hrd={result.hrd} /> : null}
+          {result.hrd ? (
+            <HrdCard
+              hrd={result.hrd}
+              classifiableBrca1Variants={result.classifiable_brca1_variants}
+            />
+          ) : null}
 
           {result.current_drug_assessment ? (
             <CurrentDrugAssessmentCard
@@ -56,10 +60,6 @@ export function ResultsReport({ result, patient, onSwitchDrug }: Props) {
               patientLabel={patient?.persona_name ?? null}
             />
           </div>
-
-          {result.classifiable_brca1_variants.length > 0 ? (
-            <Brca1FunctionSection hgvsList={result.classifiable_brca1_variants} />
-          ) : null}
         </div>
       </div>
     </div>
@@ -188,51 +188,6 @@ function LegendRow({ color, label }: { color: string; label: string }) {
     <div className="flex items-center gap-1.5">
       <span className={`inline-block w-2.5 h-2.5 rounded-full ${color}`} aria-hidden />
       <span>{label}</span>
-    </div>
-  );
-}
-
-/**
- * "Predict the effect of my BRCA1 variant" — opt-in ML card.
- *
- * Collapsed by default because the prediction is experimental (XGBoost +
- * AlphaMissense ensemble, not a clinical classifier) and we don't want to
- * imply every patient should read it. Click the button to run.
- */
-function Brca1FunctionSection({ hgvsList }: { hgvsList: string[] }) {
-  const [open, setOpen] = useState(false);
-
-  if (!open) {
-    return (
-      <section className="bg-card border rounded-2xl p-5 flex items-center gap-4 flex-wrap">
-        <FlaskConical className="w-5 h-5 text-primary flex-shrink-0" aria-hidden />
-        <div className="flex-1 min-w-[200px]">
-          <div className="text-base font-semibold">
-            Predict BRCA1 variant effect{" "}
-            <span className="text-xs font-normal text-muted-foreground">
-              · experimental
-            </span>
-          </div>
-          <div className="text-xs text-muted-foreground mt-0.5 font-mono truncate">
-            {hgvsList.join(", ")}
-          </div>
-        </div>
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          className="inline-flex items-center justify-center rounded-lg bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:opacity-90 transition-opacity"
-        >
-          Run prediction
-        </button>
-      </section>
-    );
-  }
-
-  return (
-    <div className="space-y-4">
-      {hgvsList.map((hgvs) => (
-        <Brca1FunctionCard key={hgvs} hgvsProtein={hgvs} />
-      ))}
     </div>
   );
 }

@@ -1,9 +1,20 @@
 "use client";
 
+import { useState } from "react";
+import { FlaskConical } from "lucide-react";
+
+import { Brca1FunctionCard } from "./Brca1FunctionCard";
 import type { HrdResult } from "@/lib/bc-types";
 
 interface Props {
   hrd: HrdResult;
+  /**
+   * BRCA1 variants the Tier-3 ML classifier can score (in HGVS protein
+   * notation). When non-empty we render an opt-in subsection inside this
+   * card so the ML prediction appears as part of the HR-deficiency story
+   * rather than as a separate card further down the page.
+   */
+  classifiableBrca1Variants?: string[];
 }
 
 /**
@@ -17,7 +28,7 @@ interface Props {
  * elsewhere (e.g. Diana has a CYP2D6 metabolism variant, not an HR variant
  * — her HRD status genuinely isn't the story).
  */
-export function HrdCard({ hrd }: Props) {
+export function HrdCard({ hrd, classifiableBrca1Variants = [] }: Props) {
   // Compact "not applicable" rendering for patients without HR-panel variants.
   if (hrd.label === "indeterminate" && hrd.evidence.length === 0) {
     return (
@@ -114,6 +125,10 @@ export function HrdCard({ hrd }: Props) {
         </div>
       ) : null}
 
+      {classifiableBrca1Variants.length > 0 ? (
+        <Brca1PredictionNested hgvsList={classifiableBrca1Variants} />
+      ) : null}
+
       <details className="text-xs text-muted-foreground">
         <summary className="cursor-pointer hover:text-foreground">
           Caveats
@@ -125,5 +140,58 @@ export function HrdCard({ hrd }: Props) {
         </ul>
       </details>
     </section>
+  );
+}
+
+/**
+ * Nested BRCA1 variant-effect prediction subsection.
+ *
+ * The prediction takes a couple seconds and some patients won't care for the
+ * ML layer at all, so it's opt-in: a compact button by default, the full
+ * Brca1FunctionCard content once clicked. Lives inside HrdCard so patients
+ * see it as "extra evidence for the HR-deficiency call," not as an
+ * unrelated separate card further down the page.
+ */
+function Brca1PredictionNested({ hgvsList }: { hgvsList: string[] }) {
+  const [open, setOpen] = useState(false);
+  const label =
+    hgvsList.length > 1 ? "these BRCA1 variants" : "this BRCA1 variant";
+
+  if (!open) {
+    return (
+      <div className="rounded-lg border-2 border-dashed border-muted-foreground/30 p-3 flex items-center gap-3 flex-wrap">
+        <FlaskConical className="w-4 h-4 text-primary flex-shrink-0" aria-hidden />
+        <div className="flex-1 min-w-[180px] text-sm">
+          <div className="font-medium">
+            Predict {label}{" "}
+            <span className="text-xs font-normal text-muted-foreground">
+              · experimental ML
+            </span>
+          </div>
+          <div className="text-xs text-muted-foreground font-mono truncate">
+            {hgvsList.join(", ")}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="inline-flex items-center justify-center rounded-lg bg-primary text-primary-foreground px-3 py-1.5 text-xs font-medium hover:opacity-90 transition-opacity"
+        >
+          Run prediction
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-lg border bg-white/60 p-3 md:p-4 space-y-3">
+      <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted-foreground font-semibold">
+        <FlaskConical className="w-3.5 h-3.5 text-primary" aria-hidden />
+        ML prediction · experimental
+      </div>
+      {hgvsList.map((hgvs) => (
+        <Brca1FunctionCard key={hgvs} hgvsProtein={hgvs} />
+      ))}
+    </div>
   );
 }

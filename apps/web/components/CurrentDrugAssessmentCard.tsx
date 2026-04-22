@@ -65,10 +65,14 @@ export function CurrentDrugAssessmentCard({
         </div>
       </header>
 
-      <div className="space-y-1">
-        <p className="text-sm leading-relaxed">{assessment.rationale}</p>
+      <div className="space-y-2">
+        {splitSentences(assessment.rationale).map((sentence, i) => (
+          <p key={i} className="text-sm leading-relaxed">
+            {sentence}
+          </p>
+        ))}
         {assessment.source ? (
-          <p className="text-xs italic text-muted-foreground">
+          <p className="text-xs italic text-muted-foreground pt-1">
             Source: {assessment.source}
           </p>
         ) : null}
@@ -98,4 +102,25 @@ export function CurrentDrugAssessmentCard({
       ) : null}
     </section>
   );
+}
+
+/**
+ * Break a rationale string into sentence-per-paragraph so a dense CPIC/FDA
+ * recommendation text like
+ *   "...breast AND ovarian cancer for germline BRCA1 pathogenic carriers.
+ *   Breast: HER2-negative high-risk early or metastatic disease (OlympiA,
+ *   OlympiAD). Ovarian: first-line maintenance after platinum response
+ *   (SOLO-1)."
+ * renders as visually separate clauses instead of a wall of text.
+ *
+ * Splits only on ". " followed by a capital letter / digit — leaves
+ * abbreviations like "e.g." and decimals like "1.5" alone. Trailing
+ * period preserved on each clause.
+ */
+function splitSentences(text: string): string[] {
+  const trimmed = text.trim();
+  if (!trimmed) return [];
+  // Lookbehind for `.` + space + capital-letter-or-digit start of next clause.
+  const parts = trimmed.split(/(?<=[.!?])\s+(?=[A-Z0-9])/);
+  return parts.map((p) => p.trim()).filter(Boolean);
 }
