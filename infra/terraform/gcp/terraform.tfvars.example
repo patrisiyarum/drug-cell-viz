@@ -1,0 +1,21 @@
+project_id = "YOUR-GCP-PROJECT-ID"
+region     = "us-central1"
+
+# Container image for the API. Push to Artifact Registry first, then set here.
+# Build + push:
+#   gcloud builds submit --tag us-central1-docker.pkg.dev/$PROJECT/drug-cell-viz/api:$(git rev-parse --short HEAD) apps/api
+api_image  = "us-central1-docker.pkg.dev/YOUR-GCP-PROJECT-ID/drug-cell-viz/api:latest"
+
+# Optional: external broker + observability secrets. Create these in Secret
+# Manager out-of-band (they're typically provisioned by the CloudAMQP /
+# Logfire dashboards and pasted into Secret Manager by a human once) and
+# set the secret ids here. Leave blank to skip wiring those env vars.
+rabbitmq_url_secret_id  = "rabbitmq-url"
+logfire_token_secret_id = ""
+
+# Production tier bumps:
+# db_tier              = "db-custom-2-7680"
+# redis_tier           = "STANDARD_HA"
+# redis_memory_size_gb = 5
+# api_min_instances    = 1
+# api_max_instances    = 25

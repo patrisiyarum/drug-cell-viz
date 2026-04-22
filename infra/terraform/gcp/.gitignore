@@ -1,0 +1,7 @@
+# Local state + any vars files with real secrets
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+terraform.tfvars
+*.auto.tfvars
