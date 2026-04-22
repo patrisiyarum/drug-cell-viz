@@ -242,14 +242,10 @@ function UploadCard({
           A
         </span>
         <div className="flex-1">
-          <div className="font-medium">Have your 23andMe file? Start here.</div>
-          <div className="text-xs text-muted-foreground">
-            We'll scan it for {countSupportedSnps()} clinically actionable
-            variants and pre-fill the form below.
-          </div>
+          <div className="font-medium">23andMe raw data</div>
         </div>
         <span className="text-xs text-muted-foreground group-open:hidden">
-          (optional — click to open)
+          (optional)
         </span>
       </summary>
       <div className="border-t px-5 md:px-6 py-5 space-y-4">
@@ -364,6 +360,7 @@ function VcfUploadCard({
   const [drugId, setDrugId] = useState("tamoxifen");
   const [parsing, setParsing] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [dragActive, setDragActive] = useState(false);
   const [lastResp, setLastResp] = useState<{
     total: number;
     pass: number;
@@ -405,14 +402,10 @@ function VcfUploadCard({
           B
         </span>
         <div className="flex-1">
-          <div className="font-medium">Have a clinical VCF? Upload it here.</div>
-          <div className="text-xs text-muted-foreground">
-            Server-side cyvcf2 parser. Matches your variants against our catalog
-            and runs the full analysis in one request.
-          </div>
+          <div className="font-medium">Clinical VCF</div>
         </div>
         <span className="text-xs text-muted-foreground group-open:hidden">
-          (optional — click to open)
+          (optional)
         </span>
       </summary>
       <div className="border-t px-5 md:px-6 py-5 space-y-4">
@@ -423,39 +416,51 @@ function VcfUploadCard({
           onChange={onFile}
           className="sr-only"
         />
-        <div className="flex flex-wrap items-center gap-3">
-          <label className="text-sm">
-            Drug:
-            <select
-              value={drugId}
-              onChange={(e) => setDrugId(e.target.value)}
-              className="ml-2 text-sm border rounded px-2 py-1 bg-white"
-            >
-              <option value="tamoxifen">Tamoxifen</option>
-              <option value="olaparib">Olaparib</option>
-              <option value="capecitabine">Capecitabine</option>
-              <option value="imatinib">Imatinib</option>
-              <option value="mercaptopurine">Mercaptopurine</option>
-              <option value="irinotecan">Irinotecan</option>
-            </select>
-          </label>
+        <label className="text-sm flex items-center gap-2">
+          Drug:
+          <select
+            value={drugId}
+            onChange={(e) => setDrugId(e.target.value)}
+            className="text-sm border rounded-lg px-3 py-1.5 bg-white"
+          >
+            <option value="tamoxifen">Tamoxifen</option>
+            <option value="olaparib">Olaparib</option>
+            <option value="capecitabine">Capecitabine</option>
+            <option value="imatinib">Imatinib</option>
+            <option value="mercaptopurine">Mercaptopurine</option>
+            <option value="irinotecan">Irinotecan</option>
+          </select>
+        </label>
+        <div
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragActive(true);
+          }}
+          onDragLeave={() => setDragActive(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDragActive(false);
+            if (e.dataTransfer.files[0] && inputRef.current) {
+              inputRef.current.files = e.dataTransfer.files;
+              inputRef.current.dispatchEvent(new Event("change", { bubbles: true }));
+            }
+          }}
+          className={`border-2 border-dashed rounded-xl p-5 text-center transition-colors ${
+            dragActive ? "border-primary bg-primary/5" : "border-slate-300 bg-slate-50"
+          }`}
+        >
+          <FileUp className="w-7 h-7 mx-auto text-muted-foreground" aria-hidden />
+          <p className="mt-2 text-sm text-gray-700">
+            Drop your VCF file here, or click to pick it.
+          </p>
           <button
             type="button"
             onClick={() => inputRef.current?.click()}
             disabled={parsing}
-            className="px-5 py-2 rounded-lg bg-primary text-primary-foreground text-sm hover:opacity-90 disabled:opacity-50"
+            className="mt-3 px-5 py-2 rounded-lg bg-primary text-primary-foreground text-sm hover:opacity-90 disabled:opacity-50"
           >
-            {parsing ? "Analyzing…" : "Choose VCF file"}
+            {parsing ? "Analyzing…" : "Choose file"}
           </button>
-        </div>
-
-        <div className="border rounded-lg p-3 bg-slate-50 text-xs">
-          <div className="font-medium mb-1">Accepts: .vcf, .vcf.gz</div>
-          <div className="text-muted-foreground">
-            Coordinates must be on GRCh38 / hg38. Multi-sample VCFs analyze the
-            first sample. Your file is sent to the API, parsed with cyvcf2, and
-            deleted immediately after the response.
-          </div>
         </div>
 
         {err ? <div className="text-sm text-red-600">{err}</div> : null}

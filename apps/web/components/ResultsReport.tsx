@@ -37,6 +37,7 @@ export function ResultsReport({ result, patient, onSwitchDrug }: Props) {
           <div className="no-print">
             <MolecularCard result={result} />
           </div>
+          <WhatYouSeeCard result={result} />
         </div>
 
         <div className="lg:col-span-3 space-y-6 md:space-y-8">
@@ -112,6 +113,19 @@ function RelevanceWarning({
           ) : null}
         </div>
       </div>
+    </div>
+  );
+}
+
+/** Tight explainer card paired with the 3D viewer: what the ribbons and
+ * highlights in the image mean, in one short paragraph. */
+function WhatYouSeeCard({ result }: { result: AnalysisResult }) {
+  return (
+    <div className="bg-card border rounded-2xl p-5 space-y-2">
+      <h3 className="text-sm font-semibold">What you see in the 3D view</h3>
+      <p className="text-sm leading-relaxed text-muted-foreground">
+        {result.plain_language.what_you_see}
+      </p>
     </div>
   );
 }
