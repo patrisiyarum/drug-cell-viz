@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CheckCircle2, FileUp } from "lucide-react";
 
 import {
@@ -36,6 +36,15 @@ export default function BuildPage() {
 
   const [uploadDetected, setUploadDetected] = useState<SelectedVariant[]>([]);
   const [parseResult, setParseResult] = useState<ParseResult | null>(null);
+
+  // Auto-scroll into view when a new result lands so the user doesn't have to
+  // hunt for the report after clicking "Show me how this affects me."
+  const resultsRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (result && resultsRef.current) {
+      resultsRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [result?.id]);
 
   // Shared form state: DrugPickerSection and VariantPickerSection both read and
   // write this. Lives at the page level so the Step 1 and Step 3 cards stay in
@@ -123,6 +132,7 @@ export default function BuildPage() {
                 }}
               />
               <VcfUploadCard
+                drugId={form.drugId}
                 onResult={(r, drugId) => {
                   setResult(r);
                   setLastContext({ drugId, variants: [] });
@@ -151,7 +161,10 @@ export default function BuildPage() {
         </div>
 
         {result ? (
-          <div className="max-w-[1600px] mx-auto mt-10 md:mt-14">
+          <div
+            ref={resultsRef}
+            className="max-w-[1600px] mx-auto mt-10 md:mt-14 scroll-mt-6"
+          >
             <ResultsReport result={result} onSwitchDrug={onSwitchDrug} />
           </div>
         ) : null}
@@ -351,13 +364,17 @@ export type { Detection };
  * analysis comes back in one shot, including the detected variant list and
  * the full AnalysisResult.
  */
+/**
+ * The drug comes from Step 1's shared form state — we don't ask again here.
+ */
 function VcfUploadCard({
+  drugId,
   onResult,
 }: {
+  drugId: string;
   onResult: (result: AnalysisResult, drugId: string) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const [drugId, setDrugId] = useState("tamoxifen");
   const [parsing, setParsing] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
@@ -416,21 +433,6 @@ function VcfUploadCard({
           onChange={onFile}
           className="sr-only"
         />
-        <label className="text-sm flex items-center gap-2">
-          Drug:
-          <select
-            value={drugId}
-            onChange={(e) => setDrugId(e.target.value)}
-            className="text-sm border rounded-lg px-3 py-1.5 bg-white"
-          >
-            <option value="tamoxifen">Tamoxifen</option>
-            <option value="olaparib">Olaparib</option>
-            <option value="capecitabine">Capecitabine</option>
-            <option value="imatinib">Imatinib</option>
-            <option value="mercaptopurine">Mercaptopurine</option>
-            <option value="irinotecan">Irinotecan</option>
-          </select>
-        </label>
         <div
           onDragOver={(e) => {
             e.preventDefault();

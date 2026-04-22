@@ -28,21 +28,21 @@ export default function LandingPage() {
             </p>
             <div className="flex flex-wrap items-center justify-center gap-3">
               <Link
-                href="/demo"
+                href="/build"
                 className="inline-flex items-center gap-2 px-7 py-4 bg-primary text-primary-foreground rounded-xl hover:opacity-90 transition-opacity"
               >
-                See how it works
+                Try it for yourself
                 <ArrowRight className="w-5 h-5" />
               </Link>
               <Link
-                href="/build"
-                className="inline-flex items-center gap-2 px-7 py-4 border border-border rounded-xl hover:bg-accent transition-colors text-sm"
+                href="/demo"
+                className="inline-flex items-center gap-2 px-7 py-4 border border-border bg-white rounded-xl hover:bg-accent transition-colors text-sm"
               >
-                Try it
+                See how it works
               </Link>
               <Link
                 href="/screen"
-                className="inline-flex items-center gap-2 px-7 py-4 border border-border rounded-xl hover:bg-accent transition-colors text-sm"
+                className="inline-flex items-center gap-2 px-7 py-4 border border-border bg-white rounded-xl hover:bg-accent transition-colors text-sm"
               >
                 Virtual screening (experimental)
               </Link>
