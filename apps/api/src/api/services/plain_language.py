@@ -222,57 +222,43 @@ def build_plain_language(
     in_pocket = [r for r in pocket_residues if r.in_pocket]
 
     # --- what_you_see -----------------------------------------------------
-    what_you_see = (
-        f"You're looking at a 3D model of {gene_name}, the protein {drug_name} "
-        f"is designed to attach to. "
-    )
-    if has_pose:
-        what_you_see += (
-            f"The small bright shape is {drug_name}, positioned where it would "
-            f"slot onto the protein. "
-        )
+    # Keep this tight. Every sentence must earn its place. Patients look at
+    # the 3D viewer for ~5 seconds — a paragraph is noise.
+    ligand_phrase = "the bright shape" if has_pose else "the drug"
     if in_pocket:
         pos_list = ", ".join(str(r.position) for r in in_pocket[:3])
-        what_you_see += (
-            f"The highlighted residues (position{'s' if len(in_pocket) > 1 else ''} "
-            f"{pos_list}) are the spots in your DNA that differ from the reference, "
-            f"and they sit inside the drug's binding slot, which can change how "
-            f"well the drug fits."
+        pl = "s" if len(in_pocket) > 1 else ""
+        what_you_see = (
+            f"{ligand_phrase.capitalize()} is {drug_name} bound to "
+            f"{target_gene}. The highlighted residue{pl} "
+            f"(position{pl} {pos_list}) sit{'' if pl else 's'} inside the "
+            f"drug's pocket, which can change how well {drug_name} fits."
         )
     elif pocket_residues:
-        what_you_see += (
-            "Your variants are shown on the protein but they sit away from the "
-            "drug's binding slot, so the drug should still fit normally."
+        what_you_see = (
+            f"{ligand_phrase.capitalize()} is {drug_name} bound to "
+            f"{target_gene}. Your variants are on {target_gene} but sit "
+            f"away from the binding pocket, so {drug_name} should still fit."
         )
     else:
-        # Distinguish two cases that previously both said "no variants entered":
-        #   (a) patient really didn't enter any variants, OR
-        #   (b) patient entered variants but on genes OTHER than the drug's
-        #       direct target (e.g. BRCA1 variant with olaparib → PARP1).
-        # Case (b) is the normal case for synthetic-lethality drugs, and
-        # showing "no variants entered" there makes it look like the tool
-        # ignored the input. Fix the copy to name the gene(s) instead.
         off_target_genes = [
             g for g in (entered_genes or []) if g and g != target_gene
         ]
         if off_target_genes:
+            # Patient entered variants but they're on a different gene than
+            # the drug's direct target (e.g. BRCA1 + olaparib → PARP1).
+            # Common for synthetic-lethality drugs. Keep it to two sentences.
             names = _human_list(off_target_genes)
-            noun = (
-                f"a {names} variant"
-                if len(off_target_genes) == 1
-                else f"variants in {names}"
-            )
-            what_you_see += (
-                f"You entered {noun}, but the 3D view shows {target_gene} — "
-                f"the protein {drug_name} actually binds. The clinical link "
-                f"between your variant and {drug_name} doesn't work through "
-                f"direct binding, so there's nothing to highlight on this "
-                f"structure. See the verdict below for how the two connect."
+            what_you_see = (
+                f"{ligand_phrase.capitalize()} is {drug_name} bound to "
+                f"{target_gene}. Your {names} variant isn't on this "
+                f"protein — see the verdict below for how the two connect."
             )
         else:
-            what_you_see += (
-                "No variants were entered, so you're seeing the standard "
-                "(reference) shape of the protein with the drug docked."
+            what_you_see = (
+                f"{ligand_phrase.capitalize()} is {drug_name} bound to "
+                f"{target_gene}. No variants were entered, so you're seeing "
+                f"the reference structure."
             )
 
     # --- how_the_drug_works ----------------------------------------------

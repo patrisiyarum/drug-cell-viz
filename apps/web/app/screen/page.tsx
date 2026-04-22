@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { FlaskConical, Trash2, X } from "lucide-react";
 
@@ -61,6 +61,17 @@ export default function ScreenPage() {
   // Which candidate's 3D binding pose is currently being inspected. Auto-
   // selects the top ranked after a successful run.
   const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  // Scroll the 3D pose + ranked table into view as soon as a screening lands
+  // so the user doesn't have to hunt for the results below the fold.
+  const resultsRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (result && resultsRef.current) {
+      resultsRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+    // Only fire when a new run lands — keyed on ranked list length + target,
+    // so clicking a row inside the existing result doesn't re-scroll the page.
+  }, [result?.target_gene, result?.ranked.length]);
 
   // Seed the textarea with a starter library whenever the target changes and
   // the user hasn't typed anything.
@@ -245,7 +256,7 @@ export default function ScreenPage() {
           </section>
 
           {result ? (
-            <>
+            <div ref={resultsRef} className="space-y-6 scroll-mt-6">
               <BindingPoseCard
                 result={result}
                 selectedId={selectedId}
@@ -256,7 +267,7 @@ export default function ScreenPage() {
                 selectedId={selectedId}
                 onSelect={setSelectedId}
               />
-            </>
+            </div>
           ) : null}
         </div>
       </main>
