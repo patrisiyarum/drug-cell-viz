@@ -152,6 +152,7 @@ export interface CurrentDrugAssessment {
   verdict: CurrentDrugVerdict;
   headline: string;
   rationale: string;
+  source: string | null;
   better_options: SuggestedDrug[];
 }
 

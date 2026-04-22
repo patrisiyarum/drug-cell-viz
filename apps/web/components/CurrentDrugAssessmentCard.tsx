@@ -66,7 +66,14 @@ export function CurrentDrugAssessmentCard({
         </div>
       </header>
 
-      <p className="text-sm leading-relaxed">{assessment.rationale}</p>
+      <div className="space-y-1">
+        <p className="text-sm leading-relaxed">{assessment.rationale}</p>
+        {assessment.source ? (
+          <p className="text-xs italic text-muted-foreground">
+            Source: {assessment.source}
+          </p>
+        ) : null}
+      </div>
 
       {assessment.better_options.length > 0 ? (
         <div className="rounded-lg border bg-white/70 p-3 md:p-4 space-y-2">

@@ -123,6 +123,9 @@ class CurrentDrugAssessment(BaseModel):
     verdict: Literal["well_matched", "acceptable", "review_needed", "unknown"]
     headline: str           # one-sentence summary for the UI card
     rationale: str          # why we gave this verdict, citing variants + rules
+    # Separate from rationale so the UI can render the citation on its own
+    # line (italic, small) instead of inline in the body paragraph.
+    source: str | None = None
     better_options: list[SuggestedDrug] = []
 
 

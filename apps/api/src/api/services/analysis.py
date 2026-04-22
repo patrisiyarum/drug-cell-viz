@@ -396,9 +396,9 @@ def _assess_current_drug(
             ),
             rationale=(
                 f"Your {v.variant_label} ({v.zygosity}) matches a published "
-                f"avoid-recommendation for {drug_name}. {v.recommendation} "
-                f"Source: {v.source}."
+                f"avoid-recommendation for {drug_name}. {v.recommendation}"
             ),
+            source=v.source,
             better_options=suggested_drugs,
         )
 
@@ -410,8 +410,9 @@ def _assess_current_drug(
             rationale=(
                 f"Your {v.variant_label} matches an FDA-approved biomarker "
                 f"or CPIC-recommended indication for {drug_name}. "
-                f"{v.recommendation} Source: {v.source}."
+                f"{v.recommendation}"
             ),
+            source=v.source,
             better_options=[],
         )
 
@@ -426,8 +427,9 @@ def _assess_current_drug(
             rationale=(
                 f"Your {v.variant_label} triggers published guidance to "
                 f"{'adjust dosing' if 'reduce' in v.recommendation.lower() else 'consider alternatives'}. "
-                f"{v.recommendation} Source: {v.source}."
+                f"{v.recommendation}"
             ),
+            source=v.source,
             better_options=suggested_drugs,
         )
 

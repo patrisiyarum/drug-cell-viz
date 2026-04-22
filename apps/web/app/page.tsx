@@ -38,7 +38,7 @@ export default function LandingPage() {
                 href="/build"
                 className="inline-flex items-center gap-2 px-7 py-4 border border-border rounded-xl hover:bg-accent transition-colors text-sm"
               >
-                Upload 23andMe or build a custom query
+                Try it
               </Link>
               <Link
                 href="/screen"

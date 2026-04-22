@@ -207,6 +207,8 @@ def build_pdf(result: AnalysisResult, patient_label: str | None = None) -> bytes
         flow.append(_p(f"<b>Verdict:</b> {verdict_pretty}", S["body"]))
         flow.append(_psafe(cda.headline, S["callout"]))
         flow.append(_psafe(cda.rationale, S["body"]))
+        if cda.source:
+            flow.append(_psafe(f"Source: {cda.source}", S["meta"]))
         if cda.better_options:
             flow.append(_p("Drugs worth asking about", S["h3"]))
             for s in cda.better_options:

@@ -149,18 +149,32 @@ export default function ScreenPage() {
               Rank compounds against an HR-panel target
             </h1>
             <p className="text-muted-foreground leading-relaxed">
-              Pick a target protein from the HR-repair + hormone-signalling
-              panel, paste one or more candidate SMILES, and we&apos;ll score
-              each by how well it packs into the binding pocket (3D fit) and
-              how structurally similar it is to known binders of this target
-              (Morgan-fingerprint Tanimoto). Composite rank =
-              0.6 × pocket fit + 0.4 × chemical similarity.
+              Pick a target protein. Paste a handful of candidate SMILES.
+              We&apos;ll score each one two ways:
+            </p>
+            <ul className="text-muted-foreground leading-relaxed list-disc pl-5 space-y-1">
+              <li>
+                <span className="font-medium text-foreground">3D fit</span> —
+                how well the compound packs into the binding pocket.
+              </li>
+              <li>
+                <span className="font-medium text-foreground">
+                  Chemical similarity
+                </span>{" "}
+                — how close it looks to drugs already known to bind this
+                target.
+              </li>
+            </ul>
+            <p className="text-muted-foreground leading-relaxed">
+              Final rank = 60% fit + 40% similarity.
             </p>
             <p className="text-xs text-muted-foreground">
-              Docking is an RDKit stub by default; set{" "}
-              <code className="bg-slate-100 px-1 rounded">USE_MODAL_DOCKING=true</code>{" "}
-              to route through DiffDock on Modal GPU. This is not a
-              binding-affinity calculation.
+              Docking uses an RDKit stub by default. Set{" "}
+              <code className="bg-slate-100 px-1 rounded">
+                USE_MODAL_DOCKING=true
+              </code>{" "}
+              to route through DiffDock on a GPU. This is a screening heuristic,
+              not a binding-affinity calculation.
             </p>
           </div>
 
