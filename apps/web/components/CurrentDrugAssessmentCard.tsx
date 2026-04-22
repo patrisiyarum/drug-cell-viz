@@ -1,10 +1,16 @@
 "use client";
 
-import type { CurrentDrugAssessment } from "@/lib/bc-types";
+import type { CurrentDrugAssessment, PGxVerdict } from "@/lib/bc-types";
 
 interface Props {
   drugName: string;
   assessment: CurrentDrugAssessment;
+  // PGx verdicts get surfaced as a prominent "you are a [phenotype]" line at
+  // the top of the card. This is the single most important takeaway in cases
+  // like Diana's (CYP2D6*4 homozygous → poor metabolizer → tamoxifen won't
+  // convert to endoxifen efficiently). Patients shouldn't have to infer that
+  // from the rationale paragraph.
+  pgxVerdicts?: PGxVerdict[];
   onSwitchDrug?: (drugId: string) => void;
 }
 
@@ -19,8 +25,14 @@ interface Props {
 export function CurrentDrugAssessmentCard({
   drugName,
   assessment,
+  pgxVerdicts,
   onSwitchDrug,
 }: Props) {
+  // Pick the most informative verdict to feature as the top-line metabolizer /
+  // phenotype summary. Prefer the one that's about the drug the patient is on.
+  const featured = (pgxVerdicts ?? []).find(
+    (v) => v.drug_name.toLowerCase() === drugName.toLowerCase(),
+  ) ?? pgxVerdicts?.[0];
   const style = {
     well_matched: {
       bg: "bg-success/10",
@@ -66,8 +78,23 @@ export function CurrentDrugAssessmentCard({
         </div>
       </header>
 
+      {featured ? (
+        <div className="rounded-lg border-2 border-dashed p-3 md:p-4 bg-white/70 space-y-1">
+          <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
+            Bottom line
+          </div>
+          <p className="text-sm md:text-base leading-relaxed">
+            Your <span className="font-mono text-xs">{featured.variant_label}</span>{" "}
+            ({featured.zygosity}) makes you a{" "}
+            <span className="font-semibold">{featured.phenotype}</span>
+            {phenotypeToAction(featured, drugName)}
+          </p>
+        </div>
+      ) : null}
+
       <p className="text-sm leading-relaxed">{assessment.rationale}</p>
 
+      {/* phenotypeToAction defined below renders the action clause inline. */}
       {assessment.better_options.length > 0 ? (
         <div className="rounded-lg border bg-white/70 p-3 md:p-4 space-y-2">
           <div className="text-xs font-medium uppercase text-muted-foreground">
@@ -92,4 +119,29 @@ export function CurrentDrugAssessmentCard({
       ) : null}
     </section>
   );
+}
+
+/**
+ * Turn a PGx verdict into a one-clause action statement, e.g. ", so your
+ * oncologist may consider an alternative hormonal therapy (aromatase
+ * inhibitor)." Maps CPIC/FDA recommendation text into patient-facing prose.
+ */
+function phenotypeToAction(v: PGxVerdict, drugName: string): string {
+  const rec = v.recommendation.toLowerCase();
+  if (rec.includes("avoid")) {
+    return `, so current guidance is to avoid ${drugName} at standard doses and consider an alternative.`;
+  }
+  if (rec.includes("alternative")) {
+    return `, so your oncologist may consider an alternative to ${drugName}.`;
+  }
+  if (rec.includes("reduce") || rec.includes("50%")) {
+    return `, so ${drugName} dose typically needs to be reduced to avoid toxicity.`;
+  }
+  if (rec.includes("higher") || rec.includes("40 mg")) {
+    return `, so a higher ${drugName} dose may be considered (data strongest in premenopausal patients).`;
+  }
+  if (rec.includes("fda-approved") || rec.includes("eligibility") || rec.includes("eligible")) {
+    return `, which is an FDA-recognized indication for ${drugName}.`;
+  }
+  return ".";
 }

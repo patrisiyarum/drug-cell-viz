@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { AlertTriangle, ArrowRight, ChevronDown, Copy, HelpCircle, Printer } from "lucide-react";
+import { AlertTriangle, ArrowRight, ChevronDown, FlaskConical, HelpCircle } from "lucide-react";
 
 import { Brca1FunctionCard } from "./Brca1FunctionCard";
 import { CurrentDrugAssessmentCard } from "./CurrentDrugAssessmentCard";
@@ -36,8 +36,11 @@ export function ResultsReport({ result, patient, onSwitchDrug }: Props) {
       ) : null}
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 md:gap-8">
-        <div className="lg:col-span-2 lg:sticky lg:top-6 lg:h-fit no-print">
-          <MolecularCard result={result} />
+        <div className="lg:col-span-2 space-y-6 md:space-y-8">
+          <div className="no-print">
+            <MolecularCard result={result} />
+          </div>
+          <WhatThisMeansCard result={result} />
         </div>
 
         <div className="lg:col-span-3 space-y-6 md:space-y-8">
@@ -49,27 +52,21 @@ export function ResultsReport({ result, patient, onSwitchDrug }: Props) {
             <CurrentDrugAssessmentCard
               drugName={result.drug_name}
               assessment={result.current_drug_assessment}
+              pgxVerdicts={result.pgx_verdicts}
               onSwitchDrug={onSwitchDrug}
             />
           ) : null}
 
-          <div className="flex flex-wrap items-center gap-3 no-print">
+          <div className="no-print">
             <DoctorVisitPdfButton
               result={result}
               patientLabel={patient?.persona_name ?? null}
             />
-            <span className="text-xs text-muted-foreground">
-              Printable. Mirrors this whole page + questions for your doctor.
-            </span>
           </div>
 
-          {result.classifiable_brca1_variants.length > 0
-            ? result.classifiable_brca1_variants.map((hgvs) => (
-                <Brca1FunctionCard key={hgvs} hgvsProtein={hgvs} />
-              ))
-            : null}
-          <WhatThisMeansCard result={result} />
-          <QuestionsCard result={result} patient={patient} />
+          {result.classifiable_brca1_variants.length > 0 ? (
+            <Brca1FunctionSection hgvsList={result.classifiable_brca1_variants} />
+          ) : null}
           <HowWeKnowCard result={result} />
         </div>
       </div>
@@ -214,61 +211,51 @@ function Para({ children }: { children: React.ReactNode }) {
   return <p className="leading-relaxed text-[15px]">{children}</p>;
 }
 
-function QuestionsCard({
-  result,
-  patient,
-}: {
-  result: AnalysisResult;
-  patient?: DemoPatient | null;
-}) {
-  const questions = result.plain_language.questions_to_ask;
+/**
+ * "Predict the effect of my BRCA1 variant" — opt-in ML card.
+ *
+ * Collapsed by default because the prediction is experimental (XGBoost +
+ * AlphaMissense ensemble, not a clinical classifier) and we don't want to
+ * imply every patient should read it. Click the button to run.
+ */
+function Brca1FunctionSection({ hgvsList }: { hgvsList: string[] }) {
+  const [open, setOpen] = useState(false);
 
-  function onCopy() {
-    const text = questions.map((q, i) => `${i + 1}. ${q}`).join("\n");
-    navigator.clipboard?.writeText(text);
+  if (!open) {
+    return (
+      <section className="bg-card border rounded-2xl p-5 md:p-6 space-y-3">
+        <div className="flex items-start gap-3">
+          <FlaskConical className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" aria-hidden />
+          <div className="flex-1">
+            <h3 className="text-base md:text-lg font-semibold">
+              Predict the effect of {hgvsList.length > 1 ? "these BRCA1 variants" : "this BRCA1 variant"}{" "}
+              <span className="text-xs font-normal text-muted-foreground">(experimental)</span>
+            </h3>
+            <p className="text-sm text-muted-foreground mt-1 leading-relaxed">
+              We&apos;ll run an ML model (XGBoost + AlphaMissense ensemble, trained
+              on Findlay 2018 saturation-genome-editing data) to predict whether{" "}
+              {hgvsList.join(", ")} likely disrupts BRCA1 function. Takes a
+              couple seconds. This is a research-grade prediction, not a
+              clinical classification.
+            </p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-lg bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:opacity-90 transition-opacity"
+        >
+          Run prediction
+        </button>
+      </section>
+    );
   }
-
-  function onPrint() {
-    window.print();
-  }
-
-  const tailoredTo = patient ? `${patient.persona_name}'s` : "your";
 
   return (
-    <div className="bg-card border rounded-2xl p-6 md:p-8 space-y-5">
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <h2 className="text-xl md:text-2xl font-semibold">Questions to ask your doctor</h2>
-        <div className="flex gap-2 no-print">
-          <button
-            onClick={onCopy}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-muted hover:bg-accent rounded-lg transition-colors"
-            aria-label="Copy questions to clipboard"
-          >
-            <Copy className="w-4 h-4" aria-hidden />
-            <span className="text-sm">Copy</span>
-          </button>
-          <button
-            onClick={onPrint}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-muted hover:bg-accent rounded-lg transition-colors"
-            aria-label="Print questions for appointment"
-          >
-            <Printer className="w-4 h-4" aria-hidden />
-            <span className="text-sm">Print</span>
-          </button>
-        </div>
-      </div>
-      <ul className="space-y-4 questions-list">
-        {questions.map((q, i) => (
-          <li key={i} className="flex gap-3">
-            <span className="text-primary flex-shrink-0">{i + 1}.</span>
-            <span className="leading-relaxed">{q}</span>
-          </li>
-        ))}
-      </ul>
-      <p className="text-xs text-muted-foreground pt-2 border-t">
-        This list is tailored to {tailoredTo} genotype and drug. Bring it, printed or on your
-        phone, to your next appointment.
-      </p>
+    <div className="space-y-4">
+      {hgvsList.map((hgvs) => (
+        <Brca1FunctionCard key={hgvs} hgvsProtein={hgvs} />
+      ))}
     </div>
   );
 }

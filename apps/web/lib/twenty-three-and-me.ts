@@ -56,30 +56,6 @@ const RSID_CATALOG: RsidMatch[] = [
     risk: "T",
     displayName: "DPYD c.2846A>T (rs67376798)",
   },
-  {
-    rsid: "rs1800460",
-    gene: "TPMT",
-    variantCatalogId: "TPMT_star3A",
-    ref: "C",
-    risk: "T",   // Part of the *3A definition; full *3A also needs rs1142345.
-    displayName: "TPMT partial *3A marker (rs1800460)",
-  },
-  {
-    rsid: "rs1142345",
-    gene: "TPMT",
-    variantCatalogId: "TPMT_star3A",
-    ref: "T",
-    risk: "C",   // Second *3A marker.
-    displayName: "TPMT partial *3A marker (rs1142345)",
-  },
-  {
-    rsid: "rs1800462",
-    gene: "TPMT",
-    variantCatalogId: "TPMT_star2",
-    ref: "G",
-    risk: "C",
-    displayName: "TPMT*2 (rs1800462)",
-  },
 ];
 
 // rsIDs that are clinically important but NOT well typed by 23andMe. We

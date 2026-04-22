@@ -259,11 +259,11 @@ function ParseSummary({
       <div className="flex items-start gap-2">
         <CheckCircle2 className="w-4 h-4 text-success flex-shrink-0 mt-0.5" aria-hidden />
         <div className="text-sm flex-1">
-          <span className="font-medium">File read successfully.</span>{" "}
+          <span className="font-medium">File read.</span>{" "}
           <span className="text-muted-foreground">
-            {parsed.validCalls.toLocaleString()} genotype calls. Detected{" "}
-            {parsed.detectedVariants.length}/{countSupportedSnps()} of the
-            actionable variants we support.
+            {parsed.validCalls.toLocaleString()} genotype calls scanned for the{" "}
+            {countSupportedSnps()} drug-metabolism SNPs 23andMe reliably types
+            (CYP2D6, DPYD). Found {parsed.detectedVariants.length}.
           </span>
         </div>
         <button
@@ -288,13 +288,29 @@ function ParseSummary({
             </li>
           ))}
         </ul>
-      ) : (
-        <p className="text-xs text-muted-foreground">
-          No matching variants — that's common. Most people don't carry these
-          specific SNPs. See the notes in the form below about what this test
-          doesn't cover.
+      ) : null}
+      <div
+        className="text-xs rounded-lg border p-3 space-y-2"
+        style={{ background: "rgba(217,119,6,0.06)", borderColor: "rgba(217,119,6,0.25)" }}
+      >
+        <p className="font-medium text-foreground">
+          What 23andMe files can&apos;t tell you
         </p>
-      )}
+        <p className="text-muted-foreground leading-relaxed">
+          This tool&apos;s focus is HR-deficiency (BRCA1, BRCA2, PALB2, ATM,
+          RAD51C/D, BRIP1, BARD1, FANC family). SNP chips like 23andMe&apos;s
+          don&apos;t reliably cover those genes — most pathogenic variants are
+          private or rare, and the common Ashkenazi founder variants
+          (185delAG, 6174delT, 5382insC) are indels that 23andMe reports in a
+          separate health report, not in the raw TSV.
+        </p>
+        <p className="text-muted-foreground leading-relaxed">
+          <span className="font-medium text-foreground">For HR assessment:</span>{" "}
+          upload a clinical VCF (from a CLIA lab like Invitae, Myriad, Color,
+          Ambry) in the section below, or pick a variant from the curated
+          catalog.
+        </p>
+      </div>
     </div>
   );
 }

@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 from pydantic import field_validator
@@ -30,6 +31,25 @@ class Settings(BaseSettings):
     storage_backend: str = "local"  # "local" | "r2"
     local_storage_root: Path = Path("./data/blobs")
     public_base_url: str = "http://localhost:8000"
+
+    @field_validator("public_base_url", mode="before")
+    @classmethod
+    def _resolve_public_base_url(cls, v: object) -> object:
+        """Fall back to Render's injected RENDER_EXTERNAL_URL when the value
+        is missing or comes through unresolved from the Blueprint.
+
+        render.yaml uses `value: $RENDER_EXTERNAL_URL` which is NOT expanded
+        at Blueprint-parse time on Render (it's not Blueprint substitution
+        syntax), so the API would otherwise read the literal string
+        "$RENDER_EXTERNAL_URL" and hand broken PDB URLs to the frontend.
+        RENDER_EXTERNAL_URL itself IS injected as a real env var on every
+        Render service, so we can pick it up directly.
+        """
+        if isinstance(v, str) and (not v or v.startswith("$") or "localhost" in v):
+            render_url = os.environ.get("RENDER_EXTERNAL_URL")
+            if render_url:
+                return render_url
+        return v
     r2_access_key_id: str = ""
     r2_secret_access_key: str = ""
     r2_bucket: str = "drug-cell-viz"

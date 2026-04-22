@@ -100,11 +100,28 @@ def _styles() -> dict[str, ParagraphStyle]:
     }
 
 
+def _esc(text: str) -> str:
+    """Escape a *variable* string before interpolating into a Paragraph template.
+
+    reportlab's Paragraph parses a tiny XML subset (<b>, <i>, <font>, …), so we
+    cannot pre-escape the whole template — we only escape the dynamic bits
+    that might contain user/catalog content with literal <, >, or & (e.g.
+    HGVS strings like "p.Cys61Gly>Xaa").
+    """
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
 def _p(text: str, style) -> Paragraph:
-    # reportlab's Paragraph supports a tiny HTML subset; we escape angle brackets
-    # to avoid accidentally breaking on variant strings like "p.Cys61Gly>..."
-    safe = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-    return Paragraph(safe, style)
+    """Create a Paragraph from a template that MAY contain reportlab markup.
+
+    Callers passing literal user data should wrap it in _esc() first.
+    """
+    return Paragraph(text, style)
+
+
+def _psafe(text: str, style) -> Paragraph:
+    """Shortcut for an entirely-dynamic Paragraph with no markup."""
+    return Paragraph(_esc(text), style)
 
 
 def build_pdf(result: AnalysisResult, patient_label: str | None = None) -> bytes:
@@ -134,12 +151,15 @@ def build_pdf(result: AnalysisResult, patient_label: str | None = None) -> bytes
     )
     flow.append(HRFlowable(width="100%", thickness=0.5, color=colors.HexColor("#cbd5e1")))
     flow.append(Spacer(1, 8))
-    flow.append(_p(f"Drug: <b>{result.drug_name}</b>", S["body"]))
-    flow.append(_p(f"Target protein: <b>{result.target_gene}</b> ({result.target_uniprot})", S["body"]))
+    flow.append(_p(f"Drug: <b>{_esc(result.drug_name)}</b>", S["body"]))
+    flow.append(_p(
+        f"Target protein: <b>{_esc(result.target_gene)}</b> ({_esc(result.target_uniprot)})",
+        S["body"],
+    ))
     if patient_label:
-        flow.append(_p(f"Patient: <b>{patient_label}</b>", S["body"]))
+        flow.append(_p(f"Patient: <b>{_esc(patient_label)}</b>", S["body"]))
     flow.append(Spacer(1, 8))
-    flow.append(_p(result.headline, S["callout"]))
+    flow.append(_psafe(result.headline, S["callout"]))
 
     # --- HRD composite ---
     if result.hrd:
@@ -150,13 +170,14 @@ def build_pdf(result: AnalysisResult, patient_label: str | None = None) -> bytes
             "indeterminate": "Indeterminate",
         }[result.hrd.label]
         flow.append(_p(f"<b>Result:</b> {label_pretty} (score {result.hrd.score}/100)", S["body"]))
-        flow.append(_p(result.hrd.summary, S["body"]))
+        flow.append(_psafe(result.hrd.summary, S["body"]))
         flow.append(_p("PARP-inhibitor context", S["h3"]))
-        flow.append(_p(result.hrd.parp_inhibitor_context, S["body"]))
+        flow.append(_psafe(result.hrd.parp_inhibitor_context, S["body"]))
         if result.hrd.evidence:
             flow.append(_p("Evidence", S["h3"]))
             rows = [["Gene", "Variant", "Source", "Detail"]]
             for e in result.hrd.evidence:
+                # Table renders strings literally (no XML parsing), so raw is fine.
                 rows.append([e.gene, e.variant_label, e.source.replace("_", " "), e.detail])
             t = Table(rows, colWidths=[0.7 * inch, 1.7 * inch, 1.2 * inch, 3.2 * inch])
             t.setStyle(
@@ -184,12 +205,15 @@ def build_pdf(result: AnalysisResult, patient_label: str | None = None) -> bytes
             "unknown": "Not enough data",
         }[cda.verdict]
         flow.append(_p(f"<b>Verdict:</b> {verdict_pretty}", S["body"]))
-        flow.append(_p(cda.headline, S["callout"]))
-        flow.append(_p(cda.rationale, S["body"]))
+        flow.append(_psafe(cda.headline, S["callout"]))
+        flow.append(_psafe(cda.rationale, S["body"]))
         if cda.better_options:
             flow.append(_p("Drugs worth asking about", S["h3"]))
             for s in cda.better_options:
-                flow.append(_p(f"<b>{s.name}</b> — {s.reason}", S["body"]))
+                flow.append(_p(
+                    f"<b>{_esc(s.name)}</b> — {_esc(s.reason)}",
+                    S["body"],
+                ))
 
     # --- Pharmacogenomic verdicts ---
     if result.pgx_verdicts:
@@ -197,55 +221,62 @@ def build_pdf(result: AnalysisResult, patient_label: str | None = None) -> bytes
         for v in result.pgx_verdicts:
             flow.append(
                 _p(
-                    f"<b>[Evidence {v.evidence_level}] {v.drug_name} × {v.variant_label}</b> "
-                    f"({v.zygosity})",
+                    f"<b>[Evidence {_esc(v.evidence_level)}] "
+                    f"{_esc(v.drug_name)} × {_esc(v.variant_label)}</b> "
+                    f"({_esc(v.zygosity)})",
                     S["h3"],
                 )
             )
-            flow.append(_p(f"Phenotype: {v.phenotype}", S["body"]))
-            flow.append(_p(v.recommendation, S["body"]))
-            flow.append(_p(f"Source: {v.source}", S["meta"]))
+            flow.append(_psafe(f"Phenotype: {v.phenotype}", S["body"]))
+            flow.append(_psafe(v.recommendation, S["body"]))
+            flow.append(_psafe(f"Source: {v.source}", S["meta"]))
 
     # --- Questions for the doctor ---
+    # Kept in the PDF (not the web page) — the PDF is the "take this to the
+    # appointment" artifact, so having a ready-to-read question list is the
+    # whole point of downloading it.
     if result.plain_language.questions_to_ask:
         flow.append(_p("Questions to ask your doctor", S["h2"]))
         for i, q in enumerate(result.plain_language.questions_to_ask, 1):
-            flow.append(_p(f"{i}. {q}", S["body"]))
+            flow.append(_psafe(f"{i}. {q}", S["body"]))
 
     # --- Plain-language summary ---
     pl = result.plain_language
     flow.append(_p("What this means", S["h2"]))
     flow.append(_p("What you'd see in the 3D view", S["h3"]))
-    flow.append(_p(pl.what_you_see, S["body"]))
+    flow.append(_psafe(pl.what_you_see, S["body"]))
     flow.append(_p("How this drug works", S["h3"]))
-    flow.append(_p(pl.how_the_drug_works, S["body"]))
+    flow.append(_psafe(pl.how_the_drug_works, S["body"]))
     flow.append(_p("What this means for you", S["h3"]))
-    flow.append(_p(pl.what_it_means_for_you, S["body"]))
+    flow.append(_psafe(pl.what_it_means_for_you, S["body"]))
     flow.append(_p("Next steps", S["h3"]))
-    flow.append(_p(pl.next_steps, S["body"]))
+    flow.append(_psafe(pl.next_steps, S["body"]))
 
     # --- How we know this ---
     hw = pl.how_we_know
     flow.append(_p("How we know this", S["h2"]))
-    flow.append(_p(f"<b>{hw.source}</b>", S["body"]))
-    flow.append(_p(hw.summary, S["body"]))
+    flow.append(_p(f"<b>{_esc(hw.source)}</b>", S["body"]))
+    flow.append(_psafe(hw.summary, S["body"]))
     if hw.link:
-        flow.append(_p(f"Reference: {hw.link}", S["meta"]))
+        flow.append(_psafe(f"Reference: {hw.link}", S["meta"]))
 
     # --- Disclaimers ---
     flow.append(PageBreak())
     flow.append(_p("Important — read this", S["h2"]))
     for d in result.disclaimers:
-        flow.append(_p("• " + d, S["body"]))
+        flow.append(_psafe("• " + d, S["body"]))
     if result.hrd:
         for c in result.hrd.caveats:
-            flow.append(_p("• " + c, S["body"]))
+            flow.append(_psafe("• " + c, S["body"]))
 
     # --- Glossary ---
     if pl.glossary:
         flow.append(_p("Glossary", S["h2"]))
         for g in pl.glossary:
-            flow.append(_p(f"<b>{g.term}</b> — {g.definition}", S["body"]))
+            flow.append(_p(
+                f"<b>{_esc(g.term)}</b> — {_esc(g.definition)}",
+                S["body"],
+            ))
 
     doc.build(flow)
     return buf.getvalue()
