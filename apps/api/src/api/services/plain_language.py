@@ -257,13 +257,17 @@ def build_plain_language(
         ]
         if off_target_genes:
             names = _human_list(off_target_genes)
+            noun = (
+                f"a {names} variant"
+                if len(off_target_genes) == 1
+                else f"variants in {names}"
+            )
             what_you_see += (
-                f"You entered {names} variant{'s' if len(off_target_genes) > 1 else ''}, "
-                f"but the 3D view shows {target_gene} — the protein {drug_name} "
-                "actually binds. The clinical link between your variant and "
-                f"{drug_name} doesn't work through direct binding, so there's "
-                f"nothing to highlight on this structure. See the verdict below "
-                "for how the two connect."
+                f"You entered {noun}, but the 3D view shows {target_gene} — "
+                f"the protein {drug_name} actually binds. The clinical link "
+                f"between your variant and {drug_name} doesn't work through "
+                f"direct binding, so there's nothing to highlight on this "
+                f"structure. See the verdict below for how the two connect."
             )
         else:
             what_you_see += (

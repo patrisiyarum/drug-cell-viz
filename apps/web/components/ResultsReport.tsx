@@ -40,6 +40,16 @@ export function ResultsReport({ result, patient, onSwitchDrug }: Props) {
         </div>
 
         <div className="lg:col-span-3 space-y-6 md:space-y-8">
+          {/* Download card lives at the top so it's not buried below the
+              scroll fold. The PDF is the primary "take this to your doctor"
+              artefact — it should be findable without hunting. */}
+          <div className="no-print">
+            <DoctorVisitPdfButton
+              result={result}
+              patientLabel={patient?.persona_name ?? null}
+            />
+          </div>
+
           {result.hrd ? (
             <HrdCard
               hrd={result.hrd}
@@ -53,13 +63,6 @@ export function ResultsReport({ result, patient, onSwitchDrug }: Props) {
               onSwitchDrug={onSwitchDrug}
             />
           ) : null}
-
-          <div className="no-print">
-            <DoctorVisitPdfButton
-              result={result}
-              patientLabel={patient?.persona_name ?? null}
-            />
-          </div>
         </div>
       </div>
     </div>

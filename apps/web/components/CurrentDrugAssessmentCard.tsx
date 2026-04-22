@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+
 import type { CurrentDrugAssessment } from "@/lib/bc-types";
 
 interface Props {
@@ -65,18 +67,7 @@ export function CurrentDrugAssessmentCard({
         </div>
       </header>
 
-      <div className="space-y-2">
-        {splitSentences(assessment.rationale).map((sentence, i) => (
-          <p key={i} className="text-sm leading-relaxed">
-            {sentence}
-          </p>
-        ))}
-        {assessment.source ? (
-          <p className="text-xs italic text-muted-foreground pt-1">
-            Source: {assessment.source}
-          </p>
-        ) : null}
-      </div>
+      <RationaleBody rationale={assessment.rationale} source={assessment.source} />
 
       {assessment.better_options.length > 0 ? (
         <div className="rounded-lg border bg-white/70 p-3 md:p-4 space-y-2">
@@ -105,17 +96,63 @@ export function CurrentDrugAssessmentCard({
 }
 
 /**
- * Break a rationale string into sentence-per-paragraph so a dense CPIC/FDA
- * recommendation text like
- *   "...breast AND ovarian cancer for germline BRCA1 pathogenic carriers.
- *   Breast: HER2-negative high-risk early or metastatic disease (OlympiA,
- *   OlympiAD). Ovarian: first-line maintenance after platinum response
- *   (SOLO-1)."
- * renders as visually separate clauses instead of a wall of text.
- *
- * Splits only on ". " followed by a capital letter / digit — leaves
- * abbreviations like "e.g." and decimals like "1.5" alone. Trailing
- * period preserved on each clause.
+ * Show only the first one or two sentences of the rationale by default and
+ * tuck the long CPIC/FDA background behind a "Show clinical details" expand.
+ * The first sentence is the one patient-readable takeaway ("Your BRCA1
+ * p.Cys61Gly matches an FDA-approved biomarker…"); everything after is
+ * trial-name + mechanism detail a patient rarely needs at first glance.
+ */
+function RationaleBody({
+  rationale,
+  source,
+}: {
+  rationale: string;
+  source: string | null;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const sentences = splitSentences(rationale);
+  if (sentences.length === 0) return null;
+
+  const head = sentences.slice(0, 1);
+  const rest = sentences.slice(1);
+  const hasMore = rest.length > 0 || !!source;
+
+  return (
+    <div className="space-y-2">
+      {head.map((s, i) => (
+        <p key={`head-${i}`} className="text-sm leading-relaxed">
+          {s}
+        </p>
+      ))}
+      {expanded
+        ? rest.map((s, i) => (
+            <p key={`rest-${i}`} className="text-sm leading-relaxed">
+              {s}
+            </p>
+          ))
+        : null}
+      {expanded && source ? (
+        <p className="text-xs italic text-muted-foreground pt-1">
+          Source: {source}
+        </p>
+      ) : null}
+      {hasMore ? (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="text-xs text-primary hover:opacity-80 underline-offset-2 hover:underline"
+        >
+          {expanded ? "Hide clinical details" : "Show clinical details"}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * Split a paragraph on sentence boundaries (`. ` followed by an uppercase
+ * letter or digit). Leaves abbreviations like "e.g." and decimals like "1.5"
+ * intact. Used by RationaleBody to stage the first sentence above the fold.
  */
 function splitSentences(text: string): string[] {
   const trimmed = text.trim();
