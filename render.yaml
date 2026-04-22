@@ -17,6 +17,12 @@
 # by default). See README for the exact one-time step.
 
 services:
+  # --- Managed Redis (Render Key-Value) ---
+  - type: redis
+    name: drug-cell-viz-redis
+    plan: free
+    ipAllowList: []   # only private networking between Render services
+
   # --- API ---
   - type: web
     name: drug-cell-viz-api
@@ -38,7 +44,7 @@ services:
           property: connectionString
       - key: REDIS_URL
         fromService:
-          type: keyvalue
+          type: redis
           name: drug-cell-viz-redis
           property: connectionString
       - key: STORAGE_BACKEND
@@ -79,7 +85,7 @@ services:
           property: connectionString
       - key: REDIS_URL
         fromService:
-          type: keyvalue
+          type: redis
           name: drug-cell-viz-redis
           property: connectionString
       - key: STORAGE_BACKEND
@@ -118,9 +124,3 @@ databases:
   - name: drug-cell-viz-db
     plan: free
     postgresMajorVersion: "16"
-
-# Render KV (managed Redis-compatible KV store, free tier available).
-keyValue:
-  - name: drug-cell-viz-redis
-    plan: free
-    ipAllowList: []   # only private networking between Render services
