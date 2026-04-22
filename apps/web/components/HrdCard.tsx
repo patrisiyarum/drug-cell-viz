@@ -104,26 +104,37 @@ export function HrdCard({ hrd, classifiableBrca1Variants = [] }: Props) {
         {hrd.parp_inhibitor_context}
       </div>
 
-      {hrd.evidence.length > 0 ? (
-        <div>
-          <div className="text-xs font-medium uppercase text-muted-foreground mb-2">
-            What drove this result ({hrd.evidence.length})
+      {(() => {
+        // When the inline BRCA1 classifier card is being offered, drop the
+        // `ml_prediction` rows from the evidence list — the nested card is
+        // the canonical UI for the ML output. Otherwise the same variant
+        // shows up twice ("What drove this result" row + the model card).
+        const hideMl = classifiableBrca1Variants.length > 0;
+        const filtered = hideMl
+          ? hrd.evidence.filter((e) => e.source !== "ml_prediction")
+          : hrd.evidence;
+        if (filtered.length === 0) return null;
+        return (
+          <div>
+            <div className="text-xs font-medium uppercase text-muted-foreground mb-2">
+              What drove this result ({filtered.length})
+            </div>
+            <ul className="space-y-2">
+              {filtered.map((e, i) => (
+                <li key={i} className="text-sm border rounded-lg p-3 bg-white/70">
+                  <div className="flex items-baseline gap-2 flex-wrap">
+                    <span className="font-semibold">{e.gene}</span>
+                    <span className="font-mono text-xs text-muted-foreground">
+                      {stripGenePrefix(e.variant_label, e.gene)}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">{e.detail}</p>
+                </li>
+              ))}
+            </ul>
           </div>
-          <ul className="space-y-2">
-            {hrd.evidence.map((e, i) => (
-              <li key={i} className="text-sm border rounded-lg p-3 bg-white/70">
-                <div className="flex items-baseline gap-2 flex-wrap">
-                  <span className="font-semibold">{e.gene}</span>
-                  <span className="font-mono text-xs text-muted-foreground">
-                    {e.variant_label}
-                  </span>
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">{e.detail}</p>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
+        );
+      })()}
 
       {classifiableBrca1Variants.length > 0 ? (
         <Brca1PredictionNested hgvsList={classifiableBrca1Variants} />
@@ -141,6 +152,16 @@ export function HrdCard({ hrd, classifiableBrca1Variants = [] }: Props) {
       </details>
     </section>
   );
+}
+
+/**
+ * Drop a leading "{gene} " prefix from a variant label when the gene is
+ * already rendered next to it in the same row, so we don't print
+ * "BRCA1 BRCA1 p.Cys61Gly".
+ */
+function stripGenePrefix(label: string, gene: string): string {
+  const prefix = `${gene} `;
+  return label.startsWith(prefix) ? label.slice(prefix.length) : label;
 }
 
 /**

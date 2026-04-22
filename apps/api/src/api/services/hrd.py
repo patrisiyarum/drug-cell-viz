@@ -131,6 +131,9 @@ def compute_hrd(
             # Heterozygous pathogenic BRCA1/2/PALB2 is the classic germline
             # carrier state. The tumor almost always has a second hit, so we
             # call HR-deficient from a single heterozygous call.
+            # Note: the detail text deliberately does NOT restate the
+            # variant in parens — the UI shows gene + variant_label above
+            # this text, so repeating "(BRCA1 p.Cys61Gly)" is noise.
             evidence.append(
                 HrEvidence(
                     gene=gene,
@@ -138,10 +141,9 @@ def compute_hrd(
                     source="catalog_pathogenic",
                     weight=60,
                     detail=(
-                        f"Germline {gene} pathogenic variant "
-                        f"({label_text}). Tumors arising on this background "
-                        "usually lose the second BRCA allele, leading to HR "
-                        "deficiency."
+                        f"Classic germline pathogenic {gene} variant. Tumors "
+                        "arising on this background usually lose the second "
+                        "allele, leading to HR deficiency."
                     ),
                 )
             )
@@ -151,16 +153,13 @@ def compute_hrd(
             is_fda_parpi = gene in FDA_PARPI_ELIGIBLE_MODERATE
             weight = 45 if is_fda_parpi else 15
             detail = (
-                f"Germline {gene} pathogenic variant ({label_text}). "
-                + (
-                    "FDA-recognized PARPi-eligible HR gene — an FDA-approved "
-                    "ovarian-cancer biomarker for PARP-inhibitor maintenance."
-                    if is_fda_parpi
-                    else "Moderate-penetrance HR-adjacent gene. Elevates "
-                    "hereditary cancer risk. PARPi eligibility by this "
-                    "gene alone is not established, but it adds to the "
-                    "overall HR-pathway picture."
-                )
+                "FDA-recognized PARPi-eligible HR gene — an FDA-approved "
+                "ovarian-cancer biomarker for PARP-inhibitor maintenance."
+                if is_fda_parpi
+                else f"Moderate-penetrance HR-adjacent gene. Elevates "
+                "hereditary cancer risk. PARPi eligibility by this gene "
+                "alone is not established, but it adds to the overall "
+                "HR-pathway picture."
             )
             evidence.append(
                 HrEvidence(

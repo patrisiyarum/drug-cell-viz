@@ -211,6 +211,7 @@ def build_plain_language(
     pocket_residues: list[PocketResidue],
     headline_severity: str,
     has_pose: bool,
+    entered_genes: list[str] | None = None,
 ) -> PlainLanguage:
     drug = DRUGS.get(drug_id)
     drug_name = drug["name"] if drug else drug_id.title()
@@ -244,10 +245,31 @@ def build_plain_language(
             "drug's binding slot, so the drug should still fit normally."
         )
     else:
-        what_you_see += (
-            "No variants in this target protein were entered, so you're seeing "
-            "the standard (reference) shape of the protein with the drug docked."
-        )
+        # Distinguish two cases that previously both said "no variants entered":
+        #   (a) patient really didn't enter any variants, OR
+        #   (b) patient entered variants but on genes OTHER than the drug's
+        #       direct target (e.g. BRCA1 variant with olaparib → PARP1).
+        # Case (b) is the normal case for synthetic-lethality drugs, and
+        # showing "no variants entered" there makes it look like the tool
+        # ignored the input. Fix the copy to name the gene(s) instead.
+        off_target_genes = [
+            g for g in (entered_genes or []) if g and g != target_gene
+        ]
+        if off_target_genes:
+            names = _human_list(off_target_genes)
+            what_you_see += (
+                f"You entered {names} variant{'s' if len(off_target_genes) > 1 else ''}, "
+                f"but the 3D view shows {target_gene} — the protein {drug_name} "
+                "actually binds. The clinical link between your variant and "
+                f"{drug_name} doesn't work through direct binding, so there's "
+                f"nothing to highlight on this structure. See the verdict below "
+                "for how the two connect."
+            )
+        else:
+            what_you_see += (
+                "No variants were entered, so you're seeing the standard "
+                "(reference) shape of the protein with the drug docked."
+            )
 
     # --- how_the_drug_works ----------------------------------------------
     analogy = DRUG_ANALOGIES.get(
@@ -521,3 +543,15 @@ def _pick_glossary_terms(
             seen.add(p)
             out.append(p)
     return out
+
+
+def _human_list(items: list[str]) -> str:
+    """Render ['BRCA1'] → 'a BRCA1', ['BRCA1', 'PALB2'] → 'BRCA1 and PALB2',
+    ['BRCA1', 'PALB2', 'ATM'] → 'BRCA1, PALB2, and ATM'."""
+    if not items:
+        return ""
+    if len(items) == 1:
+        return items[0]
+    if len(items) == 2:
+        return f"{items[0]} and {items[1]}"
+    return f"{', '.join(items[:-1])}, and {items[-1]}"

@@ -198,6 +198,17 @@ async def run_analysis(
 
     # --- 5) Plain-language translation for patients ---
     await cb("plain_language", "Writing plain-English report", 0.95)
+    # Genes the user has variants in, preserving order but deduped. Lets the
+    # plain-language writer distinguish "no variants entered" from "variants
+    # entered but on a different gene than the drug's direct target" — which
+    # is the normal case for olaparib + BRCA1 (olaparib binds PARP1; the
+    # clinical relevance is via synthetic lethality).
+    entered_genes: list[str] = []
+    for r in resolved:
+        g = r.get("gene_symbol")
+        if g and g not in entered_genes:
+            entered_genes.append(g)
+
     plain = plain_language.build_plain_language(
         drug_id=drug["id"],
         target_gene=target_gene,
@@ -206,6 +217,7 @@ async def run_analysis(
         pocket_residues=pocket_residues,
         headline_severity=severity,
         has_pose=pose_url is not None,
+        entered_genes=entered_genes,
     )
 
     result = AnalysisResult(
