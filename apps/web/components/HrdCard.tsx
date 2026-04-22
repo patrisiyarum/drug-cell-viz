@@ -84,12 +84,11 @@ export function HrdCard({ hrd }: Props) {
         </div>
       </header>
 
-      <p className="text-sm leading-relaxed font-medium">{style.oneLiner}</p>
-      <p className="text-sm leading-relaxed text-muted-foreground">{hrd.summary}</p>
+      <p className="text-sm leading-relaxed">{style.oneLiner}</p>
 
-      <div className="rounded-lg bg-white/60 border p-3 md:p-4 text-sm leading-relaxed">
-        <div className="text-xs font-medium uppercase text-muted-foreground mb-1">
-          What this means for PARP inhibitors
+      <div className="rounded-lg bg-white/60 border p-3 text-sm leading-relaxed">
+        <div className="text-[11px] font-medium uppercase text-muted-foreground mb-1">
+          PARP inhibitors
         </div>
         {hrd.parp_inhibitor_context}
       </div>

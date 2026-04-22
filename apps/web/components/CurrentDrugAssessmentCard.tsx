@@ -90,11 +90,12 @@ export function CurrentDrugAssessmentCard({
             {phenotypeToAction(featured, drugName)}
           </p>
         </div>
-      ) : null}
+      ) : (
+        // Fall back to the full rationale only when we don't have a clean
+        // one-liner to show. Keeps the card short in the common case.
+        <p className="text-sm leading-relaxed">{assessment.rationale}</p>
+      )}
 
-      <p className="text-sm leading-relaxed">{assessment.rationale}</p>
-
-      {/* phenotypeToAction defined below renders the action clause inline. */}
       {assessment.better_options.length > 0 ? (
         <div className="rounded-lg border bg-white/70 p-3 md:p-4 space-y-2">
           <div className="text-xs font-medium uppercase text-muted-foreground">

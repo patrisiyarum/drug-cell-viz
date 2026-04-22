@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { AlertTriangle, ArrowRight, ChevronDown, FlaskConical, HelpCircle } from "lucide-react";
+import { AlertTriangle, ArrowRight, FlaskConical, HelpCircle } from "lucide-react";
 
 import { Brca1FunctionCard } from "./Brca1FunctionCard";
 import { CurrentDrugAssessmentCard } from "./CurrentDrugAssessmentCard";
@@ -67,7 +67,6 @@ export function ResultsReport({ result, patient, onSwitchDrug }: Props) {
           {result.classifiable_brca1_variants.length > 0 ? (
             <Brca1FunctionSection hgvsList={result.classifiable_brca1_variants} />
           ) : null}
-          <HowWeKnowCard result={result} />
         </div>
       </div>
     </div>
@@ -198,17 +197,20 @@ function LegendRow({ color, label }: { color: string; label: string }) {
 function WhatThisMeansCard({ result }: { result: AnalysisResult }) {
   const pl = result.plain_language;
   return (
-    <div className="bg-card border rounded-2xl p-6 md:p-8 space-y-4">
-      <h2 className="text-xl md:text-2xl font-semibold">What this means</h2>
-      <Para>{pl.what_you_see}</Para>
-      <Para>{pl.how_the_drug_works}</Para>
-      <Para>{pl.what_it_means_for_you}</Para>
+    <div className="bg-card border rounded-2xl p-5 md:p-6 space-y-3">
+      <h2 className="text-base font-semibold">What this means for you</h2>
+      <p className="leading-relaxed text-sm">{pl.what_it_means_for_you}</p>
+      <details className="text-sm text-muted-foreground">
+        <summary className="cursor-pointer hover:text-foreground text-xs uppercase tracking-wide">
+          More detail
+        </summary>
+        <div className="mt-3 space-y-3 leading-relaxed">
+          <p>{pl.how_the_drug_works}</p>
+          <p>{pl.what_you_see}</p>
+        </div>
+      </details>
     </div>
   );
-}
-
-function Para({ children }: { children: React.ReactNode }) {
-  return <p className="leading-relaxed text-[15px]">{children}</p>;
 }
 
 /**
@@ -223,27 +225,23 @@ function Brca1FunctionSection({ hgvsList }: { hgvsList: string[] }) {
 
   if (!open) {
     return (
-      <section className="bg-card border rounded-2xl p-5 md:p-6 space-y-3">
-        <div className="flex items-start gap-3">
-          <FlaskConical className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" aria-hidden />
-          <div className="flex-1">
-            <h3 className="text-base md:text-lg font-semibold">
-              Predict the effect of {hgvsList.length > 1 ? "these BRCA1 variants" : "this BRCA1 variant"}{" "}
-              <span className="text-xs font-normal text-muted-foreground">(experimental)</span>
-            </h3>
-            <p className="text-sm text-muted-foreground mt-1 leading-relaxed">
-              We&apos;ll run an ML model (XGBoost + AlphaMissense ensemble, trained
-              on Findlay 2018 saturation-genome-editing data) to predict whether{" "}
-              {hgvsList.join(", ")} likely disrupts BRCA1 function. Takes a
-              couple seconds. This is a research-grade prediction, not a
-              clinical classification.
-            </p>
+      <section className="bg-card border rounded-2xl p-5 flex items-center gap-4 flex-wrap">
+        <FlaskConical className="w-5 h-5 text-primary flex-shrink-0" aria-hidden />
+        <div className="flex-1 min-w-[200px]">
+          <div className="text-base font-semibold">
+            Predict BRCA1 variant effect{" "}
+            <span className="text-xs font-normal text-muted-foreground">
+              · experimental
+            </span>
+          </div>
+          <div className="text-xs text-muted-foreground mt-0.5 font-mono truncate">
+            {hgvsList.join(", ")}
           </div>
         </div>
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-lg bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:opacity-90 transition-opacity"
+          className="inline-flex items-center justify-center rounded-lg bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:opacity-90 transition-opacity"
         >
           Run prediction
         </button>
@@ -260,62 +258,3 @@ function Brca1FunctionSection({ hgvsList }: { hgvsList: string[] }) {
   );
 }
 
-function HowWeKnowCard({ result }: { result: AnalysisResult }) {
-  const [open, setOpen] = useState(false);
-  const hw = result.plain_language.how_we_know;
-
-  return (
-    <div className="bg-card border rounded-2xl overflow-hidden">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="w-full px-6 md:px-8 py-5 flex items-center justify-between hover:bg-muted/50 transition-colors text-left"
-      >
-        <h2 className="text-xl md:text-2xl font-semibold">How we know this</h2>
-        <ChevronDown
-          className={`w-5 h-5 md:w-6 md:h-6 text-muted-foreground transition-transform ${
-            open ? "rotate-180" : ""
-          }`}
-        />
-      </button>
-      {open ? (
-        <div className="border-t px-6 md:px-8 py-5 space-y-4">
-          <div>
-            <h3 className="font-medium mb-1">Source</h3>
-            <a
-              href={hw.link}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-primary hover:underline text-sm break-all"
-            >
-              {hw.source}
-            </a>
-          </div>
-          <div>
-            <h3 className="font-medium mb-1">Evidence summary</h3>
-            <p className="leading-relaxed text-muted-foreground text-sm">{hw.summary}</p>
-          </div>
-          {result.pgx_verdicts.length > 0 ? (
-            <div>
-              <h3 className="font-medium mb-2">Matched guidance</h3>
-              <ul className="space-y-2 text-sm">
-                {result.pgx_verdicts.map((v, i) => (
-                  <li key={i} className="border rounded p-3 bg-white">
-                    <div className="flex items-baseline justify-between gap-2 flex-wrap">
-                      <span className="font-medium">{v.phenotype}</span>
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary">
-                        Evidence {v.evidence_level}
-                      </span>
-                    </div>
-                    <div className="text-muted-foreground mt-1">{v.recommendation}</div>
-                    <div className="text-xs italic mt-1 text-muted-foreground">{v.source}</div>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-    </div>
-  );
-}
