@@ -4,7 +4,12 @@ import Link from "next/link";
 import { useRef, useState } from "react";
 import { CheckCircle2, FileUp } from "lucide-react";
 
-import { BCAnalysisForm } from "@/components/BCAnalysisForm";
+import {
+  DrugPickerSection,
+  RunAnalysisButton,
+  VariantPickerSection,
+  useBCAnalysisForm,
+} from "@/components/BCAnalysisForm";
 import { ResultsReport } from "@/components/ResultsReport";
 import { api } from "@/lib/api";
 import type { AnalysisResult, VariantInput, Zygosity } from "@/lib/bc-types";
@@ -31,6 +36,18 @@ export default function BuildPage() {
 
   const [uploadDetected, setUploadDetected] = useState<SelectedVariant[]>([]);
   const [parseResult, setParseResult] = useState<ParseResult | null>(null);
+
+  // Shared form state: DrugPickerSection and VariantPickerSection both read and
+  // write this. Lives at the page level so the Step 1 and Step 3 cards stay in
+  // sync.
+  const form = useBCAnalysisForm({
+    onResult: (r, ctx) => {
+      setResult(r);
+      setLastContext(ctx);
+    },
+    drugIdOverride: lastContext?.drugId,
+    presetVariants: uploadDetected,
+  });
 
   async function onSwitchDrug(newDrugId: string) {
     if (!lastContext) return;
@@ -76,48 +93,52 @@ export default function BuildPage() {
       </header>
 
       <main className="flex-1 px-6 md:px-8 py-12 md:py-16">
-        <div className="max-w-3xl mx-auto space-y-8">
-          <div className="space-y-3 text-center">
+        <div className="max-w-3xl mx-auto space-y-6">
+          <div className="space-y-2 text-center">
             <h1 className="text-3xl md:text-4xl font-semibold">
               See how a medication might affect you
             </h1>
-            <p className="text-muted-foreground text-base md:text-lg leading-relaxed max-w-2xl mx-auto">
-              Pick the medication your doctor is considering, tell us about any
-              variants you know about, and we'll show a plain-English report
-              plus a 3D view of how the drug interacts with your body.
-            </p>
-            <p className="text-sm text-muted-foreground">
-              It doesn't replace your doctor. It helps you have a better
-              conversation with them.
+            <p className="text-muted-foreground text-base leading-relaxed max-w-2xl mx-auto">
+              Four steps: pick a drug, optionally upload your data, select
+              variants, then read the report.
             </p>
           </div>
 
-          <UploadCard
-            onDetected={onDetected}
-            parseResult={parseResult}
-            onClear={() => {
-              setUploadDetected([]);
-              setParseResult(null);
-            }}
-          />
+          <StepCard n={1} title="Pick a medication">
+            <DrugPickerSection form={form} />
+          </StepCard>
 
-          <VcfUploadCard
-            onResult={(r, drugId) => {
-              setResult(r);
-              setLastContext({ drugId, variants: [] });
-            }}
-          />
+          <StepCard
+            n={2}
+            title="Upload your data"
+            subtitle="Optional — skip if you already know which variants to pick."
+          >
+            <div className="space-y-4">
+              <UploadCard
+                onDetected={onDetected}
+                parseResult={parseResult}
+                onClear={() => {
+                  setUploadDetected([]);
+                  setParseResult(null);
+                }}
+              />
+              <VcfUploadCard
+                onResult={(r, drugId) => {
+                  setResult(r);
+                  setLastContext({ drugId, variants: [] });
+                }}
+              />
+            </div>
+          </StepCard>
 
-          <div className="bg-card border rounded-2xl p-6 md:p-8">
-            <BCAnalysisForm
-              onResult={(r, ctx) => {
-                setResult(r);
-                setLastContext(ctx);
-              }}
-              drugIdOverride={lastContext?.drugId}
-              presetVariants={uploadDetected}
-            />
-          </div>
+          <StepCard n={3} title="Select your variants">
+            <div className="space-y-5">
+              <VariantPickerSection form={form} />
+              <div className="pt-2 border-t">
+                <RunAnalysisButton form={form} />
+              </div>
+            </div>
+          </StepCard>
 
           {switching ? (
             <div className="text-sm text-muted-foreground text-center">
@@ -131,11 +152,57 @@ export default function BuildPage() {
 
         {result ? (
           <div className="max-w-[1600px] mx-auto mt-10 md:mt-14">
+            <div className="max-w-3xl mx-auto mb-4 flex items-center gap-3">
+              <StepNumber n={4} />
+              <h2 className="text-xl md:text-2xl font-semibold">
+                Your full report
+              </h2>
+            </div>
             <ResultsReport result={result} onSwitchDrug={onSwitchDrug} />
           </div>
         ) : null}
       </main>
     </div>
+  );
+}
+
+/**
+ * A numbered step wrapper: big primary-colored badge on the left, title on
+ * the right, content below. Matches the visual rhythm of the results-page
+ * cards (rounded-2xl border, p-5/p-6).
+ */
+function StepCard({
+  n,
+  title,
+  subtitle,
+  children,
+}: {
+  n: number;
+  title: string;
+  subtitle?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="bg-card border rounded-2xl p-5 md:p-6 space-y-4">
+      <div className="flex items-start gap-3">
+        <StepNumber n={n} />
+        <div className="flex-1">
+          <h2 className="text-lg md:text-xl font-semibold">{title}</h2>
+          {subtitle ? (
+            <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>
+          ) : null}
+        </div>
+      </div>
+      <div>{children}</div>
+    </section>
+  );
+}
+
+function StepNumber({ n }: { n: number }) {
+  return (
+    <span className="w-7 h-7 flex-shrink-0 rounded-full bg-primary text-primary-foreground text-sm font-semibold flex items-center justify-center">
+      {n}
+    </span>
   );
 }
 

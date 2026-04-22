@@ -183,6 +183,22 @@ GENES: dict[str, GeneEntry] = {
         "synthetically lethal in HR-deficient cells (BRCA1/2 pathogenic "
         "tumors) because unrepaired double-strand breaks accumulate.",
     },
+    "CDK4": {
+        "symbol": "CDK4",
+        "name": "Cyclin-dependent kinase 4",
+        "uniprot_id": "P11802",
+        "role": "Partners with D-type cyclins to phosphorylate Rb and release "
+        "E2F-driven S-phase transcription. Co-target (with CDK6) of palbociclib, "
+        "ribociclib, and abemaciclib in HR+/HER2- metastatic breast cancer.",
+    },
+    "CDK6": {
+        "symbol": "CDK6",
+        "name": "Cyclin-dependent kinase 6",
+        "uniprot_id": "Q00534",
+        "role": "Functional paralog of CDK4; together they drive G1→S "
+        "progression via Rb phosphorylation. Co-inhibited with CDK4 by "
+        "palbociclib, ribociclib, abemaciclib.",
+    },
     # --- Extended HR pathway (moderate-penetrance + Fanconi anemia family) ---
     "ATM": {
         "symbol": "ATM",
@@ -304,7 +320,7 @@ DRUGS: dict[str, DrugEntry] = {
         "name": "Palbociclib",
         "smiles": "CC(=O)C1=C(C)C2=CN=C(NC3=NC=C(C=C3)N3CCNCC3)N=C2N(C2CCCC2)C1=O",
         "category": "cdk46_inhibitor",
-        "primary_target_gene": "CDK4",  # CDK4 not in GENES yet; we allow it
+        "primary_target_gene": "CDK4",
         "metabolizing_gene": None,
         "mechanism": "ATP-competitive CDK4/6 inhibitor → hypophosphorylates "
         "Rb → G1 cell-cycle arrest.",

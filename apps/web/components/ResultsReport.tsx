@@ -40,7 +40,6 @@ export function ResultsReport({ result, patient, onSwitchDrug }: Props) {
           <div className="no-print">
             <MolecularCard result={result} />
           </div>
-          <WhatThisMeansCard result={result} />
         </div>
 
         <div className="lg:col-span-3 space-y-6 md:space-y-8">
@@ -189,25 +188,6 @@ function LegendRow({ color, label }: { color: string; label: string }) {
     <div className="flex items-center gap-1.5">
       <span className={`inline-block w-2.5 h-2.5 rounded-full ${color}`} aria-hidden />
       <span>{label}</span>
-    </div>
-  );
-}
-
-function WhatThisMeansCard({ result }: { result: AnalysisResult }) {
-  const pl = result.plain_language;
-  return (
-    <div className="bg-card border rounded-2xl p-5 md:p-6 space-y-3">
-      <h2 className="text-base font-semibold">What this means for you</h2>
-      <p className="leading-relaxed text-sm">{pl.what_it_means_for_you}</p>
-      <details className="text-sm text-muted-foreground">
-        <summary className="cursor-pointer hover:text-foreground text-xs uppercase tracking-wide">
-          More detail
-        </summary>
-        <div className="mt-3 space-y-3 leading-relaxed">
-          <p>{pl.how_the_drug_works}</p>
-          <p>{pl.what_you_see}</p>
-        </div>
-      </details>
     </div>
   );
 }

@@ -78,6 +78,15 @@ _PLAIN_GENE_ROLES: dict[str, str] = {
         "A DNA damage sensor. Olaparib blocks it. In tumors with broken BRCA1 "
         "or BRCA2, blocking PARP1 is selectively lethal to the cancer cells."
     ),
+    "CDK4": (
+        "A protein that tells cells to divide. Palbociclib and ribociclib "
+        "block it (and its partner CDK6), pausing the cell cycle in "
+        "hormone-receptor-positive breast cancer."
+    ),
+    "CDK6": (
+        "Partner of CDK4; together they drive the cell cycle. Blocked by the "
+        "same CDK4/6 inhibitors (palbociclib, ribociclib, abemaciclib)."
+    ),
 }
 
 
@@ -165,6 +174,8 @@ _GENE_EFFECT_TYPES: dict[str, str] = {
     "PARP1": "drug_target",
     "TYMS": "drug_target",
     "CYP19A1": "drug_target",
+    "CDK4": "drug_target",
+    "CDK6": "drug_target",
     # Drug metabolism (affects how your body processes the drug)
     "CYP2D6": "drug_metabolism",
     "DPYD": "drug_metabolism",
