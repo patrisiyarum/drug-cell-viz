@@ -8,7 +8,6 @@ import { CurrentDrugAssessmentCard } from "./CurrentDrugAssessmentCard";
 import { DoctorVisitPdfButton } from "./DoctorVisitPdfButton";
 import { HrdCard } from "./HrdCard";
 import { MolViewer } from "./MolViewer";
-import { StatusBadge, type PatientStatus } from "./StatusBadge";
 import type { AnalysisResult, DemoPatient, SuggestedDrug } from "@/lib/bc-types";
 
 interface Props {
@@ -23,8 +22,6 @@ interface Props {
 }
 
 export function ResultsReport({ result, patient, onSwitchDrug }: Props) {
-  const status = patient ? patient.status : headlineToStatus(result.headline_severity);
-
   return (
     <div className="space-y-6">
       {result.relevance_warning ? (
@@ -43,8 +40,6 @@ export function ResultsReport({ result, patient, onSwitchDrug }: Props) {
         </div>
 
         <div className="lg:col-span-3 space-y-6 md:space-y-8">
-          <StatusBadge status={status}>{result.headline}</StatusBadge>
-
           {result.hrd ? <HrdCard hrd={result.hrd} /> : null}
 
           {result.current_drug_assessment ? (
@@ -119,14 +114,6 @@ function RelevanceWarning({
       </div>
     </div>
   );
-}
-
-function headlineToStatus(
-  severity: AnalysisResult["headline_severity"],
-): PatientStatus {
-  if (severity === "benefit" || severity === "info") return "expected";
-  if (severity === "caution") return "reduced";
-  return "dose-adjustment";
 }
 
 function MolecularCard({ result }: { result: AnalysisResult }) {

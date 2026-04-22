@@ -99,8 +99,8 @@ export default function BuildPage() {
               See how a medication might affect you
             </h1>
             <p className="text-muted-foreground text-base leading-relaxed max-w-2xl mx-auto">
-              Four steps: pick a drug, optionally upload your data, select
-              variants, then read the report.
+              Pick a drug, optionally upload your data, and select the
+              variants you know about. Your report will appear below.
             </p>
           </div>
 
@@ -152,12 +152,6 @@ export default function BuildPage() {
 
         {result ? (
           <div className="max-w-[1600px] mx-auto mt-10 md:mt-14">
-            <div className="max-w-3xl mx-auto mb-4 flex items-center gap-3">
-              <StepNumber n={4} />
-              <h2 className="text-xl md:text-2xl font-semibold">
-                Your full report
-              </h2>
-            </div>
             <ResultsReport result={result} onSwitchDrug={onSwitchDrug} />
           </div>
         ) : null}
