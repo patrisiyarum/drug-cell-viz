@@ -3,7 +3,6 @@
 import type { CurrentDrugAssessment } from "@/lib/bc-types";
 
 interface Props {
-  drugName: string;
   assessment: CurrentDrugAssessment;
   onSwitchDrug?: (drugId: string) => void;
 }
@@ -15,9 +14,12 @@ interface Props {
  * prescribed, this card gives a one-sentence verdict (well matched / review
  * needed / etc) rather than making them parse CPIC rule text. Any strictly
  * better-matched drugs show as quick-switch chips.
+ *
+ * The card's headline already names the drug — we deliberately don't render
+ * a separate "Is {drugName} the right drug for you?" label above it, because
+ * that ended up restating the headline nearly verbatim.
  */
 export function CurrentDrugAssessmentCard({
-  drugName,
   assessment,
   onSwitchDrug,
 }: Props) {
@@ -53,15 +55,12 @@ export function CurrentDrugAssessmentCard({
       className={`rounded-2xl border p-5 md:p-6 space-y-4 ${style.bg} ${style.border}`}
     >
       <header className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <div className="text-xs uppercase tracking-wide text-muted-foreground mb-1">
-            Is {drugName} the right drug for you?
-          </div>
-          <h3 className="text-lg md:text-xl font-semibold">
-            {assessment.headline}
-          </h3>
-        </div>
-        <div className={`px-3 py-1.5 rounded-full text-sm font-semibold ${style.pill}`}>
+        <h3 className="text-lg md:text-xl font-semibold flex-1 min-w-0">
+          {assessment.headline}
+        </h3>
+        <div
+          className={`px-3 py-1.5 rounded-full text-sm font-semibold flex-shrink-0 ${style.pill}`}
+        >
           {style.label}
         </div>
       </header>
