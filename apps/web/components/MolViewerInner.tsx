@@ -65,6 +65,10 @@ export default function MolViewerInner({ pdbUrl, highlights }: Props) {
         const trajectory = await plugin.builders.structure.parseTrajectory(data, "pdb");
         await plugin.builders.structure.hierarchy.applyPreset(trajectory, "default");
 
+        // Auto-zoom to the drug (HETATM ligand) so the binding site is front
+        // and center instead of showing a tiny drug inside a huge protein blob.
+        await focusOnLigand(plugin);
+
         if (highlights && highlights.length > 0) {
           await highlightResidues(plugin, highlights);
         }
@@ -84,6 +88,34 @@ export default function MolViewerInner({ pdbUrl, highlights }: Props) {
   return <div ref={containerRef} className="relative w-full h-full" />;
 }
 
+async function focusOnLigand(plugin: PluginUIContext): Promise<void> {
+  const structureRef = plugin.managers.structure.hierarchy.current.structures[0];
+  if (!structureRef?.cell.obj) return;
+  const structure = structureRef.cell.obj.data;
+
+  // Select non-water HETATM atoms → the ligand.
+  const selection = Script.getStructureSelection(
+    (Q: any) =>
+      Q.struct.generator.atomGroups({
+        "residue-test": Q.core.logic.and([
+          Q.core.rel.eq([
+            Q.struct.atomProperty.macromolecular.isHet(),
+            true,
+          ]),
+          Q.core.rel.neq([
+            Q.struct.atomProperty.macromolecular.label_comp_id(),
+            "HOH",
+          ]),
+        ]),
+      }),
+    structure,
+  );
+  const loci = StructureSelection.toLociWithSourceUnits(selection);
+  if (loci.elements.length === 0) return;
+  // Extra radius: show pocket walls around the drug, not just the drug alone.
+  plugin.managers.camera.focusLoci(loci, { extraRadius: 8 });
+}
+
 async function highlightResidues(
   plugin: PluginUIContext,
   highlights: VariantHighlight[],
@@ -94,8 +126,6 @@ async function highlightResidues(
 
   const positions = highlights.map((h) => h.position);
 
-  // Select all variant residues at once — Mol* will paint them with the
-  // selection color (bright, high contrast against the default chain colors).
   const selection = Script.getStructureSelection(
     (Q: any) =>
       Q.struct.generator.atomGroups({
@@ -110,5 +140,6 @@ async function highlightResidues(
   if (loci.elements.length === 0) return;
 
   plugin.managers.structure.selection.fromLoci("set", loci);
-  plugin.managers.camera.focusLoci(loci);
+  // Deliberately not re-focusing camera here — the ligand zoom is the
+  // primary anchor, and variants sit within its framing when they matter.
 }

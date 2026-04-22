@@ -1,0 +1,27 @@
+{
+  "model_version": "brca2_xgb_v1",
+  "trained_on": "Huang, Hu et al. 2025 (Nature, doi:10.1038/s41586-024-08388-8)",
+  "training_citation": "Huang H, Hu C, Ji J, et al. Functional evaluation and clinical classification of BRCA2 variants. Nature 638, 528-537 (2025).",
+  "task": "binary classification: Pathogenic (P strong + P moderate) vs Benign (B strong + B moderate); VUS and supporting excluded",
+  "covered_region": "BRCA2 DNA-binding domain, exons 15-26, residues 2479-3216",
+  "train_size": 3523,
+  "test_size": 881,
+  "holdout_metrics": {
+    "auroc": 0.841531388352821,
+    "auprc": 0.557448737732648,
+    "brier": 0.08153096586465836,
+    "confusion_matrix": [
+      [
+        748,
+        18
+      ],
+      [
+        83,
+        32
+      ]
+    ],
+    "positive_rate": 0.13053348467650397,
+    "n": 881
+  },
+  "caveat": "Features reuse the BRCA1 domain encoding (all-zero for BRCA2). v0 baseline; a production model would encode BRCA2 subdomains (OB1/OB2/OB3/tower/helical)."
+}

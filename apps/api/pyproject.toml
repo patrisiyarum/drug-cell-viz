@@ -21,6 +21,14 @@ dependencies = [
     "sse-starlette>=2.1",
     "slowapi>=0.1.9",
     "python-multipart>=0.0.12",
+    # BRCA1 variant effect classifier (Tier-3). Trained on Findlay et al. 2018
+    # saturation genome editing functional scores. Inference needs xgboost;
+    # training needs scikit-learn and pandas too. Kept in runtime deps so the
+    # model loads at API startup.
+    "pandas>=2.0",
+    "scikit-learn>=1.3",
+    "xgboost>=2.0",
+    "openpyxl>=3.1",  # training-time: read Findlay supplementary .xlsx
 ]
 
 [project.optional-dependencies]

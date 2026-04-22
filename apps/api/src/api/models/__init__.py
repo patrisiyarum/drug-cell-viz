@@ -2,8 +2,12 @@ from api.models.analysis import (
     AnalysisCreate,
     AnalysisResult,
     AnalysisRow,
+    GlossaryTerm,
+    HowWeKnow,
     PGxVerdict,
+    PlainLanguage,
     PocketResidue,
+    SuggestedDrug,
     VariantInput,
 )
 from api.models.job import Job, JobCreate, JobKind, JobRead, JobStatus
@@ -15,6 +19,8 @@ __all__ = [
     "AnalysisResult",
     "AnalysisRow",
     "DockingPose",
+    "GlossaryTerm",
+    "HowWeKnow",
     "Job",
     "JobCreate",
     "JobKind",
@@ -26,6 +32,8 @@ __all__ = [
     "MorphologyResult",
     "MorphologyResultRow",
     "PGxVerdict",
+    "PlainLanguage",
     "PocketResidue",
+    "SuggestedDrug",
     "VariantInput",
 ]

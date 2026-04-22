@@ -31,3 +31,10 @@ build/
 *.parquet
 scratch/
 data/
+# Exception: bundled ML training data (reproducibility of BRCA1/2 classifiers)
+!apps/api/src/api/ml/data/
+!apps/api/src/api/ml/data/**
+
+# TypeScript incremental build artifact
+tsconfig.tsbuildinfo
+**/tsconfig.tsbuildinfo

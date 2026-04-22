@@ -1,6 +1,7 @@
 "use client";
 
 import { MolViewer } from "./MolViewer";
+import { PlainLanguageExplainer } from "./PlainLanguageExplainer";
 import type { AnalysisResult, HeadlineSeverity, PGxVerdict, PocketResidue } from "@/lib/bc-types";
 
 interface Props {
@@ -42,15 +43,21 @@ export function AnalysisResultPanel({ result }: Props) {
           <h3 className="font-medium text-sm">
             3D structure — {result.drug_name} on {result.target_gene}
           </h3>
-          <div className="h-[420px] border rounded bg-white overflow-hidden">
+          <div className="h-[420px] border rounded bg-white overflow-hidden relative">
             <MolViewer pdbUrl={pdbUrl} highlights={highlights} />
+            <ViewerLegend hasVariants={highlights.length > 0} />
           </div>
           <p className="text-xs text-gray-500">
-            Your variant residues are shown in the Mol* selection color. Red in the table
-            below means inside the drug binding pocket (≤5 Å from the ligand).
+            Zoomed in automatically on the drug binding site. You can rotate the view by
+            click-dragging and zoom with the scroll wheel.
           </p>
         </section>
       </div>
+
+      <section className="space-y-2">
+        <h3 className="font-medium text-sm">Plain-English explainer</h3>
+        <PlainLanguageExplainer plain={result.plain_language} />
+      </section>
 
       <DisclaimerBox items={result.disclaimers} />
     </div>
@@ -146,6 +153,32 @@ function PocketTable({
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+function ViewerLegend({ hasVariants }: { hasVariants: boolean }) {
+  // Absolute-positioned legend overlay so a non-specialist viewer knows what
+  // each color on the 3D scene represents.
+  return (
+    <div className="absolute top-2 left-2 bg-white/95 backdrop-blur-sm border rounded-md px-3 py-2 text-[11px] space-y-1 shadow-sm pointer-events-none">
+      <div className="font-semibold text-gray-700 uppercase tracking-wide text-[10px]">
+        Legend
+      </div>
+      <LegendRow color="bg-slate-400" label="Protein (target in your cells)" />
+      <LegendRow color="bg-pink-500" label="Drug molecule" />
+      {hasVariants ? (
+        <LegendRow color="bg-yellow-400" label="Your variant residue" />
+      ) : null}
+    </div>
+  );
+}
+
+function LegendRow({ color, label }: { color: string; label: string }) {
+  return (
+    <div className="flex items-center gap-1.5 text-gray-800">
+      <span className={`inline-block w-2.5 h-2.5 rounded-full ${color}`} aria-hidden />
+      <span>{label}</span>
     </div>
   );
 }

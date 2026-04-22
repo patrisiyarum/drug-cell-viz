@@ -20,11 +20,19 @@ export interface CatalogDrug {
   supports_docking: boolean;
 }
 
+export type GeneEffectType =
+  | "drug_target"
+  | "drug_metabolism"
+  | "dna_repair"
+  | "other";
+
 export interface CatalogGene {
   symbol: string;
   name: string;
   uniprot_id: string;
   role: string;
+  plain_role: string;
+  effect_type: GeneEffectType;
 }
 
 export type ClinicalSignificance =
@@ -43,6 +51,8 @@ export interface CatalogVariant {
   residue_positions: number[];
   clinical_significance: ClinicalSignificance;
   effect_summary: string;
+  plain_summary: string;
+  effect_type: GeneEffectType;
 }
 
 export interface Catalog {
@@ -86,6 +96,33 @@ export type HeadlineSeverity =
   | "contraindicated"
   | "benefit";
 
+export interface GlossaryTerm {
+  term: string;
+  definition: string;
+}
+
+export interface HowWeKnow {
+  source: string;
+  link: string;
+  summary: string;
+}
+
+export interface PlainLanguage {
+  what_you_see: string;
+  how_the_drug_works: string;
+  what_it_means_for_you: string;
+  next_steps: string;
+  questions_to_ask: string[];
+  how_we_know: HowWeKnow;
+  glossary: GlossaryTerm[];
+}
+
+export interface SuggestedDrug {
+  id: string;
+  name: string;
+  reason: string;
+}
+
 export interface AnalysisResult {
   id: string;
   drug_id: string;
@@ -98,6 +135,86 @@ export interface AnalysisResult {
   pocket_residues: PocketResidue[];
   headline: string;
   headline_severity: HeadlineSeverity;
+  plain_language: PlainLanguage;
+  relevance_warning: string | null;
+  suggested_drugs: SuggestedDrug[];
+  classifiable_brca1_variants: string[];
   disclaimers: string[];
   created_at: string;
+}
+
+export interface DemoPatient {
+  id: string;
+  name: string;
+  persona_name: string;
+  age: number;
+  scenario: string;
+  indication: string;
+  drug_id: string;
+  medication_display: string;
+  status: "expected" | "reduced" | "dose-adjustment";
+  status_color: "success" | "warning" | "info";
+  genotype_summary: Record<string, string>;
+  variant_ids: string[];
+  zygosity_overrides: Record<string, Zygosity>;
+  narrative: string;
+}
+
+export interface Demos {
+  note: string;
+  patients: DemoPatient[];
+}
+
+// --- BRCA Exchange expert-panel lookup ---
+export interface BrcaExchangeRecord {
+  hgvs_cdna: string | null;
+  hgvs_protein: string | null;
+  enigma_classification: string | null;
+  enigma_date_evaluated: string | null;
+  enigma_method: string | null;
+  clinvar_classification: string | null;
+  sources: string | null;
+  link: string | null;
+}
+
+// --- BRCA1 variant-effect classifier (Tier-3 ML model) ---
+
+export type Brca1Label =
+  | "likely_loss_of_function"
+  | "likely_functional"
+  | "uncertain";
+
+export interface Brca1ComponentScores {
+  xgb_probability: number;
+  alphamissense_score: number | null;
+  alphamissense_class: string | null;
+  alphamissense_covered: boolean;
+  alphamissense_value_used: number | null;
+}
+
+export interface Brca1Conformal {
+  coverage: number;
+  threshold: number;
+  prediction_set: string[];
+  label: "loss_of_function" | "functional" | "uncertain";
+}
+
+export interface Brca1Classification {
+  hgvs_protein: string;
+  ref_aa: string;
+  position: number;
+  alt_aa: string;
+  consequence: string;
+  domain: string;
+  in_assayed_region: boolean;
+  probability_loss_of_function: number;
+  label: Brca1Label;
+  confidence: "low" | "moderate" | "high";
+  components: Brca1ComponentScores;
+  conformal: Brca1Conformal;
+  model_version: string;
+  training_citation: string;
+  holdout_auroc: number;
+  holdout_auprc: number;
+  caveats: string[];
 }

@@ -40,8 +40,13 @@ class DrugEntry(TypedDict):
     name: str
     smiles: str
     category: DrugCategory
-    primary_target_gene: str  # symbol from GENES
+    primary_target_gene: str  # symbol from GENES — what the drug physically binds
     metabolizing_gene: str | None  # gene whose variants affect metabolism
+    # Genes whose status matters clinically even though the drug doesn't bind
+    # them. Used for synthetic-lethality drugs (olaparib → BRCA1/BRCA2) so
+    # the relevance check knows a BRCA1 variant IS part of olaparib's story
+    # even though the drug physically binds PARP1.
+    context_genes: list[str]
     mechanism: str
     breast_cancer_indication: str
 
@@ -128,6 +133,50 @@ GENES: dict[str, GeneEntry] = {
         "anastrozole, exemestane in postmenopausal ER+ breast cancer. Rare "
         "variants modestly affect estrogen levels and AI response.",
     },
+    # Added for cross-oncology demo patients — imatinib/ABL1 + capecitabine/TYMS.
+    "ABL1": {
+        "symbol": "ABL1",
+        "name": "Tyrosine-protein kinase ABL1",
+        "uniprot_id": "P00519",
+        "role": "Non-receptor tyrosine kinase. In chronic myeloid leukemia, "
+        "the BCR-ABL1 fusion protein drives constitutive kinase activity and "
+        "leukemogenesis. Target of imatinib, dasatinib, nilotinib, ponatinib.",
+    },
+    "TYMS": {
+        "symbol": "TYMS",
+        "name": "Thymidylate synthase",
+        "uniprot_id": "P04818",
+        "role": "Catalyzes dUMP → dTMP, essential for DNA synthesis. Inhibited "
+        "by 5-fluorouracil (5-FU), the active metabolite of capecitabine. "
+        "TS-inhibition is the primary mechanism of fluoropyrimidine cytotoxicity.",
+    },
+    "TPMT": {
+        "symbol": "TPMT",
+        "name": "Thiopurine S-methyltransferase",
+        "uniprot_id": "P51580",
+        "role": "Inactivates thiopurine drugs (mercaptopurine, thioguanine, "
+        "azathioprine). Patients with low or absent TPMT activity accumulate "
+        "toxic metabolites and suffer life-threatening myelosuppression at "
+        "standard doses. CPIC Level A guidance.",
+    },
+    "UGT1A1": {
+        "symbol": "UGT1A1",
+        "name": "UDP-glucuronosyltransferase 1A1",
+        "uniprot_id": "P22309",
+        "role": "Conjugates SN-38 (the active metabolite of irinotecan) for "
+        "biliary excretion. Reduced UGT1A1 activity (as in UGT1A1*28/*28, "
+        "Gilbert's syndrome) causes SN-38 accumulation, severe neutropenia "
+        "and diarrhea. FDA label indicates dose reduction.",
+    },
+    "PARP1": {
+        "symbol": "PARP1",
+        "name": "Poly [ADP-ribose] polymerase 1",
+        "uniprot_id": "P09874",
+        "role": "DNA-damage sensor that flags single-strand breaks for repair. "
+        "Target of olaparib, talazoparib, rucaparib. PARP inhibition is "
+        "synthetically lethal in HR-deficient cells (BRCA1/2 pathogenic "
+        "tumors) because unrepaired double-strand breaks accumulate.",
+    },
 }
 
 
@@ -140,9 +189,10 @@ DRUGS: dict[str, DrugEntry] = {
         "primary_target_gene": "ESR1",
         "metabolizing_gene": "CYP2D6",
         "mechanism": "Selective estrogen-receptor modulator (SERM). In breast "
-        "tissue tamoxifen acts as an ER antagonist, but it's a prodrug — "
+        "tissue tamoxifen acts as an ER antagonist, but it's a prodrug. "
         "clinical activity depends on CYP2D6-mediated conversion to endoxifen.",
-        "breast_cancer_indication": "Adjuvant and metastatic treatment of ER+ breast "
+        "context_genes": [],
+        "breast_cancer_indication":"Adjuvant and metastatic treatment of ER+ breast "
         "cancer, especially in premenopausal women.",
     },
     "fulvestrant": {
@@ -155,7 +205,8 @@ DRUGS: dict[str, DrugEntry] = {
         "mechanism": "Selective estrogen-receptor degrader (SERD). Binds ER, "
         "induces conformational change → ubiquitination and proteasomal "
         "degradation of the receptor.",
-        "breast_cancer_indication": "ER+/HER2- metastatic breast cancer, often with "
+        "context_genes": [],
+        "breast_cancer_indication":"ER+/HER2- metastatic breast cancer, often with "
         "a CDK4/6 or PI3Kα inhibitor.",
     },
     "trastuzumab": {
@@ -170,7 +221,8 @@ DRUGS: dict[str, DrugEntry] = {
         "metabolizing_gene": None,
         "mechanism": "Monoclonal antibody against HER2 extracellular domain IV. "
         "Blocks ligand-independent HER2 signaling and flags cells for ADCC.",
-        "breast_cancer_indication": "HER2-positive (IHC 3+ or FISH amplified) early "
+        "context_genes": [],
+        "breast_cancer_indication":"HER2-positive (IHC 3+ or FISH amplified) early "
         "and metastatic breast cancer.",
     },
     "palbociclib": {
@@ -182,7 +234,8 @@ DRUGS: dict[str, DrugEntry] = {
         "metabolizing_gene": None,
         "mechanism": "ATP-competitive CDK4/6 inhibitor → hypophosphorylates "
         "Rb → G1 cell-cycle arrest.",
-        "breast_cancer_indication": "HR+/HER2- metastatic breast cancer with an "
+        "context_genes": [],
+        "breast_cancer_indication":"HR+/HER2- metastatic breast cancer with an "
         "aromatase inhibitor or fulvestrant.",
     },
     "olaparib": {
@@ -190,12 +243,17 @@ DRUGS: dict[str, DrugEntry] = {
         "name": "Olaparib",
         "smiles": "C1CC1C(=O)N2CCN(CC2)C(=O)C3=CC=CC(=C3CC4=NNC(=O)C5=CC=CC=C54)F",
         "category": "parp_inhibitor",
-        "primary_target_gene": "BRCA1",  # proxy — PARP1 is the real target; BRCA1/2 loss is the context
+        # Olaparib binds PARP1, not BRCA1. The BRCA1/2 connection is via
+        # synthetic lethality — HR-deficient cells can't repair the DSBs
+        # that PARP inhibition causes. The app's BRCA1 variant-effect
+        # classifier is what surfaces the BRCA1 relevance separately.
+        "primary_target_gene": "PARP1",
         "metabolizing_gene": None,
-        "mechanism": "PARP1/2 inhibitor → traps PARP on DNA → double-strand "
-        "breaks that require BRCA-mediated homologous repair. In BRCA1/2-"
-        "deficient cells, synthetic lethality.",
-        "breast_cancer_indication": "Germline BRCA1/2-mutated HER2-negative "
+        "mechanism": "Traps PARP1/2 on DNA, causing double-strand breaks "
+        "that require BRCA-mediated homologous repair to fix. In BRCA1/2-"
+        "deficient cells, those breaks are lethal (synthetic lethality).",
+        "context_genes": ["BRCA1", "BRCA2"],
+        "breast_cancer_indication":"Germline BRCA1/2-mutated HER2-negative "
         "metastatic breast cancer; adjuvant therapy in high-risk early BRCA+ disease.",
     },
     "alpelisib": {
@@ -207,7 +265,8 @@ DRUGS: dict[str, DrugEntry] = {
         "metabolizing_gene": None,
         "mechanism": "Selective PI3Kα inhibitor. Particularly effective against "
         "hotspot-mutated PIK3CA (H1047R, E545K, E542K).",
-        "breast_cancer_indication": "PIK3CA-mutated, HR+/HER2- metastatic breast "
+        "context_genes": [],
+        "breast_cancer_indication":"PIK3CA-mutated, HR+/HER2- metastatic breast "
         "cancer (with fulvestrant).",
     },
     "letrozole": {
@@ -220,20 +279,73 @@ DRUGS: dict[str, DrugEntry] = {
         "mechanism": "Non-steroidal aromatase inhibitor → blocks androgen → "
         "estrogen conversion → suppresses peripheral estrogen in "
         "postmenopausal women.",
-        "breast_cancer_indication": "Postmenopausal HR+ early and metastatic "
+        "context_genes": [],
+        "breast_cancer_indication":"Postmenopausal HR+ early and metastatic "
         "breast cancer.",
     },
     "capecitabine": {
         "id": "capecitabine",
         "name": "Capecitabine",
-        "smiles": "CCCCCOC(=O)NC1=NC(=O)N(C=C1F)C2C(C(C(O2)C)O)O",
+        # For the 3D view we dock 5-fluorouracil (the active metabolite) into
+        # thymidylate synthase — capecitabine itself is a prodrug and doesn't
+        # bind TS directly. This gives a biologically meaningful docking pose.
+        "smiles": "C1=C(C(=O)NC(=O)N1)F",  # 5-FU
         "category": "chemotherapy",
-        "primary_target_gene": "DPYD",  # DPYD handles the clearance step, not the target
+        "primary_target_gene": "TYMS",
         "metabolizing_gene": "DPYD",
-        "mechanism": "Oral prodrug of 5-FU → thymidylate synthase inhibition. "
-        "DPYD deficiency causes 5-FU accumulation and severe toxicity.",
-        "breast_cancer_indication": "Metastatic breast cancer after anthracycline/"
-        "taxane failure, or in triple-negative disease.",
+        "mechanism": "Oral prodrug of 5-FU. 5-FU → FdUMP → thymidylate "
+        "synthase inhibition → disrupts DNA synthesis. DPYD deficiency causes "
+        "5-FU accumulation and severe, sometimes fatal toxicity.",
+        "context_genes": [],
+        "breast_cancer_indication":"Metastatic breast cancer after anthracycline/"
+        "taxane failure, or in triple-negative disease. Also standard of care "
+        "in metastatic colorectal cancer (demo Patient C).",
+    },
+    "imatinib": {
+        "id": "imatinib",
+        "name": "Imatinib",
+        "smiles": "CC1=C(C=C(C=C1)NC(=O)C2=CC=C(C=C2)CN3CCN(CC3)C)NC4=NC=CC(=N4)C5=CN=CC=C5",
+        "category": "her2_targeted",  # reused category tag; it's a TKI
+        "primary_target_gene": "ABL1",
+        "metabolizing_gene": None,
+        "mechanism": "ATP-competitive inhibitor of BCR-ABL1, KIT, and PDGFR "
+        "tyrosine kinases. Locks ABL1 in an inactive conformation, blocking "
+        "phosphorylation of downstream survival/proliferation signals.",
+        "context_genes": [],
+        "breast_cancer_indication":"Standard of care for Chronic Myeloid "
+        "Leukemia (CML) and GIST. The classic BCR-ABL1 targeted therapy.",
+    },
+    "mercaptopurine": {
+        "id": "mercaptopurine",
+        "name": "Mercaptopurine (6-MP)",
+        "smiles": "C1=NC2=C(N1)C(=S)N=CN2",
+        "category": "chemotherapy",
+        "primary_target_gene": "TPMT",
+        "metabolizing_gene": "TPMT",
+        "mechanism": "Purine analog that, after intracellular activation, "
+        "interferes with DNA and RNA synthesis in rapidly dividing cells. "
+        "TPMT inactivates the drug; low TPMT activity causes toxic "
+        "accumulation.",
+        "context_genes": [],
+        "breast_cancer_indication":"Standard of care for pediatric acute "
+        "lymphoblastic leukemia (ALL) maintenance therapy and some "
+        "inflammatory bowel disease regimens.",
+    },
+    "irinotecan": {
+        "id": "irinotecan",
+        "name": "Irinotecan (Camptosar)",
+        "smiles": "CCC1=C2CN3C(=CC4=C(C3=O)COC(=O)C4(CC)O)C2=NC5=CC(=CC=C51)OC(=O)N6CCC(CC6)N7CCCCC7",
+        "category": "chemotherapy",
+        "primary_target_gene": "UGT1A1",
+        "metabolizing_gene": "UGT1A1",
+        "mechanism": "Topoisomerase-I inhibitor. Its active metabolite SN-38 "
+        "traps topoisomerase-DNA complexes, causing double-strand breaks in "
+        "dividing cells. UGT1A1 conjugates SN-38 for excretion; reduced "
+        "UGT1A1 activity causes SN-38 accumulation and severe toxicity.",
+        "context_genes": [],
+        "breast_cancer_indication":"First-line / second-line therapy for "
+        "metastatic colorectal cancer (often as FOLFIRI) and pancreatic "
+        "cancer.",
     },
 }
 
@@ -346,7 +458,7 @@ VARIANTS: dict[str, VariantEntry] = {
         "hgvs_protein": None,
         "residue_positions": [],
         "clinical_significance": "drug_response",
-        "effect_summary": "Null allele. Homozygotes are poor metabolizers — "
+        "effect_summary": "Null allele. Homozygotes are poor metabolizers, "
         "substantially reduced tamoxifen → endoxifen conversion. CPIC Level A: "
         "recommend alternative endocrine therapy in premenopausal patients.",
     },
@@ -381,6 +493,40 @@ VARIANTS: dict[str, VariantEntry] = {
         "clinical_significance": "drug_response",
         "effect_summary": "Reduced DPD activity. CPIC recommends ~50% "
         "capecitabine dose reduction in heterozygotes.",
+    },
+    # --- TPMT (thiopurine toxicity) ---
+    "TPMT_star3A": {
+        "id": "TPMT_star3A",
+        "gene_symbol": "TPMT",
+        "name": "TPMT*3A (p.Ala154Thr + p.Tyr240Cys)",
+        "hgvs_protein": "p.A154T+p.Y240C",
+        "residue_positions": [154, 240],
+        "clinical_significance": "drug_response",
+        "effect_summary": "Most common TPMT deficiency allele. Homozygotes "
+        "have essentially absent TPMT activity and accumulate toxic "
+        "thiopurine metabolites. Heterozygotes have intermediate activity.",
+    },
+    "TPMT_star2": {
+        "id": "TPMT_star2",
+        "gene_symbol": "TPMT",
+        "name": "TPMT*2 (p.Ala80Pro)",
+        "hgvs_protein": "p.A80P",
+        "residue_positions": [80],
+        "clinical_significance": "drug_response",
+        "effect_summary": "Loss-of-function TPMT variant. Heterozygotes "
+        "are intermediate metabolizers.",
+    },
+    # --- UGT1A1 (irinotecan toxicity / Gilbert's) ---
+    "UGT1A1_star28": {
+        "id": "UGT1A1_star28",
+        "gene_symbol": "UGT1A1",
+        "name": "UGT1A1*28 (TA7 promoter repeat)",
+        "hgvs_protein": None,
+        "residue_positions": [],
+        "clinical_significance": "drug_response",
+        "effect_summary": "Extra TA repeat in the promoter reduces UGT1A1 "
+        "expression. Homozygotes (*28/*28) have Gilbert's syndrome and "
+        "accumulate SN-38, the active metabolite of irinotecan.",
     },
 }
 
@@ -479,7 +625,7 @@ PGX_RULES: list[PGxRule] = [
         "variant_ids": ["BRCA2_6174delT"],
         "genotype": "heterozygous",
         "phenotype": "germline BRCA2 pathogenic carrier",
-        "recommendation": "FDA-approved indication (see BRCA1 note — applies "
+        "recommendation": "FDA-approved indication (see BRCA1 note, applies "
         "to either gene).",
         "evidence_level": "A",
         "source": "FDA olaparib label + OlympiA",
@@ -523,6 +669,54 @@ PGX_RULES: list[PGxRule] = [
         "evidence_level": "B",
         "source": "MutHER, SUMMIT basket trials",
     },
+    # --- Mercaptopurine / TPMT (CPIC Level A) ---
+    {
+        "drug_id": "mercaptopurine",
+        "gene_symbol": "TPMT",
+        "variant_ids": ["TPMT_star3A", "TPMT_star2"],
+        "genotype": "homozygous",
+        "phenotype": "TPMT poor metabolizer",
+        "recommendation": "CPIC: start with drastically reduced dose (often "
+        "about 10% of standard) or choose alternative agents. Full dose can "
+        "cause fatal myelosuppression.",
+        "evidence_level": "A",
+        "source": "CPIC 2019 thiopurines/TPMT guideline",
+    },
+    {
+        "drug_id": "mercaptopurine",
+        "gene_symbol": "TPMT",
+        "variant_ids": ["TPMT_star3A", "TPMT_star2"],
+        "genotype": "heterozygous",
+        "phenotype": "TPMT intermediate metabolizer",
+        "recommendation": "CPIC: start at 30 to 80 percent of the standard "
+        "dose and adjust based on complete blood counts.",
+        "evidence_level": "A",
+        "source": "CPIC 2019 thiopurines/TPMT guideline",
+    },
+    # --- Irinotecan / UGT1A1 (FDA label) ---
+    {
+        "drug_id": "irinotecan",
+        "gene_symbol": "UGT1A1",
+        "variant_ids": ["UGT1A1_star28"],
+        "genotype": "homozygous",
+        "phenotype": "UGT1A1*28/*28 (Gilbert's syndrome)",
+        "recommendation": "FDA label advises reducing the starting dose by at "
+        "least one level in UGT1A1*28 homozygotes due to increased risk of "
+        "severe neutropenia and diarrhea.",
+        "evidence_level": "A",
+        "source": "FDA irinotecan label",
+    },
+    {
+        "drug_id": "irinotecan",
+        "gene_symbol": "UGT1A1",
+        "variant_ids": ["UGT1A1_star28"],
+        "genotype": "heterozygous",
+        "phenotype": "UGT1A1*1/*28",
+        "recommendation": "Heterozygotes tolerate standard doses in most "
+        "studies, but monitor neutrophil counts closely early in therapy.",
+        "evidence_level": "B",
+        "source": "FDA irinotecan label; DPWG guidance",
+    },
 ]
 
 
@@ -532,3 +726,154 @@ def rules_for_drug(drug_id: str) -> list[PGxRule]:
 
 def variants_for_gene(gene_symbol: str) -> list[VariantEntry]:
     return [v for v in VARIANTS.values() if v["gene_symbol"] == gene_symbol]
+
+
+def drugs_for_gene(gene_symbol: str) -> list[DrugEntry]:
+    """Drugs where this gene is the primary target or the metabolizing gene.
+
+    Used when a patient pastes a sequence for a gene that isn't in the
+    currently-selected drug's pathway. We surface relevant alternatives
+    instead of silently running a useless analysis.
+    """
+    return [
+        d
+        for d in DRUGS.values()
+        if d["primary_target_gene"] == gene_symbol or d["metabolizing_gene"] == gene_symbol
+    ]
+
+
+def drug_related_genes(drug_id: str) -> set[str]:
+    """Set of gene symbols clinically relevant to this drug.
+
+    Includes the direct binding target, the metabolizing gene (if any), and
+    any "context" genes (e.g. synthetic-lethality partners like BRCA1/2 for
+    olaparib — the drug doesn't bind BRCA1 but its entire clinical rationale
+    depends on BRCA status).
+    """
+    d = DRUGS.get(drug_id)
+    if d is None:
+        return set()
+    out: set[str] = {d["primary_target_gene"]}
+    if d["metabolizing_gene"]:
+        out.add(d["metabolizing_gene"])
+    for g in d.get("context_genes", []):
+        out.add(g)
+    return out
+
+
+def drugs_for_gene_inclusive(gene_symbol: str) -> list[DrugEntry]:
+    """Drugs where this gene is the target, metabolizer, OR a context gene."""
+    return [
+        d
+        for d in DRUGS.values()
+        if d["primary_target_gene"] == gene_symbol
+        or d["metabolizing_gene"] == gene_symbol
+        or gene_symbol in d.get("context_genes", [])
+    ]
+
+
+# --- Demo patients ---------------------------------------------------------
+#
+# Three preset patient profiles for the 2-minute walkthrough. Genotypes are
+# constructed from public CPIC and PharmGKB reference alleles. No real patient
+# data is used (the UI surfaces this disclosure prominently).
+#
+# Design notes:
+#  - Patient A uses an empty `variants` list — *1/*1 for every metabolism gene
+#    is the wild-type reference; our analyzer treats "no variants" as the
+#    green-light case and emits a "standard dosing" headline.
+#  - Patient B exercises the caution path (CYP2D6 poor metabolizer).
+#  - Patient C exercises the clinically serious path (DPYD*2A heterozygous).
+
+
+class DemoPatient(TypedDict):
+    id: str
+    name: str
+    age: int
+    persona_name: str   # first name used in patient-friendly narrative ("Maya")
+    scenario: str
+    indication: str
+    drug_id: str
+    medication_display: str  # e.g. "Imatinib (Gleevec)"
+    status: str  # "expected" | "reduced" | "dose-adjustment" — maps to StatusBadge
+    status_color: str  # "success" | "warning" | "info"
+    genotype_summary: dict[str, str]
+    variant_ids: list[str]
+    zygosity_overrides: dict[str, str]
+    narrative: str
+
+
+DEMO_PATIENTS: list[DemoPatient] = [
+    {
+        "id": "maya",
+        "name": "Maya's story",
+        "persona_name": "Maya",
+        "age": 45,
+        "scenario": "A clear case. A cancer drug working as intended.",
+        "indication": "Chronic Myeloid Leukemia (CML)",
+        "drug_id": "imatinib",
+        "medication_display": "Imatinib (Gleevec)",
+        "status": "expected",
+        "status_color": "success",
+        "genotype_summary": {
+            "CYP2D6": "*1/*1 (normal)",
+            "DPYD": "*1/*1 (normal)",
+            "BRCA1": "wild-type",
+            "BRCA2": "wild-type",
+        },
+        "variant_ids": [],
+        "zygosity_overrides": {},
+        "narrative": "Imatinib blocks the BCR-ABL1 fusion protein that drives CML. "
+        "Maya has the typical versions of the genes that process this drug.",
+    },
+    {
+        "id": "diana",
+        "name": "Diana's story",
+        "persona_name": "Diana",
+        "age": 52,
+        "scenario": "A common case. A genetic variant reducing a drug's effectiveness, and the alternatives.",
+        "indication": "ER+ Breast Cancer",
+        "drug_id": "tamoxifen",
+        "medication_display": "Tamoxifen",
+        "status": "reduced",
+        "status_color": "warning",
+        "genotype_summary": {
+            "CYP2D6": "*4/*4 (poor metabolizer)",
+            "DPYD": "*1/*1 (normal)",
+            "BRCA1": "wild-type",
+            "BRCA2": "wild-type",
+        },
+        "variant_ids": ["CYP2D6_star4"],
+        "zygosity_overrides": {"CYP2D6_star4": "homozygous"},
+        "narrative": "Tamoxifen is a prodrug. CYP2D6 must convert it to its "
+        "active form, and Diana's CYP2D6 works slowly.",
+    },
+    {
+        "id": "priya",
+        "name": "Priya's story",
+        "persona_name": "Priya",
+        "age": 62,
+        "scenario": "A safety case. How genetics changes the right dose.",
+        "indication": "Metastatic Colorectal Cancer",
+        "drug_id": "capecitabine",
+        "medication_display": "Capecitabine (prodrug for 5-FU)",
+        "status": "dose-adjustment",
+        "status_color": "info",
+        "genotype_summary": {
+            "CYP2D6": "*1/*1 (normal)",
+            "DPYD": "*2A/*1 (intermediate metabolizer)",
+            "BRCA1": "wild-type",
+            "BRCA2": "wild-type",
+        },
+        "variant_ids": ["DPYD_star2A"],
+        "zygosity_overrides": {"DPYD_star2A": "heterozygous"},
+        "narrative": "DPYD clears 5-FU. Priya's DPYD works at reduced capacity, "
+        "so the standard dose can accumulate to toxic levels.",
+    },
+]
+
+
+DEMO_NOTE = (
+    "Demo patient genotypes constructed from public CPIC and PharmGKB "
+    "reference alleles. No real patient data is used."
+)

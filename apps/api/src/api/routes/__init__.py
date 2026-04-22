@@ -1,4 +1,6 @@
 from api.routes.bc import router as bc_router
+from api.routes.brca1 import router as brca1_router
+from api.routes.brca2 import router as brca2_router
 from api.routes.export import router as export_router
 from api.routes.jobs import limiter as jobs_limiter
 from api.routes.jobs import router as jobs_router
@@ -7,6 +9,8 @@ from api.routes.morphology import router as morphology_router
 
 __all__ = [
     "bc_router",
+    "brca1_router",
+    "brca2_router",
     "export_router",
     "jobs_limiter",
     "jobs_router",

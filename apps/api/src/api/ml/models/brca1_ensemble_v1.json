@@ -1,0 +1,12 @@
+{
+  "coef": [
+    4.812645106745242,
+    3.2125873608752866
+  ],
+  "intercept": -4.18342700020774,
+  "feature_order": [
+    "xgb_proba_lof",
+    "alphamissense_pathogenicity"
+  ],
+  "am_fill_value": 0.44791486859321594
+}

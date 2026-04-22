@@ -110,3 +110,64 @@ def gene_for_symbol(symbol: str) -> str:
             f"gene {symbol!r} not in curated breast-cancer catalog"
         )
     return GENES[symbol]["uniprot_id"]
+
+
+_uniprot_cache: dict[str, str] = {}
+
+
+async def _cached_uniprot(uniprot_id: str) -> str:
+    seq = _uniprot_cache.get(uniprot_id)
+    if seq is None:
+        seq = await fetch_uniprot_sequence(uniprot_id)
+        _uniprot_cache[uniprot_id] = seq
+    return seq
+
+
+async def identify_gene_from_sequence(pasted: str) -> tuple[str, float] | None:
+    """Auto-detect which supported gene a pasted sequence belongs to.
+
+    Scores the pasted sequence against every curated gene's canonical UniProt
+    sequence by best-window identity. Returns (gene_symbol, fraction) for the
+    top match if it clears 70% identity, otherwise None.
+
+    This is how the frontend handles "paste a sequence, leave the gene picker
+    on 'none'" — a patient pasting their variant of ABL1 shouldn't also have
+    to know the name of the gene.
+    """
+    cleaned = "".join(c for c in pasted.upper() if c.isalpha())
+    if len(cleaned) < 30:
+        return None
+
+    best: tuple[str, float] | None = None
+    for symbol, gene in GENES.items():
+        try:
+            wt = await _cached_uniprot(gene["uniprot_id"])
+        except Exception:
+            continue
+        score = _max_identity(wt.upper(), cleaned)
+        if best is None or score > best[1]:
+            best = (symbol, score)
+
+    if best is None or best[1] < 0.70:
+        return None
+    return best
+
+
+def _max_identity(wildtype: str, fragment: str) -> float:
+    """Return the best identity fraction when `fragment` is slid across `wildtype`.
+
+    Handles both full-length paste (len equal) and partial paste (fragment
+    shorter). For very long proteins this is O(n*m) but our genes cap at
+    a few thousand residues, so it runs in tens of ms.
+    """
+    if len(fragment) == 0 or len(wildtype) == 0:
+        return 0.0
+    if len(fragment) >= len(wildtype):
+        matches = sum(1 for i, c in enumerate(wildtype) if c == fragment[i])
+        return matches / len(wildtype)
+    best_matches = 0
+    for offset in range(len(wildtype) - len(fragment) + 1):
+        m = sum(1 for i, c in enumerate(fragment) if wildtype[offset + i] == c)
+        if m > best_matches:
+            best_matches = m
+    return best_matches / len(fragment)

@@ -22,14 +22,17 @@ from api.models import (
     AnalysisResult,
     PGxVerdict,
     PocketResidue,
+    SuggestedDrug,
     VariantInput,
 )
-from api.services import alphafold, docking, pocket, storage, variants
+from api.services import alphafold, docking, plain_language, pocket, storage, variants
 from api.services.bc_catalog import (
     DRUGS,
     GENES,
     VARIANTS,
     PGxRule,
+    drug_related_genes,
+    drugs_for_gene,
     rules_for_drug,
 )
 
@@ -40,7 +43,7 @@ DISCLAIMERS = [
     "Educational use only. This tool does NOT make medical or treatment recommendations.",
     "Pharmacogenomic guidance shown is summarized from public CPIC/FDA sources; "
     "always confirm with a qualified clinician and a CLIA-certified genetic test.",
-    "Structural pocket analysis is a heuristic — residues close to the ligand "
+    "Structural pocket analysis is a heuristic. Residues close to the ligand "
     "in a docked model are more likely to affect binding, but this is not a "
     "binding-affinity calculation.",
     "Do not make treatment decisions based on this app. Consult an oncologist "
@@ -134,6 +137,23 @@ async def run_analysis(
     # --- 4) Headline ---
     headline, severity = _headline(drug["name"], pgx_verdicts, pocket_residues)
 
+    # --- 4b) Drug-vs-variants relevance check ---
+    relevance_warning, suggested_drugs = _relevance_check(drug_id, resolved)
+
+    # --- 4c) BRCA1 variants the Tier-3 classifier can handle ---
+    classifiable_brca1 = _extract_classifiable_brca1(resolved)
+
+    # --- 5) Plain-language translation for patients ---
+    plain = plain_language.build_plain_language(
+        drug_id=drug["id"],
+        target_gene=target_gene,
+        target_uniprot=gene_entry["uniprot_id"],
+        pgx_verdicts=pgx_verdicts,
+        pocket_residues=pocket_residues,
+        headline_severity=severity,
+        has_pose=pose_url is not None,
+    )
+
     return AnalysisResult(
         id=uuid4().hex,
         drug_id=drug["id"],
@@ -146,6 +166,10 @@ async def run_analysis(
         pocket_residues=pocket_residues,
         headline=headline,
         headline_severity=severity,
+        plain_language=plain,
+        relevance_warning=relevance_warning,
+        suggested_drugs=suggested_drugs,
+        classifiable_brca1_variants=classifiable_brca1,
         disclaimers=DISCLAIMERS,
         created_at=datetime.utcnow(),
     )
@@ -183,25 +207,138 @@ async def _resolve_variants(
                     "zygosity": v.zygosity,
                     "label": entry["name"],
                 })
-        elif v.gene_symbol and v.protein_sequence:
-            uniprot = variants.gene_for_symbol(v.gene_symbol)
+        elif v.protein_sequence:
+            # Two accepted cases now:
+            #   (a) user explicitly picked the gene alongside pasting the sequence
+            #   (b) user only pasted the sequence — auto-detect the gene by
+            #       comparing identity against every supported gene's UniProt WT.
+            gene_symbol = v.gene_symbol
+            if not gene_symbol:
+                match = await variants.identify_gene_from_sequence(v.protein_sequence)
+                if match is None:
+                    raise AnalysisError(
+                        "couldn't tell which gene this sequence is from. Try picking "
+                        "the gene from the dropdown, or double-check the sequence is "
+                        "one of the supported genes."
+                    )
+                gene_symbol, _score = match
+                logger.info("auto-detected gene %s from pasted sequence", gene_symbol)
+
+            uniprot = variants.gene_for_symbol(gene_symbol)
             wildtype = await variants.fetch_uniprot_sequence(uniprot)
             subs, has_indel = variants.align_and_diff(wildtype, v.protein_sequence)
             for pos, wt, alt in subs:
                 out.append({
-                    "gene_symbol": v.gene_symbol,
+                    "gene_symbol": gene_symbol,
                     "position": pos,
                     "catalog_id": None,
                     "zygosity": v.zygosity,
-                    "label": f"{v.gene_symbol} p.{wt}{pos}{alt}",
+                    "label": f"{gene_symbol} p.{wt}{pos}{alt}",
                 })
             if has_indel:
-                logger.info("sequence for %s has an indel; positions skipped", v.gene_symbol)
+                logger.info("sequence for %s has an indel; positions skipped", gene_symbol)
+            if not subs and not has_indel:
+                # Sequence matches WT exactly — no variants to report, but the
+                # analyzer still needs to know which gene context we're in.
+                out.append({
+                    "gene_symbol": gene_symbol,
+                    "position": 0,
+                    "catalog_id": None,
+                    "zygosity": v.zygosity,
+                    "label": f"{gene_symbol} (no variants detected in pasted sequence)",
+                })
         else:
             raise AnalysisError(
-                "variant must have either catalog_id or (gene_symbol + protein_sequence)"
+                "variant must have a catalog_id, or a protein_sequence (with optional gene_symbol)"
             )
     return out
+
+
+def _extract_classifiable_brca1(resolved: list[dict]) -> list[str]:
+    """Find BRCA1 point-AA variants that the Tier-3 classifier can handle.
+
+    Parses the resolved variant `label` field, which is either "BRCA1 p.X###Y"
+    (1-letter) for pasted sequences or "BRCA1 p.Xxx###Yyy" (3-letter) for
+    catalog variants. Skips anything without recognisable p.-notation
+    (frameshifts, splice variants, indels — those need a different model).
+    """
+    import re
+
+    # Allow both "p.C61G" and "p.Cys61Gly" forms.
+    pattern = re.compile(
+        r"p\.(?:([A-Z])(\d+)([A-Z*])|([A-Z][a-z]{2})(\d+)([A-Z][a-z]{2}|Ter))"
+    )
+
+    out: list[str] = []
+    seen: set[str] = set()
+    for r in resolved:
+        if r.get("gene_symbol") != "BRCA1":
+            continue
+        label = r.get("label", "")
+        m = pattern.search(label)
+        if not m:
+            continue
+        # Normalize to the 1-letter form the classifier prefers.
+        if m.group(1):
+            hgvs = f"p.{m.group(1)}{m.group(2)}{m.group(3)}"
+        else:
+            # 3-letter form — pass through; the classifier's parser handles both.
+            hgvs = f"p.{m.group(4)}{m.group(5)}{m.group(6)}"
+        if hgvs not in seen:
+            seen.add(hgvs)
+            out.append(hgvs)
+    return out
+
+
+def _relevance_check(
+    drug_id: str,
+    resolved: list[dict],
+) -> tuple[str | None, list[SuggestedDrug]]:
+    """Does the user's variant set involve any gene this drug cares about?
+
+    If yes, return (None, []). If the user pasted variants for genes that are
+    unrelated to this drug's target and metabolism, return a clear warning
+    plus a list of drugs that *are* related to their genes, so the UI can
+    offer a one-click switch.
+    """
+    if not resolved:
+        return None, []
+
+    drug_genes = drug_related_genes(drug_id)
+    patient_genes = {r["gene_symbol"] for r in resolved if r.get("gene_symbol")}
+    relevant = patient_genes & drug_genes
+    if relevant:
+        return None, []
+
+    drug = DRUGS.get(drug_id)
+    drug_name = drug["name"] if drug else drug_id
+
+    # Pick at most 3 alternative drugs, one per patient gene (no duplicates).
+    seen: set[str] = set()
+    suggestions: list[SuggestedDrug] = []
+    for gene_symbol in patient_genes:
+        for d in drugs_for_gene(gene_symbol):
+            if d["id"] in seen or d["id"] == drug_id:
+                continue
+            seen.add(d["id"])
+            if d["primary_target_gene"] == gene_symbol:
+                reason = f"targets {gene_symbol} directly"
+            else:
+                reason = f"is processed by {gene_symbol} in your body"
+            suggestions.append(SuggestedDrug(id=d["id"], name=d["name"], reason=reason))
+            if len(suggestions) >= 3:
+                break
+        if len(suggestions) >= 3:
+            break
+
+    patient_gene_label = ", ".join(sorted(patient_genes))
+    warning = (
+        f"The variants you gave us are in {patient_gene_label}, which is not part "
+        f"of {drug_name}'s pathway. The 3D view below still shows {drug_name} on "
+        f"its normal target, but your variants won't show up on it. Pick one of "
+        f"the suggested drugs to see how your variants actually interact."
+    )
+    return warning, suggestions
 
 
 def _match_rules(drug_id: str, resolved: list[dict]) -> list[PGxVerdict]:
@@ -259,7 +396,7 @@ def _headline(
         ]
         if contraindications:
             return (
-                f"{drug_name}: avoid — {contraindications[0].phenotype} "
+                f"{drug_name}: avoid. {contraindications[0].phenotype} "
                 f"({contraindications[0].variant_label}).",
                 "contraindicated",
             )
@@ -270,7 +407,7 @@ def _headline(
                 "benefit",
             )
         return (
-            f"{drug_name}: dosing or choice may need adjustment — "
+            f"{drug_name}: dosing or choice may need adjustment. "
             f"{verdicts[0].phenotype}.",
             "caution",
         )
@@ -278,17 +415,19 @@ def _headline(
     if in_pocket_count > 0:
         return (
             f"{drug_name}: {in_pocket_count} of your variant residue(s) sit "
-            f"inside the binding pocket — structural disruption likely.",
+            f"inside the binding pocket. Structural disruption is likely.",
             "warning",
         )
     if pocket_residues:
         return (
             f"{drug_name}: your variants are on the target but outside the "
-            f"binding pocket — binding likely preserved.",
+            f"binding pocket. Binding is likely preserved.",
             "info",
         )
+    # No PGx verdicts and no structural residues to analyze — the user submitted
+    # wild-type (Patient A) or no variants at all. Emit a green-light summary.
     return (
-        f"{drug_name}: no matching PGx rule for your variants. Structural "
-        f"view only.",
-        "info",
+        f"{drug_name}: no pharmacogenomic contraindications identified. "
+        f"Standard dosing per FDA labeling. Monitor for common adverse effects.",
+        "benefit",
     )

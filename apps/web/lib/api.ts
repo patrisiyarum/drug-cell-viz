@@ -4,7 +4,14 @@ import type {
   MolecularResult,
   MorphologyResult,
 } from "./types";
-import type { AnalysisResult, Catalog, VariantInput } from "./bc-types";
+import type {
+  AnalysisResult,
+  Brca1Classification,
+  BrcaExchangeRecord,
+  Catalog,
+  Demos,
+  VariantInput,
+} from "./bc-types";
 
 export const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -29,9 +36,19 @@ export const api = {
 
   // Breast cancer analysis flow
   getCatalog: () => request<Catalog>("/api/bc/catalog"),
+  getDemos: () => request<Demos>("/api/bc/demos"),
   analyze: (body: { drug_id: string; variants: VariantInput[] }) =>
     request<AnalysisResult>("/api/bc/analyze", {
       method: "POST",
       body: JSON.stringify(body),
     }),
+  classifyBrca1: (hgvsProtein: string) =>
+    request<Brca1Classification>("/api/brca1/classify", {
+      method: "POST",
+      body: JSON.stringify({ hgvs_protein: hgvsProtein }),
+    }),
+  lookupBrcaExchange: (hgvsProtein: string) =>
+    request<BrcaExchangeRecord | null>(
+      `/api/brca1/exchange?hgvs_protein=${encodeURIComponent(hgvsProtein)}`,
+    ),
 };

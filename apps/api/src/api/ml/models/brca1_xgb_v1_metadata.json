@@ -1,0 +1,202 @@
+{
+  "model_version": "brca1_xgb_v1",
+  "trained_on": "Findlay et al. 2018 (Nature, doi:10.1038/s41586-018-0461-z)",
+  "training_citation": "Findlay GM, Daza RM, Martin B, et al. Accurate classification of BRCA1 variants with saturation genome editing. Nature 562, 217-222 (2018).",
+  "task": "binary classification: LOF vs FUNC (intermediate variants excluded from training)",
+  "train_size": 2186,
+  "calibration_size": 729,
+  "test_size": 729,
+  "holdout_metrics": {
+    "auroc": 0.9325814806820635,
+    "auprc": 0.8201812277373639,
+    "brier": 0.08080201888545523,
+    "confusion_matrix": [
+      [
+        542,
+        23
+      ],
+      [
+        53,
+        111
+      ]
+    ],
+    "positive_rate": 0.22496570644718794,
+    "n": 729
+  },
+  "baseline_metrics": {
+    "xgb_only": {
+      "auroc": 0.9108784804662206,
+      "auprc": 0.7826701643159523,
+      "brier": 0.09177964925765991,
+      "confusion_matrix": [
+        [
+          544,
+          21
+        ],
+        [
+          72,
+          92
+        ]
+      ],
+      "positive_rate": 0.22496570644718794,
+      "n": 729
+    },
+    "alphamissense_only": {
+      "auroc": 0.9087796006810092,
+      "auprc": 0.7611407769287549,
+      "brier": 0.15719208121299744,
+      "confusion_matrix": [
+        [
+          211,
+          73
+        ],
+        [
+          6,
+          85
+        ]
+      ],
+      "positive_rate": 0.24266666666666667,
+      "n": 375
+    }
+  },
+  "alphamissense_coverage_on_test": {
+    "covered": 375,
+    "total": 729,
+    "fraction": 0.51440329218107
+  },
+  "ensemble_weights": {
+    "xgb": 4.812645106745242,
+    "alphamissense": 3.2125873608752866,
+    "intercept": -4.18342700020774,
+    "am_imputation_value_for_missing": 0.44791486859321594,
+    "attribution": "AlphaMissense: DeepMind, Science 2023 (doi:10.1126/science.adg7492). CC BY-NC-SA 4.0."
+  },
+  "conformal": {
+    "method": "split-conformal on absolute residual |y - p_LOF|",
+    "calibration_n": 729,
+    "thresholds": {
+      "0.8": 0.18127411526091586,
+      "0.9": 0.5072085970433727,
+      "0.95": 0.8202954475750789
+    }
+  },
+  "per_domain_auroc": {
+    "RING": {
+      "n": 156,
+      "ensemble_auroc": 0.9643870967741935,
+      "xgb_auroc": 0.9308387096774194,
+      "positive_rate": 0.1987179487179487
+    },
+    "Linker2": {
+      "n": 33,
+      "ensemble_auroc": 1.0,
+      "xgb_auroc": 1.0,
+      "positive_rate": 0.06060606060606061
+    },
+    "BRCT1": {
+      "n": 140,
+      "ensemble_auroc": 0.96375,
+      "xgb_auroc": 0.9325,
+      "positive_rate": 0.2857142857142857
+    },
+    "BRCT_linker": {
+      "n": 34,
+      "ensemble_auroc": 0.951388888888889,
+      "xgb_auroc": 0.9097222222222222,
+      "positive_rate": 0.47058823529411764
+    },
+    "BRCT2": {
+      "n": 156,
+      "ensemble_auroc": 0.9058515854854527,
+      "xgb_auroc": 0.8591042824452435,
+      "positive_rate": 0.14743589743589744
+    }
+  },
+  "top_features": {
+    "consequence_Canonical_splice": 0.15602409839630127,
+    "consequence_Nonsense": 0.11887456476688385,
+    "is_synonymous": 0.06639327853918076,
+    "consequence_Splice_region": 0.05751499906182289,
+    "consequence_Intronic": 0.04408150911331177,
+    "consequence_Synonymous": 0.04186791926622391,
+    "ref_C": 0.02530556172132492,
+    "ref_N": 0.025002915412187576,
+    "d_hydrophobicity": 0.024190448224544525,
+    "domain_Linker2": 0.021663712337613106,
+    "grantham": 0.02130226418375969,
+    "alt_P": 0.01915585808455944,
+    "ref_M": 0.018147295340895653,
+    "ref_L": 0.01653960533440113,
+    "ref_K": 0.014430158771574497,
+    "ref_W": 0.013395857997238636,
+    "ref_E": 0.012979695573449135,
+    "domain_BRCT_linker": 0.012652670964598656,
+    "ref_S": 0.012310014106333256,
+    "ref_H": 0.012220296077430248
+  },
+  "feature_count": 62,
+  "feature_names": [
+    "aa_pos",
+    "aa_pos_frac",
+    "d_hydrophobicity",
+    "d_volume",
+    "d_charge",
+    "d_polarity",
+    "grantham",
+    "is_synonymous",
+    "domain_RING",
+    "domain_Linker1",
+    "domain_CoiledCoil",
+    "domain_Linker2",
+    "domain_BRCT1",
+    "domain_BRCT_linker",
+    "domain_BRCT2",
+    "ref_A",
+    "ref_C",
+    "ref_D",
+    "ref_E",
+    "ref_F",
+    "ref_G",
+    "ref_H",
+    "ref_I",
+    "ref_K",
+    "ref_L",
+    "ref_M",
+    "ref_N",
+    "ref_P",
+    "ref_Q",
+    "ref_R",
+    "ref_S",
+    "ref_T",
+    "ref_V",
+    "ref_W",
+    "ref_Y",
+    "alt_A",
+    "alt_C",
+    "alt_D",
+    "alt_E",
+    "alt_F",
+    "alt_G",
+    "alt_H",
+    "alt_I",
+    "alt_K",
+    "alt_L",
+    "alt_M",
+    "alt_N",
+    "alt_P",
+    "alt_Q",
+    "alt_R",
+    "alt_S",
+    "alt_T",
+    "alt_V",
+    "alt_W",
+    "alt_Y",
+    "consequence_Missense",
+    "consequence_Synonymous",
+    "consequence_Nonsense",
+    "consequence_Canonical_splice",
+    "consequence_Splice_region",
+    "consequence_Intronic",
+    "consequence_5_UTR"
+  ]
+}

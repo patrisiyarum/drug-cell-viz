@@ -16,6 +16,8 @@ from api.config import settings
 from api.db import check_db, init_db
 from api.routes import (
     bc_router,
+    brca1_router,
+    brca2_router,
     export_router,
     jobs_limiter,
     jobs_router,
@@ -56,6 +58,8 @@ app.include_router(molecular_router)
 app.include_router(morphology_router)
 app.include_router(export_router)
 app.include_router(bc_router)
+app.include_router(brca1_router)
+app.include_router(brca2_router)
 
 # Serve local blob storage so the frontend can fetch PDBs and thumbnails by URL.
 if settings.storage_backend == "local":
