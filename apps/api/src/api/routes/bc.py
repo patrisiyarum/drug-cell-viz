@@ -5,10 +5,13 @@ from __future__ import annotations
 import json
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import Response
+from pydantic import BaseModel
 
 from api.db import session_scope
 from api.models import AnalysisCreate, AnalysisResult, AnalysisRow
 from api.services import analysis as analysis_service
+from api.services import pdf_report as pdf_report_service
 from api.services.bc_catalog import DEMO_NOTE, DEMO_PATIENTS, DRUGS, GENES, VARIANTS
 
 router = APIRouter(prefix="/api/bc", tags=["breast-cancer"])
@@ -250,3 +253,29 @@ async def get_analysis(result_id: str) -> AnalysisResult:
 async def get_demos() -> dict:
     """Return preset demo patient profiles for the walkthrough."""
     return {"note": DEMO_NOTE, "patients": DEMO_PATIENTS}
+
+
+class PdfReportRequest(BaseModel):
+    # The client POSTs the full AnalysisResult back (we don't require the
+    # backend to keep persistent state for this ephemeral PDF export). The
+    # frontend already has the AnalysisResult in memory post-analysis.
+    result: AnalysisResult
+    patient_label: str | None = None
+
+
+@router.post("/report.pdf")
+async def download_pdf_report(payload: PdfReportRequest) -> Response:
+    """Generate the doctor-visit PDF and stream it back as an attachment."""
+    pdf = pdf_report_service.build_pdf(payload.result, payload.patient_label)
+    filename = (
+        f"pharmacogenomic-report-{payload.result.drug_id}"
+        f"-{payload.result.id[:8]}.pdf"
+    )
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Cache-Control": "no-store",
+        },
+    )

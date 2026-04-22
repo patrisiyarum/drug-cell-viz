@@ -183,6 +183,74 @@ GENES: dict[str, GeneEntry] = {
         "synthetically lethal in HR-deficient cells (BRCA1/2 pathogenic "
         "tumors) because unrepaired double-strand breaks accumulate.",
     },
+    # --- Extended HR pathway (moderate-penetrance + Fanconi anemia family) ---
+    "ATM": {
+        "symbol": "ATM",
+        "name": "Ataxia-telangiectasia mutated kinase",
+        "uniprot_id": "Q13315",
+        "role": "Upstream kinase that activates the DNA-damage response. "
+        "Germline pathogenic variants elevate breast and pancreatic cancer "
+        "risk. Some ATM-mutant tumors show partial HR deficiency, but ATM "
+        "alone is not a reliable PARPi biomarker.",
+    },
+    "RAD51C": {
+        "symbol": "RAD51C",
+        "name": "RAD51 paralog C",
+        "uniprot_id": "O43502",
+        "role": "Component of the RAD51 paralog complex that drives the "
+        "actual strand-invasion step of homologous recombination. Germline "
+        "pathogenic variants confer elevated ovarian and triple-negative "
+        "breast cancer risk. Recognized PARPi-eligible gene per FDA label.",
+    },
+    "RAD51D": {
+        "symbol": "RAD51D",
+        "name": "RAD51 paralog D",
+        "uniprot_id": "O75771",
+        "role": "RAD51 paralog that works with RAD51C. Germline pathogenic "
+        "variants raise ovarian cancer risk markedly. FDA-recognized "
+        "PARPi-eligible gene.",
+    },
+    "BRIP1": {
+        "symbol": "BRIP1",
+        "name": "BRCA1-interacting protein 1 (FANCJ)",
+        "uniprot_id": "Q9BX63",
+        "role": "Helicase that partners with BRCA1 in HR repair. Also known "
+        "as FANCJ in the Fanconi anemia family. Germline pathogenic variants "
+        "elevate ovarian cancer risk and contribute to HR deficiency.",
+    },
+    "BARD1": {
+        "symbol": "BARD1",
+        "name": "BRCA1-associated RING domain protein 1",
+        "uniprot_id": "Q99728",
+        "role": "Obligate heterodimer partner of BRCA1. BARD1 loss phenocopies "
+        "BRCA1 loss in terms of HR deficiency. Germline pathogenic variants "
+        "elevate breast cancer risk.",
+    },
+    "FANCA": {
+        "symbol": "FANCA",
+        "name": "Fanconi anemia complementation group A",
+        "uniprot_id": "O15360",
+        "role": "Core component of the Fanconi anemia complex that "
+        "activates FANCD2/FANCI for inter-strand crosslink repair. Biallelic "
+        "loss causes Fanconi anemia; monoallelic germline variants may "
+        "contribute to HR deficiency in some tumors.",
+    },
+    "FANCC": {
+        "symbol": "FANCC",
+        "name": "Fanconi anemia complementation group C",
+        "uniprot_id": "Q00597",
+        "role": "Core FA complex component. Ashkenazi founder variant "
+        "(c.456+4A>T) is relatively common. Same HR-related logic as "
+        "other FA family genes.",
+    },
+    "FANCD2": {
+        "symbol": "FANCD2",
+        "name": "Fanconi anemia complementation group D2",
+        "uniprot_id": "Q9BXW9",
+        "role": "Monoubiquitinated by the FA core complex to trigger "
+        "inter-strand crosslink repair in coordination with BRCA1/BRCA2. "
+        "Central to the Fanconi anemia / BRCA pathway.",
+    },
 }
 
 
@@ -589,6 +657,89 @@ VARIANTS: dict[str, VariantEntry] = {
         "at the membrane in a constitutively active conformation. Occurs "
         "in ~6% of ER+ breast cancers and is an FDA-recognized biomarker "
         "for capivasertib (CAPItello-291).",
+    },
+    # --- Extended HR pathway variants ---
+    "ATM_R2832C": {
+        "id": "ATM_R2832C",
+        "gene_symbol": "ATM",
+        "name": "ATM p.Arg2832Cys",
+        "hgvs_protein": "p.R2832C",
+        "residue_positions": [2832],
+        "clinical_significance": "pathogenic",
+        "effect_summary": "Recurrent ATM missense in the PI3K-like kinase "
+        "domain. Associated with ataxia-telangiectasia when homozygous and "
+        "with elevated breast cancer risk in heterozygous carriers.",
+    },
+    "RAD51C_R237W": {
+        "id": "RAD51C_R237W",
+        "gene_symbol": "RAD51C",
+        "name": "RAD51C p.Arg237Trp",
+        "hgvs_protein": "p.R237W",
+        "residue_positions": [237],
+        "clinical_significance": "pathogenic",
+        "effect_summary": "Missense in the Walker A domain disrupts ATP "
+        "binding. Associated with hereditary ovarian cancer.",
+    },
+    "RAD51D_R232X": {
+        "id": "RAD51D_R232X",
+        "gene_symbol": "RAD51D",
+        "name": "RAD51D p.Arg232Ter",
+        "hgvs_protein": "p.R232*",
+        "residue_positions": [232],
+        "clinical_significance": "pathogenic",
+        "effect_summary": "Nonsense variant truncates RAD51D before the "
+        "ATP-binding region. Recurrent in hereditary ovarian cancer families.",
+    },
+    "BRIP1_R798X": {
+        "id": "BRIP1_R798X",
+        "gene_symbol": "BRIP1",
+        "name": "BRIP1 p.Arg798Ter",
+        "hgvs_protein": "p.R798*",
+        "residue_positions": [798],
+        "clinical_significance": "pathogenic",
+        "effect_summary": "Nonsense variant eliminates the helicase C-"
+        "terminus. Recurrent in hereditary ovarian cancer.",
+    },
+    "BARD1_Q564X": {
+        "id": "BARD1_Q564X",
+        "gene_symbol": "BARD1",
+        "name": "BARD1 p.Gln564Ter",
+        "hgvs_protein": "p.Q564*",
+        "residue_positions": [564],
+        "clinical_significance": "pathogenic",
+        "effect_summary": "Nonsense variant disrupting the BRCT domains "
+        "that BRCA1-dependent E3 ligase activity requires.",
+    },
+    "FANCC_IVS4_1G_T": {
+        "id": "FANCC_IVS4_1G_T",
+        "gene_symbol": "FANCC",
+        "name": "FANCC c.456+4A>T (Ashkenazi founder)",
+        "hgvs_protein": None,
+        "residue_positions": [],
+        "clinical_significance": "pathogenic",
+        "effect_summary": "Splice-site variant; most common FANCC pathogenic "
+        "variant in Ashkenazi Jewish populations. Associated with Fanconi "
+        "anemia when biallelic.",
+    },
+    "FANCA_H1110P": {
+        "id": "FANCA_H1110P",
+        "gene_symbol": "FANCA",
+        "name": "FANCA p.His1110Pro",
+        "hgvs_protein": "p.H1110P",
+        "residue_positions": [1110],
+        "clinical_significance": "pathogenic",
+        "effect_summary": "Recurrent FANCA missense in the C-terminal region "
+        "of the FA core complex. Biallelic variants cause Fanconi anemia.",
+    },
+    "FANCD2_E734X": {
+        "id": "FANCD2_E734X",
+        "gene_symbol": "FANCD2",
+        "name": "FANCD2 p.Glu734Ter",
+        "hgvs_protein": "p.E734*",
+        "residue_positions": [734],
+        "clinical_significance": "pathogenic",
+        "effect_summary": "Nonsense variant truncating FANCD2 before the "
+        "monoubiquitination site essential for FA pathway activation.",
     },
     # --- ESR1 (additional resistance mutations, elacestrant biomarkers) ---
     "ESR1_Y537N": {

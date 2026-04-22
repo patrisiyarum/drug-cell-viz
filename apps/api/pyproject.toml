@@ -33,6 +33,9 @@ dependencies = [
     # manylinux + macOS arm64 so CI and Render builds don't need a system
     # bcftools install at API runtime.
     "cyvcf2>=0.31",
+    # PDF export for doctor-visit report (cf. /api/bc/report.pdf). reportlab
+    # is pure-Python, no system deps, wheel ships on all platforms.
+    "reportlab>=4.0",
 ]
 
 [project.optional-dependencies]

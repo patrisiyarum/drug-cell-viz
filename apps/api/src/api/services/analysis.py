@@ -20,6 +20,7 @@ from uuid import uuid4
 
 from api.models import (
     AnalysisResult,
+    CurrentDrugAssessment,
     HrdEvidence,
     HrdResult,
     PGxVerdict,
@@ -145,7 +146,16 @@ async def run_analysis(
     # --- 4c) BRCA1 variants the Tier-3 classifier can handle ---
     classifiable_brca1 = _extract_classifiable_brca1(resolved)
 
-    # --- 4d) HR deficiency composite — the headline HRD call for PARPi ---
+    # --- 4d) "Is the current drug right for me?" assessment ---
+    current_drug_assessment = _assess_current_drug(
+        drug_id=drug_id,
+        resolved=resolved,
+        verdicts=pgx_verdicts,
+        headline_severity=severity,
+        suggested_drugs=suggested_drugs,
+    )
+
+    # --- 4f) HR deficiency composite — the headline HRD call for PARPi ---
     hrd_raw = hrd_service.compute_hrd(resolved, classifiable_brca1)
     hrd_result = HrdResult(
         label=hrd_raw.label,
@@ -193,6 +203,7 @@ async def run_analysis(
         suggested_drugs=suggested_drugs,
         classifiable_brca1_variants=classifiable_brca1,
         hrd=hrd_result,
+        current_drug_assessment=current_drug_assessment,
         disclaimers=DISCLAIMERS,
         created_at=datetime.utcnow(),
     )
@@ -275,6 +286,143 @@ async def _resolve_variants(
                 "variant must have a catalog_id, or a protein_sequence (with optional gene_symbol)"
             )
     return out
+
+
+def _assess_current_drug(
+    drug_id: str,
+    resolved: list[dict],
+    verdicts: list[PGxVerdict],
+    headline_severity: str,
+    suggested_drugs: list[SuggestedDrug],
+) -> CurrentDrugAssessment:
+    """Verdict on whether the chosen drug is right for this patient's variants.
+
+    Four buckets:
+      - unknown:        no variants provided, can't assess
+      - well_matched:   an FDA-biomarker/CPIC rule endorses this combo
+      - review_needed:  a guideline says "avoid" / "consider alternative",
+                        or the variants are in a pathway the drug doesn't
+                        touch (relevance-check mismatch already fired)
+      - acceptable:     in between — drug and variants relate but nothing
+                        strongly endorses or contraindicates
+
+    This is the "second opinion" feature: when someone walks in already on
+    a medication with a known variant, they get an explicit answer instead
+    of having to read a full PGx rule and infer. Better_options surfaces
+    any drug that the same variants more clearly support (e.g. BRCA1
+    germline + olaparib as alternative to tamoxifen).
+    """
+    drug = DRUGS.get(drug_id)
+    drug_name = drug["name"] if drug else drug_id
+
+    if not resolved:
+        return CurrentDrugAssessment(
+            verdict="unknown",
+            headline=f"We can't assess {drug_name} fit without any variants.",
+            rationale=(
+                "Add one or more variants (or upload a 23andMe file / VCF) "
+                "and we'll tell you whether your current drug is the right "
+                "match based on public CPIC and FDA guidance."
+            ),
+            better_options=[],
+        )
+
+    # Scan the rules for strong signals about this drug specifically.
+    explicitly_contraindicated = [
+        v for v in verdicts if "avoid" in v.recommendation.lower()
+    ]
+    explicitly_endorsed = [
+        v for v in verdicts
+        if "fda-approved" in v.recommendation.lower()
+        or "eligible" in v.recommendation.lower()
+        or "eligibility" in v.recommendation.lower()
+    ]
+    alternative_preferred = [
+        v for v in verdicts
+        if "alternative" in v.recommendation.lower()
+        or "consider" in v.recommendation.lower()
+        or "reduce" in v.recommendation.lower()
+    ]
+
+    # If the relevance check already fired with suggestions, the drug is in
+    # the wrong pathway entirely — always "review needed".
+    if suggested_drugs and not explicitly_endorsed:
+        return CurrentDrugAssessment(
+            verdict="review_needed",
+            headline=(
+                f"{drug_name} may not be the best match for your variants. "
+                "Alternatives are listed below."
+            ),
+            rationale=(
+                f"The variants you entered are in genes {drug_name} doesn't "
+                "directly target or process. That doesn't mean it's unsafe, "
+                "but a different drug in our catalog specifically addresses "
+                "those variants. Bring this list to your oncologist."
+            ),
+            better_options=suggested_drugs,
+        )
+
+    if explicitly_contraindicated:
+        v = explicitly_contraindicated[0]
+        return CurrentDrugAssessment(
+            verdict="review_needed",
+            headline=(
+                f"{drug_name} has a safety flag for your genotype. "
+                "Review this with your oncologist before your next dose."
+            ),
+            rationale=(
+                f"Your {v.variant_label} ({v.zygosity}) matches a published "
+                f"avoid-recommendation for {drug_name}. {v.recommendation} "
+                f"Source: {v.source}."
+            ),
+            better_options=suggested_drugs,
+        )
+
+    if explicitly_endorsed:
+        v = explicitly_endorsed[0]
+        return CurrentDrugAssessment(
+            verdict="well_matched",
+            headline=f"{drug_name} is explicitly endorsed for your variants.",
+            rationale=(
+                f"Your {v.variant_label} matches an FDA-approved biomarker "
+                f"or CPIC-recommended indication for {drug_name}. "
+                f"{v.recommendation} Source: {v.source}."
+            ),
+            better_options=[],
+        )
+
+    if alternative_preferred:
+        v = alternative_preferred[0]
+        return CurrentDrugAssessment(
+            verdict="review_needed",
+            headline=(
+                f"{drug_name} may still work, but dose or choice may need "
+                "adjustment. Ask your oncologist."
+            ),
+            rationale=(
+                f"Your {v.variant_label} triggers published guidance to "
+                f"{'adjust dosing' if 'reduce' in v.recommendation.lower() else 'consider alternatives'}. "
+                f"{v.recommendation} Source: {v.source}."
+            ),
+            better_options=suggested_drugs,
+        )
+
+    # No verdicts fired. Variants exist but none of them map to this drug.
+    return CurrentDrugAssessment(
+        verdict="acceptable",
+        headline=(
+            f"{drug_name} has no red flags for your variants, but no "
+            "specific endorsement either."
+        ),
+        rationale=(
+            f"The variants you entered don't match any guideline-level rule "
+            f"for {drug_name} in either direction. Standard dosing is "
+            "reasonable; keep an eye on typical side effects, and share "
+            "your variant list with your oncologist so they can weigh "
+            "anything we didn't cover."
+        ),
+        better_options=[],
+    )
 
 
 def _extract_classifiable_brca1(resolved: list[dict]) -> list[str]:

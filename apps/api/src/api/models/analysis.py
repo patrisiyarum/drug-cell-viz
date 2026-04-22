@@ -111,6 +111,21 @@ class SuggestedDrug(BaseModel):
     reason: str  # why this drug is relevant, e.g. "targets BRCA1 via synthetic lethality"
 
 
+class CurrentDrugAssessment(BaseModel):
+    """Whether the drug the patient is already on is the right one for them.
+
+    This is the "I'm on X, is that right?" use case — the patient knows what
+    they're taking, supplies their variants, and gets an explicit
+    confirmation or a pointer to a better-matched option without having to
+    ask for a second oncology opinion.
+    """
+
+    verdict: Literal["well_matched", "acceptable", "review_needed", "unknown"]
+    headline: str           # one-sentence summary for the UI card
+    rationale: str          # why we gave this verdict, citing variants + rules
+    better_options: list[SuggestedDrug] = []
+
+
 class AnalysisResult(BaseModel):
     id: str
     drug_id: str
@@ -142,6 +157,10 @@ class AnalysisResult(BaseModel):
     # output for this app — PARP-inhibitor eligibility across breast,
     # ovarian, pancreatic, and prostate cancer.
     hrd: HrdResult | None = None
+    # Second-opinion-style assessment of the currently-selected drug. Tells
+    # a patient whether the drug they're already on is well-matched to their
+    # genetics or whether there's a stronger option.
+    current_drug_assessment: CurrentDrugAssessment | None = None
     disclaimers: list[str]
     created_at: datetime
 

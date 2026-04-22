@@ -49,9 +49,28 @@ HrdLabel = Literal["hr_deficient", "hr_proficient", "indeterminate"]
 CORE_HR_GENES: set[str] = {"BRCA1", "BRCA2", "PALB2"}
 
 # Moderate-penetrance HR-adjacent genes. A pathogenic variant here elevates
-# hereditary cancer risk and is clinically relevant, but by itself it does
-# NOT make the tumor HR-deficient enough to reliably predict PARPi response.
-MODERATE_HR_GENES: set[str] = {"CHEK2", "ATM", "BARD1", "RAD51C", "RAD51D", "BRIP1"}
+# hereditary cancer risk and is clinically relevant. RAD51C/RAD51D/BRIP1
+# have FDA recognition as PARPi-eligible (especially in ovarian cancer);
+# CHEK2/ATM do not by themselves predict PARPi response. Fanconi anemia
+# (FANC) family variants contribute to HR deficiency via the FA-BRCA
+# pathway but clinical evidence for PARPi eligibility in FANC-only
+# carriers is weaker than for core BRCA1/2/PALB2.
+MODERATE_HR_GENES: set[str] = {
+    "CHEK2",
+    "ATM",
+    "BARD1",
+    "RAD51C",
+    "RAD51D",
+    "BRIP1",
+    "FANCA",
+    "FANCC",
+    "FANCD2",
+}
+
+# Within MODERATE_HR_GENES, these have FDA-recognized PARPi eligibility (at
+# least in ovarian cancer). A pathogenic variant in one of these is a
+# stronger HRD signal than CHEK2/ATM/FANC on its own.
+FDA_PARPI_ELIGIBLE_MODERATE: set[str] = {"RAD51C", "RAD51D", "BRIP1", "BARD1"}
 
 
 @dataclass
@@ -127,18 +146,29 @@ def compute_hrd(
                 )
             )
         elif gene in MODERATE_HR_GENES and sig in ("pathogenic", "likely_pathogenic"):
+            # FDA-recognized PARPi-eligible genes (RAD51C/D, BRIP1, BARD1)
+            # get a meaningfully higher weight than CHEK2/ATM/FANC.
+            is_fda_parpi = gene in FDA_PARPI_ELIGIBLE_MODERATE
+            weight = 45 if is_fda_parpi else 15
+            detail = (
+                f"Germline {gene} pathogenic variant ({label_text}). "
+                + (
+                    "FDA-recognized PARPi-eligible HR gene — an FDA-approved "
+                    "ovarian-cancer biomarker for PARP-inhibitor maintenance."
+                    if is_fda_parpi
+                    else "Moderate-penetrance HR-adjacent gene. Elevates "
+                    "hereditary cancer risk. PARPi eligibility by this "
+                    "gene alone is not established, but it adds to the "
+                    "overall HR-pathway picture."
+                )
+            )
             evidence.append(
                 HrEvidence(
                     gene=gene,
                     variant_label=label_text,
                     source="catalog_moderate",
-                    weight=15,
-                    detail=(
-                        f"Germline {gene} pathogenic variant "
-                        f"({label_text}). Moderate-penetrance HR-adjacent "
-                        "gene. Elevates hereditary cancer risk but does "
-                        "not by itself imply PARPi-sensitive HR deficiency."
-                    ),
+                    weight=weight,
+                    detail=detail,
                 )
             )
 
