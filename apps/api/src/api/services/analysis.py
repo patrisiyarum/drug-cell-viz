@@ -24,6 +24,7 @@ from api.models import (
     CurrentDrugAssessment,
     HrdEvidence,
     HrdResult,
+    OffTargetStructure,
     PGxVerdict,
     PocketResidue,
     SuggestedDrug,
@@ -209,6 +210,16 @@ async def run_analysis(
         if g and g not in entered_genes:
             entered_genes.append(g)
 
+    # --- 4g) Off-target variant structures ----------------------------------
+    # For every gene the patient has a variant in that ISN'T the drug's
+    # primary target, fetch that gene's AlphaFold structure. The frontend
+    # renders a second 3D card per entry so Maya (BRCA1+olaparib→PARP1)
+    # actually sees her variant depicted on BRCA1, not just PARP1+olaparib.
+    off_target_structures: list[OffTargetStructure] = await _build_off_target_structures(
+        resolved=resolved,
+        target_gene=target_gene,
+    )
+
     plain = plain_language.build_plain_language(
         drug_id=drug["id"],
         target_gene=target_gene,
@@ -238,11 +249,83 @@ async def run_analysis(
         classifiable_brca1_variants=classifiable_brca1,
         hrd=hrd_result,
         current_drug_assessment=current_drug_assessment,
+        off_target_structures=off_target_structures,
         disclaimers=DISCLAIMERS,
         created_at=datetime.utcnow(),
     )
     await cb("done", "Complete", 1.0)
     return result
+
+
+async def _build_off_target_structures(
+    resolved: list[dict],
+    target_gene: str,
+) -> list[OffTargetStructure]:
+    """For every gene the patient has a variant in that ISN'T the drug's
+    primary target, fetch that gene's AlphaFold structure and bundle the
+    variant residue positions so the frontend can highlight them.
+
+    This is the "show me my variant in 3D" path: Maya has BRCA1 p.Cys61Gly
+    but her drug (olaparib) binds PARP1, so the main MolecularCard shows
+    PARP1+olaparib. With off-target structures, the UI also shows BRCA1
+    with residue 61 highlighted — the variant Maya actually cares about.
+    """
+    # Group positions per gene, skipping the target gene (already in main
+    # MolecularCard) and anything we don't have a UniProt id for.
+    positions_by_gene: dict[str, list[int]] = {}
+    labels_by_gene: dict[str, list[str]] = {}
+    for r in resolved:
+        gene = r.get("gene_symbol")
+        pos = r.get("position")
+        if not gene or gene == target_gene:
+            continue
+        if gene not in GENES:
+            continue
+        if pos is None:
+            continue
+        positions_by_gene.setdefault(gene, []).append(int(pos))
+        # Use the catalog variant name as the label, falling back to HGVS.
+        catalog_id = r.get("catalog_id")
+        var = VARIANTS.get(catalog_id) if catalog_id else None
+        label = (
+            var["name"] if var else r.get("hgvs_protein") or f"position {pos}"
+        )
+        labels_by_gene.setdefault(gene, []).append(label)
+
+    out: list[OffTargetStructure] = []
+    for gene_sym, positions in positions_by_gene.items():
+        gene_entry = GENES[gene_sym]
+        try:
+            _, pdb_url = await alphafold.fetch_structure(gene_entry["uniprot_id"])
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "off-target structure fetch failed for %s (%s): %s",
+                gene_sym,
+                gene_entry["uniprot_id"],
+                exc,
+            )
+            continue
+        # Dedupe positions while preserving order; dedupe labels aligned.
+        seen: set[int] = set()
+        uniq_positions: list[int] = []
+        uniq_labels: list[str] = []
+        for p, lbl in zip(positions, labels_by_gene[gene_sym], strict=False):
+            if p in seen:
+                continue
+            seen.add(p)
+            uniq_positions.append(p)
+            uniq_labels.append(lbl)
+        out.append(
+            OffTargetStructure(
+                gene_symbol=gene_sym,
+                gene_name=gene_entry["name"],
+                uniprot_id=gene_entry["uniprot_id"],
+                protein_pdb_url=pdb_url,
+                positions=uniq_positions,
+                variant_labels=uniq_labels,
+            )
+        )
+    return out
 
 
 async def _resolve_variants(

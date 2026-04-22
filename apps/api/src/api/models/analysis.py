@@ -129,6 +129,27 @@ class CurrentDrugAssessment(BaseModel):
     better_options: list[SuggestedDrug] = []
 
 
+class OffTargetStructure(BaseModel):
+    """A protein structure for a gene the patient has a variant in, which is
+    different from the drug's primary target.
+
+    Used to render a second 3D viewer on the results page so patients can
+    actually see their variant residue on its own protein — not just see
+    "the drug bound to something unrelated."
+    """
+
+    gene_symbol: str
+    gene_name: str
+    uniprot_id: str
+    protein_pdb_url: str
+    # Residue positions carrying variants, 1-indexed. The frontend passes these
+    # to Mol* as highlights.
+    positions: list[int] = []
+    # Short human-readable label for each position, e.g. "p.Cys61Gly" — used
+    # as the card subtitle next to the gene.
+    variant_labels: list[str] = []
+
+
 class AnalysisResult(BaseModel):
     id: str
     drug_id: str
@@ -156,6 +177,12 @@ class AnalysisResult(BaseModel):
     # Protein-level HGVS strings like "p.C61G". Frameshift / splice variants
     # are excluded because the classifier only handles point AA changes.
     classifiable_brca1_variants: list[str] = []
+    # When the patient's variants sit on genes OTHER than the drug's primary
+    # target (e.g. olaparib + BRCA1 — olaparib binds PARP1, not BRCA1), we
+    # still fetch those proteins' AlphaFold structures so the UI can show
+    # the variant residue highlighted on its own protein. Without this
+    # patients see only PARP1 + olaparib and nothing about BRCA1.
+    off_target_structures: list["OffTargetStructure"] = []
     # Homologous-recombination deficiency composite. THE headline clinical
     # output for this app — PARP-inhibitor eligibility across breast,
     # ovarian, pancreatic, and prostate cancer.

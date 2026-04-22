@@ -427,7 +427,11 @@ function BindingPoseCard({
         </button>
       </div>
       <div className="relative h-[480px] bg-slate-50">
-        <MolViewer pdbUrl={pdbUrl} />
+        {/* key={pdbUrl} forces Mol* to fully remount whenever the user picks
+             a different candidate row. Without it, some Mol* plugin state
+             caches the first pose and subsequent selections show the same
+             structure — rank 1 stayed visible even after clicking rank 2+. */}
+        <MolViewer key={pdbUrl} pdbUrl={pdbUrl} />
         <div className="absolute top-2 left-2 bg-white/95 backdrop-blur-sm border rounded-md px-3 py-2 text-[11px] space-y-1 shadow-sm pointer-events-none">
           <div className="font-semibold text-muted-foreground uppercase tracking-wide text-[10px]">
             Legend

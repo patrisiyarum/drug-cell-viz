@@ -156,6 +156,15 @@ export interface CurrentDrugAssessment {
   better_options: SuggestedDrug[];
 }
 
+export interface OffTargetStructure {
+  gene_symbol: string;
+  gene_name: string;
+  uniprot_id: string;
+  protein_pdb_url: string;
+  positions: number[];
+  variant_labels: string[];
+}
+
 export interface AnalysisResult {
   id: string;
   drug_id: string;
@@ -172,6 +181,7 @@ export interface AnalysisResult {
   relevance_warning: string | null;
   suggested_drugs: SuggestedDrug[];
   classifiable_brca1_variants: string[];
+  off_target_structures: OffTargetStructure[];
   hrd: HrdResult | null;
   current_drug_assessment: CurrentDrugAssessment | null;
   disclaimers: string[];
