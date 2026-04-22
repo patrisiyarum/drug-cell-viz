@@ -32,7 +32,7 @@ from api.services.bc_catalog import (
     VARIANTS,
     PGxRule,
     drug_related_genes,
-    drugs_for_gene,
+    drugs_for_gene_inclusive,
     rules_for_drug,
 )
 
@@ -317,14 +317,17 @@ def _relevance_check(
     seen: set[str] = set()
     suggestions: list[SuggestedDrug] = []
     for gene_symbol in patient_genes:
-        for d in drugs_for_gene(gene_symbol):
+        for d in drugs_for_gene_inclusive(gene_symbol):
             if d["id"] in seen or d["id"] == drug_id:
                 continue
             seen.add(d["id"])
             if d["primary_target_gene"] == gene_symbol:
                 reason = f"targets {gene_symbol} directly"
-            else:
+            elif d["metabolizing_gene"] == gene_symbol:
                 reason = f"is processed by {gene_symbol} in your body"
+            else:
+                # Context gene (e.g. olaparib's synthetic-lethality with BRCA1/2).
+                reason = f"is clinically indicated when {gene_symbol} is deficient"
             suggestions.append(SuggestedDrug(id=d["id"], name=d["name"], reason=reason))
             if len(suggestions) >= 3:
                 break

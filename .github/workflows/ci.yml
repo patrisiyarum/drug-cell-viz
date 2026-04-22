@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  api:
+    name: API (Python)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/api
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "0.9.30"
+
+      - name: Set up Python
+        run: uv python install 3.11
+
+      - name: Sync dependencies (with dev extras)
+        run: uv sync --extra dev
+
+      - name: pytest
+        run: uv run pytest -q
+
+      # mypy is intentionally not blocking yet — the ML training scripts
+      # use untyped libraries (xgboost, sklearn) that would need extensive
+      # stub coverage to pass --strict. Run it as an advisory job instead.
+      - name: mypy (advisory)
+        continue-on-error: true
+        run: uv run mypy src/api || true
+
+  web:
+    name: Web (Next.js)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: pnpm
+          cache-dependency-path: apps/web/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm exec tsc --noEmit

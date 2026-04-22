@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -10,6 +11,20 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://drug:drug@postgres:5432/drug"
     redis_url: str = "redis://redis:6379/0"
     log_level: str = "INFO"
+
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def _normalize_db_url(cls, v: object) -> object:
+        """Render (and Heroku-style providers) hand out `postgres://...` URLs.
+        SQLAlchemy's async engine needs the driver-prefixed form. Promote
+        automatically so the deploy just works without the user remembering.
+        """
+        if isinstance(v, str):
+            if v.startswith("postgres://"):
+                v = "postgresql+asyncpg://" + v[len("postgres://"):]
+            elif v.startswith("postgresql://"):
+                v = "postgresql+asyncpg://" + v[len("postgresql://"):]
+        return v
 
     # Storage: in dev we use the local filesystem. In prod these point at R2.
     storage_backend: str = "local"  # "local" | "r2"

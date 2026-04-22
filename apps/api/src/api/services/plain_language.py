@@ -418,7 +418,8 @@ def _questions_for(
 
     seen: set[str] = set()
     out: list[str] = []
-    for q in by_severity.get(severity, []) + generic + drug_specific.get(drug_id, []):
+    # Drug-specific questions lead — otherwise the 5-item cap pushes them off.
+    for q in drug_specific.get(drug_id, []) + by_severity.get(severity, []) + generic:
         if q not in seen:
             seen.add(q)
             out.append(q)

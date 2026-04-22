@@ -1,0 +1,126 @@
+# Render Blueprint for drug-cell-viz.
+#
+# One-click deploy: push this file to GitHub, then in the Render dashboard:
+#   New → Blueprint → connect this repo.
+#
+# Provisions:
+#   - drug-cell-viz-api     FastAPI + uvicorn web service (with persistent disk
+#                           for blob storage: AlphaFold PDB cache + docking poses)
+#   - drug-cell-viz-worker  Background worker running ARQ against the same Redis
+#                           and Postgres the API uses
+#   - drug-cell-viz-web     Next.js frontend
+#   - drug-cell-viz-redis   Managed Key-Value (Render KV) for ARQ + result cache
+#   - drug-cell-viz-db      Managed Postgres
+#
+# After the initial deploy, set NEXT_PUBLIC_API_URL on the web service to
+# the actual API service URL (Render assigns https://drug-cell-viz-api.onrender.com
+# by default). See README for the exact one-time step.
+
+services:
+  # --- API ---
+  - type: web
+    name: drug-cell-viz-api
+    runtime: docker
+    rootDir: apps/api
+    dockerfilePath: apps/api/Dockerfile
+    dockerContext: apps/api
+    plan: starter   # upgrade to standard if RDKit + xgboost cold starts bite
+    healthCheckPath: /healthz
+    autoDeploy: true
+    disk:
+      name: api-blobs
+      mountPath: /data/blobs
+      sizeGB: 1
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: drug-cell-viz-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: drug-cell-viz-redis
+          property: connectionString
+      - key: STORAGE_BACKEND
+        value: local
+      - key: LOCAL_STORAGE_ROOT
+        value: /data/blobs
+      - key: PUBLIC_BASE_URL
+        # Render substitutes this at runtime with the service's public URL.
+        # Use RENDER_EXTERNAL_URL so generated blob links point to the right host.
+        value: $RENDER_EXTERNAL_URL
+      - key: LOG_LEVEL
+        value: INFO
+      - key: USE_MODAL_DOCKING
+        value: "false"
+      - key: RATE_LIMIT_JOBS_PER_HOUR
+        value: "100"
+
+  # --- Background worker ---
+  - type: worker
+    name: drug-cell-viz-worker
+    runtime: docker
+    rootDir: apps/api
+    dockerfilePath: apps/api/Dockerfile
+    dockerContext: apps/api
+    dockerCommand: uv run arq api.workers.settings.WorkerSettings
+    plan: starter
+    autoDeploy: true
+    disk:
+      # Worker writes blobs the same way the API does (docking poses, AlphaFold
+      # cache). Matching disk name attaches the same volume.
+      name: api-blobs
+      mountPath: /data/blobs
+      sizeGB: 1
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: drug-cell-viz-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: drug-cell-viz-redis
+          property: connectionString
+      - key: STORAGE_BACKEND
+        value: local
+      - key: LOCAL_STORAGE_ROOT
+        value: /data/blobs
+      - key: PUBLIC_BASE_URL
+        fromService:
+          type: web
+          name: drug-cell-viz-api
+          property: host
+      - key: LOG_LEVEL
+        value: INFO
+
+  # --- Frontend ---
+  - type: web
+    name: drug-cell-viz-web
+    runtime: node
+    rootDir: apps/web
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm build
+    startCommand: pnpm start
+    plan: starter
+    autoDeploy: true
+    envVars:
+      # IMPORTANT: after the first deploy, set this to the API service URL,
+      # e.g. https://drug-cell-viz-api.onrender.com. NEXT_PUBLIC_* vars are
+      # read at *build* time, so update + redeploy the web service once the
+      # API is live and has its hostname.
+      - key: NEXT_PUBLIC_API_URL
+        sync: false   # dashboard-managed; not baked into git
+      - key: NODE_VERSION
+        value: "20"
+
+# --- Managed data services ---
+databases:
+  - name: drug-cell-viz-db
+    plan: free
+    postgresMajorVersion: "16"
+
+# Render KV (managed Redis-compatible KV store, free tier available).
+keyValue:
+  - name: drug-cell-viz-redis
+    plan: free
+    ipAllowList: []   # only private networking between Render services

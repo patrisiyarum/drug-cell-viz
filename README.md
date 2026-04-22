@@ -1,24 +1,98 @@
 # drug-cell-viz
 
-Web app that takes a drug (SMILES) and a protein target (UniProt ID) and
-returns two side-by-side visualizations:
+[![CI](https://github.com/patrisiyarum/drug-cell-viz/actions/workflows/ci.yml/badge.svg)](https://github.com/patrisiyarum/drug-cell-viz/actions/workflows/ci.yml)
 
-- **Molecular view** — the ligand docked into the target's 3D structure
-  (AlphaFold DB for the protein + RDKit stub docker or DiffDock on Modal for
-  the pose)
-- **Cell morphology view** — top nearest neighbors in a JUMP Cell
-  Painting-style catalog, retrieved by Morgan-fingerprint similarity
+A patient-facing pharmacogenomic variant interpreter. Takes a cancer drug and
+a patient's genetic variants (curated catalog, protein sequence paste, or
+23andMe raw file) and returns:
 
-Full spec: [CLAUDE.md](./CLAUDE.md).
+1. **A plain-English clinical report** with CPIC / FDA evidence, questions to
+   ask your oncologist, and printable output
+2. **A 3D molecular view** of the drug on its target protein (AlphaFold DB)
+   with the patient's variant residues highlighted
+3. **A BRCA1 / BRCA2 variant-effect prediction** from an XGBoost + AlphaMissense
+   ensemble classifier trained on saturation genome editing data, with
+   calibrated conformal prediction intervals and expert panel cross-reference
+   (ENIGMA / BRCA Exchange)
+
+Explicitly positioned as an **educational tool** that helps patients walk into
+oncology appointments prepared. Never makes treatment recommendations of its
+own — always surfaces the evidence and cites the source.
 
 ---
 
-## Quick start
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     Next.js 15 (patient UI)                     │
+│   Landing · /demo selector · /results/[id] · /build             │
+│   Mol* 3D viewer · plain-English translator · 23andMe parser    │
+└───────────────────────────────┬─────────────────────────────────┘
+                                │ HTTPS
+┌───────────────────────────────▼─────────────────────────────────┐
+│                      FastAPI (async Python)                     │
+│                                                                 │
+│  /api/bc/analyze  → drug × variants orchestrator                │
+│  /api/brca1/*     → ensemble classifier (XGB + AlphaMissense)   │
+│  /api/brca2/*     → BRCA2 DBD classifier (Huang 2025 SGE)       │
+│  /blobs/*         → PDB + SVG static mount                      │
+│                                                                 │
+│  Services:                                                      │
+│   · alphafold.py        AlphaFold DB fetch + disk cache         │
+│   · docking.py          RDKit stub / Modal DiffDock adapter     │
+│   · pocket.py           NumPy heavy-atom distance analysis      │
+│   · variants.py         HGVS parse + auto-detect from sequence  │
+│   · plain_language.py   jargon → patient-friendly translator    │
+│   · brca_exchange.py    ENIGMA expert-panel lookup              │
+└──┬──────────────────────┬──────────────────────┬───────────────┘
+   │                      │                      │
+   ▼                      ▼                      ▼
+ARQ worker            Redis (KV)            Postgres
+(docking, long ops)   (ARQ queue +          (analysis audit trail,
+                       result cache)         job status)
+
+ External:  AlphaFold DB · UniProt · BRCA Exchange · CPIC · FDA labels
+ Training:  Findlay 2018 SGE · Huang 2025 SGE · AlphaMissense (DeepMind)
+```
+
+---
+
+## Deploy to Render (one blueprint, zero surprises)
+
+The repo ships a [`render.yaml`](./render.yaml) Blueprint. In the Render dashboard:
+
+1. **New → Blueprint**, connect this GitHub repo, pick the `main` branch.
+2. Render creates five services: API (Docker, with persistent disk), worker
+   (Docker, shares the disk), web (Node/Next.js), Key-Value store, Postgres.
+3. After the API service comes up with its auto-assigned URL (e.g.
+   `https://drug-cell-viz-api.onrender.com`), open the **web** service's
+   env vars and set `NEXT_PUBLIC_API_URL` to that exact URL. Trigger a
+   redeploy of the web service. (`NEXT_PUBLIC_*` vars are baked at build
+   time, so a manual set-then-redeploy is the simplest flow.)
+4. Open the web service URL — you'll see the landing page, `/demo` selector,
+   and `/build` flow live.
+
+**Free-tier notes:**
+- Postgres free tier expires after 90 days (Render's policy).
+- Free-tier services spin down after 15 min of inactivity — first request
+  after a cold start takes ~30s while the ML models warm up.
+- Persistent disk is a paid add-on (~$0.25/GB/month). Drop it from
+  `render.yaml` if you're happy to re-fetch AlphaFold structures on every
+  restart (they're idempotent anyway).
+
+**Hitting a paywall?** You can alternatively deploy just the API as a single
+Docker service and run the frontend anywhere (Vercel, Cloudflare Pages).
+The API is stateless except for Postgres + Redis + the blob disk.
+
+---
+
+## Quick start (local)
 
 ```bash
 cp .env.example .env
 docker compose up --build
-#   api      → http://localhost:8000
+#   api      → http://localhost:8000  (/healthz, /readyz)
 #   worker   → processes jobs from Redis
 #   redis    → localhost:6379
 #   postgres → localhost:5432
@@ -29,84 +103,95 @@ pnpm dev
 # frontend   → http://localhost:3000
 ```
 
-Try it:
-- **SMILES:** `CC1=C(C=C(C=C1)NC(=O)C2=CC=C(C=C2)CN3CCN(CC3)C)NC4=NC=CC(=N4)C5=CN=CC=C5` (imatinib)
-- **UniProt:** `P00519` (ABL1)
-
-You should see a 3D pose in Mol* on the left and an 8-tile cell grid on the
-right. The status banner shows a download link for a zip of the job.
+Open `http://localhost:3000/demo` and click through the Maya / Diana / Priya
+patient cases. Or go to `/build` to upload your own 23andMe file or pick
+from the curated variant catalog.
 
 ---
 
-## What runs where
+## Layered feature overview
 
-| Phase | Component | Default |
+| Layer | Default | Swap-in |
 |---|---|---|
-| 1 | AlphaFold DB fetch (httpx + local cache) | ✅ real |
-| 1 | Docking (RDKit 3D conformer placed at protein centroid) | ✅ stub, default on |
-| 2 | DiffDock on Modal (A10G GPU) | 🔌 opt-in via `USE_MODAL_DOCKING=true` |
-| 3 | Morphology retrieval (Morgan fingerprint + Tanimoto) | ✅ real, against bundled 16-compound catalog |
-| 3 | FAISS over real JUMP-CP embeddings | 🔌 run `scripts/download_jump_subset.py` + `build_faiss_index.py` |
-| 4 | ARQ worker + Redis cache on `(smiles, uniprot_id)` | ✅ |
-| 4 | SSE streaming at `/api/jobs/{id}/stream` | ✅ |
-| 5 | Zip export at `/api/export/{id}.zip` | ✅ |
-| 5 | Rate limiting (10 jobs/hour/IP by default) | ✅ |
-
-The bundled catalog at `apps/api/src/api/services/catalog_data.py` has 16
-well-known compounds with phenotype tags (kinase inhibitors, microtubule
-disruptors, actin disruptors, DNA-damage agents, etc.). Thumbnails are
-rendered server-side as SVG "cell mosaic" placeholders keyed to the
-phenotype — so the UI works with zero external image downloads.
-
-To swap in real JUMP-CP data, implement the two scripts in `scripts/` —
-the retrieval path already speaks in `MorphologyMatch` records, so only the
-index source needs to change.
+| AlphaFold protein structures | ✅ live AlphaFold DB + disk cache | n/a |
+| Docking poses | ✅ RDKit stub (centroid placement) | 🔌 DiffDock on Modal A10G (`USE_MODAL_DOCKING=true`) |
+| Pharmacogenomic rules | ✅ curated CPIC / FDA subset (10 drugs, 13 variants) | scripted ingest of full CPIC / PharmGKB |
+| BRCA1 variant effect | ✅ XGBoost + AlphaMissense ensemble + conformal (AUROC 0.933) | retrain with ESM2 embeddings on Modal GPU |
+| BRCA2 DBD variant effect | ✅ XGBoost baseline (AUROC 0.842) | retrain with BRCA2-aware domain features |
+| Expert-panel classification | ✅ BRCA Exchange / ENIGMA lookup (graceful fallback) | n/a |
+| 23andMe SNP parse | ✅ client-side (data never leaves the browser) | VCF upload (cyvcf2, planned) |
+| 3D viewer | ✅ Mol* with variant highlighting + ligand auto-zoom | n/a |
+| Rate limit, SSE, zip export | ✅ | n/a |
 
 ---
 
-## Enabling real DiffDock (Phase 2)
+## Tests & CI
 
-1. `pip install modal && modal token new` (once)
-2. `cd infra/modal && modal deploy diffdock_fn.py`
-3. In your `.env`: `USE_MODAL_DOCKING=true`
-4. Restart the worker: `docker compose restart worker`
+```bash
+cd apps/api
+uv sync --extra dev
+uv run pytest -q
+```
 
-The worker will now call the deployed Modal function instead of the RDKit
-stub. Expect ~45s per dock on A10G. The stub keeps working if Modal is
-unreachable — flip the flag back.
+31 tests covering:
+- BRCA1 / BRCA2 classifiers (known pathogenic/benign variants)
+- Drug/gene relevance check (including the synthetic-lethality
+  olaparib/BRCA1 case that's the subject of several regression tests)
+- Plain-language translator (severity mapping, recommendation translation,
+  drug-specific question generation, glossary triggers)
+- Variant resolver (alignment, auto-detect gene from sequence)
+- Morphology retrieval (Morgan fingerprints + SVG render)
+- Docking stub (centroid placement + combined PDB emission)
+
+GitHub Actions runs pytest + `tsc --noEmit` on every push to `main` and on
+every PR. See [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+
+---
+
+## Data sources & attribution
+
+| Source | What | License |
+|---|---|---|
+| [Findlay et al. 2018](https://pmc.ncbi.nlm.nih.gov/articles/PMC6181777/) | BRCA1 SGE functional scores (3,893 SNVs) | Nature supplementary data |
+| [Huang et al. 2025](https://www.nature.com/articles/s41586-024-08388-8) | BRCA2 DBD SGE functional scores (4,404 missense) | Nature supplementary data |
+| [AlphaMissense](https://www.science.org/doi/10.1126/science.adg7492) (DeepMind) | ~216M precomputed missense pathogenicity scores | CC BY-NC-SA 4.0 |
+| [AlphaFold DB](https://alphafold.ebi.ac.uk/) | Per-gene protein structures | CC BY 4.0 |
+| [UniProt](https://www.uniprot.org/) | Canonical protein sequences | CC BY 4.0 |
+| [CPIC](https://cpicpgx.org/) / FDA labels | Pharmacogenomic guidance | Public guidelines |
+| [BRCA Exchange](https://brcaexchange.org/) | ENIGMA expert classifications | Open data |
 
 ---
 
 ## Layout
 
 ```
-apps/api              FastAPI + SQLModel + ARQ worker
-apps/web              Next.js 15 + Mol* + TanStack Query
-infra/modal           DiffDock GPU function (deploy separately)
-scripts/              one-time JUMP-CP download + FAISS index build
-packages/shared-types OpenAPI-generated TS types (run scripts/generate_ts_types.sh)
+apps/api/src/api/
+  ├─ ml/                 BRCA1/2 classifiers (train.py, infer.py, infer_brca2.py)
+  │   ├─ data/           Findlay 2018, Huang 2025, AlphaMissense BRCA1 slice
+  │   └─ models/         trained XGBoost + ensemble + conformal metadata
+  ├─ models/             Pydantic + SQLModel data contracts
+  ├─ services/           alphafold, docking, pocket, variants, plain_language,
+  │                      brca_exchange, storage, bc_catalog
+  ├─ routes/             bc, brca1, brca2, jobs, molecular, morphology, export
+  ├─ workers/            ARQ task definitions
+  └─ main.py             FastAPI app + lifespan
+apps/web/
+  ├─ app/                Next.js App Router: /, /demo, /results/[id], /build
+  ├─ components/         MolViewer, ResultsReport, Brca1FunctionCard, …
+  └─ lib/                api client, types, twenty-three-and-me parser
+infra/modal/             Modal GPU function for real DiffDock
+render.yaml              One-click Render Blueprint
+.github/workflows/       CI (pytest + tsc)
 ```
-
----
-
-## Tests
-
-```bash
-cd apps/api
-uv sync --all-extras
-uv run pytest
-```
-
-Two tests: morphology retrieval (RDKit fingerprints + SVG render) and the
-docking stub (centroid placement + combined PDB emission). Neither needs
-Redis, Postgres, or network — so they run in CI unchanged.
 
 ---
 
 ## Disclaimer
 
-These predictions are computational hypotheses, not medical evidence.
-Docking poses are approximations; morphology matches are retrieved from an
-experimental dataset, not generated for your specific query. This tool is
-for research exploration only and does not substitute for laboratory or
-clinical validation.
+This is an educational tool. It is not a medical device, is not FDA-cleared,
+and does not provide treatment recommendations. All evidence shown is
+summarized from public sources (CPIC, FDA labels, ENIGMA / BRCA Exchange,
+AlphaMissense). Every ML prediction is reported with held-out performance
+metrics and known limitations. **Consult a qualified oncologist and a
+clinical pharmacogenomicist** before making any treatment decision. Genetic
+testing must be performed by a CLIA-certified laboratory.
