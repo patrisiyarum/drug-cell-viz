@@ -1,0 +1,18 @@
+##fileformat=VCFv4.2
+##fileDate=20260423
+##source=drug-cell-viz-fixture
+##reference=GRCh38
+##comment=Synthetic patient for demo. Heterozygous DPYD*2A (rs3918290) carrier.
+##comment=DPYD encodes dihydropyrimidine dehydrogenase, which catabolises 5-FU
+##comment=(the active metabolite of capecitabine). *2A carriers have roughly
+##comment=50 percent residual DPD activity. CPIC recommends ~50 percent dose
+##comment=reduction with titration; severe/fatal toxicity risk if not reduced.
+##contig=<ID=chr1,length=248956422>
+##FILTER=<ID=PASS,Description="All filters passed">
+##INFO=<ID=AF,Number=A,Type=Float,Description="Allele frequency (gnomAD v4.1)">
+##INFO=<ID=CLNSIG,Number=.,Type=String,Description="ClinVar clinical significance">
+##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
+##FORMAT=<ID=DP,Number=1,Type=Integer,Description="Read depth">
+##FORMAT=<ID=AD,Number=R,Type=Integer,Description="Allelic depths">
+#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO	FORMAT	PATIENT_A
+chr1	97573863	rs3918290	T	C	1200	PASS	AF=0.006;CLNSIG=drug_response	GT:DP:AD	0/1:45:23,22

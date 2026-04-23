@@ -1,0 +1,16 @@
+##fileformat=VCFv4.2
+##fileDate=20260423
+##source=drug-cell-viz-fixture
+##reference=GRCh38
+##comment=Synthetic patient for demo. Heterozygous BRCA1 p.Cys61Gly carrier.
+##comment=Expected clinical interpretation: HR-deficient, PARP-inhibitor eligible
+##comment=(olaparib / niraparib). Mirrors the Maya preset in /demo.
+##contig=<ID=chr17,length=83257441>
+##FILTER=<ID=PASS,Description="All filters passed">
+##INFO=<ID=AF,Number=A,Type=Float,Description="Allele frequency (gnomAD v4.1)">
+##INFO=<ID=CLNSIG,Number=.,Type=String,Description="ClinVar clinical significance">
+##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
+##FORMAT=<ID=DP,Number=1,Type=Integer,Description="Read depth">
+##FORMAT=<ID=AD,Number=R,Type=Integer,Description="Allelic depths">
+#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO	FORMAT	MAYA
+chr17	43124097	rs28897672	A	C	1500	PASS	AF=0.00001;CLNSIG=Pathogenic	GT:DP:AD	0/1:42:20,22
