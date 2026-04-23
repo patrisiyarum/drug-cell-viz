@@ -264,7 +264,7 @@ function MolecularCard({
             {showHelp ? (
               <div className="absolute right-0 top-11 z-30 w-72 bg-white border rounded-xl p-4 shadow-lg text-sm leading-relaxed">
                 The grey ribbon is the protein in your cells. The bright shape is the drug
-                positioned where it attaches. Yellow highlights are any variant residues you
+                positioned where it attaches. Pink highlights are any variant residues you
                 entered. Click and drag to rotate; scroll to zoom.
               </div>
             ) : null}
@@ -283,7 +283,7 @@ function MolecularCard({
           <LegendRow color="bg-slate-400" label="Protein (the drug's target)" />
           <LegendRow color="bg-pink-500" label="Drug molecule" />
           {highlights.length > 0 ? (
-            <LegendRow color="bg-yellow-400" label="Your variant residue" />
+            <LegendRow color="bg-pink-500" label="Your variant residue" />
           ) : null}
         </div>
       </div>
@@ -321,7 +321,7 @@ function OffTargetStructureCard({
       </p>
     ) : (
       <p className="text-sm text-muted-foreground leading-relaxed">
-        The yellow residue{highlights.length === 1 ? "" : "s"} mark
+        The pink residue{highlights.length === 1 ? "" : "s"} mark
         {highlights.length === 1 ? "s" : ""} where{" "}
         <span className="font-mono text-xs">{variantSummary}</span> sits on{" "}
         {structure.gene_name}.
@@ -357,7 +357,7 @@ function OffTargetStructureCard({
             </div>
             <LegendRow color="bg-slate-400" label={structure.gene_symbol} />
             {highlights.length > 0 ? (
-              <LegendRow color="bg-yellow-400" label="Your variant residue" />
+              <LegendRow color="bg-pink-500" label="Your variant residue" />
             ) : null}
           </div>
         </div>

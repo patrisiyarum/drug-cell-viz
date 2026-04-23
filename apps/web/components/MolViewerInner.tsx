@@ -145,16 +145,18 @@ async function highlightResidues(
   const loci = StructureSelection.toLociWithSourceUnits(selection);
   if (loci.elements.length === 0) return;
 
-  // Bright yellow overpaint layered on top of the default cartoon coloring —
-  // recolors just the variant residue(s) without touching the rest of the
-  // protein. Way more visible than the cyan selection-ring default.
-  const YELLOW = Color(0xf5d000);
+  // Bright magenta overpaint — cartoon default is a green/teal-ish hue on
+  // AlphaFold structures, so magenta is the most visually distinct choice
+  // and reads unambiguously as "variant residue" against the backbone.
+  // Yellow blended into lime against the cartoon (#f5d000 on green), so we
+  // picked a saturated complement instead.
+  const HIGHLIGHT = Color(0xff00aa);
   const components = structureRef.components ?? [];
   // setStructureOverpaint's selector callback receives a Structure and
   // returns a Loci. We re-run the same atom-groups query per structure so
   // the overpaint picks up the right atoms even when there are multiple
   // components (cartoon, ligand, etc.) sharing the underlying model.
-  await setStructureOverpaint(plugin, components, YELLOW, async (s) => {
+  await setStructureOverpaint(plugin, components, HIGHLIGHT, async (s) => {
     const sel = Script.getStructureSelection(
       (Q: any) =>
         Q.struct.generator.atomGroups({
@@ -167,6 +169,11 @@ async function highlightResidues(
     );
     return StructureSelection.toLociWithSourceUnits(sel);
   });
+
+  // Auto-zoom the camera to the variant residue so it's visually framed
+  // instead of being a pixel on a whole-protein view. extraRadius frames a
+  // few surrounding residues so the viewer has context, not just a point.
+  plugin.managers.camera.focusLoci(loci, { extraRadius: 12 });
 
   // Also set a persistent selection so hovering the legend highlights the
   // residue and the built-in "focus selection" button zooms to it.
