@@ -65,6 +65,7 @@ export default function ScreenPage() {
   // Scroll the 3D pose + ranked table into view as soon as a screening lands
   // so the user doesn't have to hunt for the results below the fold.
   const resultsRef = useRef<HTMLDivElement | null>(null);
+  const poseRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     if (result && resultsRef.current) {
       resultsRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -72,6 +73,17 @@ export default function ScreenPage() {
     // Only fire when a new run lands — keyed on ranked list length + target,
     // so clicking a row inside the existing result doesn't re-scroll the page.
   }, [result?.target_gene, result?.ranked.length]);
+
+  // Clicking a row in the ranking table changes selectedId; scroll the 3D
+  // pose card (which sits above the table) back into view so the user sees
+  // the new compound bound without manually scrolling up.
+  function handleSelect(id: string) {
+    setSelectedId(id);
+    // rAF so the DOM has committed the selected-row style before we scroll.
+    requestAnimationFrame(() => {
+      poseRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
 
   // Seed the textarea with a starter library whenever the target changes and
   // the user hasn't typed anything.
@@ -153,7 +165,7 @@ export default function ScreenPage() {
             <div className="flex items-center gap-2 text-primary">
               <FlaskConical className="w-5 h-5" aria-hidden />
               <span className="text-xs font-semibold uppercase tracking-wide">
-                Virtual screening · experimental
+                Virtual screening
               </span>
             </div>
             <h1 className="text-3xl md:text-4xl font-semibold">
@@ -257,15 +269,17 @@ export default function ScreenPage() {
 
           {result ? (
             <div ref={resultsRef} className="space-y-6 scroll-mt-6">
-              <BindingPoseCard
-                result={result}
-                selectedId={selectedId}
-                onClose={() => setSelectedId(null)}
-              />
+              <div ref={poseRef} className="scroll-mt-6">
+                <BindingPoseCard
+                  result={result}
+                  selectedId={selectedId}
+                  onClose={() => setSelectedId(null)}
+                />
+              </div>
               <ResultsTable
                 result={result}
                 selectedId={selectedId}
-                onSelect={setSelectedId}
+                onSelect={handleSelect}
               />
             </div>
           ) : null}

@@ -163,6 +163,7 @@ export interface OffTargetStructure {
   protein_pdb_url: string;
   positions: number[];
   variant_labels: string[];
+  unavailable_reason: string | null;
 }
 
 export interface AnalysisResult {

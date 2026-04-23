@@ -295,16 +295,6 @@ async def _build_off_target_structures(
     out: list[OffTargetStructure] = []
     for gene_sym, positions in positions_by_gene.items():
         gene_entry = GENES[gene_sym]
-        try:
-            _, pdb_url = await alphafold.fetch_structure(gene_entry["uniprot_id"])
-        except Exception as exc:  # noqa: BLE001
-            logger.warning(
-                "off-target structure fetch failed for %s (%s): %s",
-                gene_sym,
-                gene_entry["uniprot_id"],
-                exc,
-            )
-            continue
         # Dedupe positions while preserving order; dedupe labels aligned.
         seen: set[int] = set()
         uniq_positions: list[int] = []
@@ -313,8 +303,32 @@ async def _build_off_target_structures(
             if p in seen:
                 continue
             seen.add(p)
-            uniq_positions.append(p)
+            # pos=0 is the "residue not mapped" sentinel (e.g. splice
+            # variants like CYP2D6*4 that don't have a protein-level
+            # position). Keep the label but drop the 0 from the highlight
+            # list — highlighting a non-existent residue produces nothing
+            # visible anyway.
+            if p > 0:
+                uniq_positions.append(p)
             uniq_labels.append(lbl)
+
+        pdb_url = ""
+        unavailable_reason: str | None = None
+        try:
+            _, pdb_url = await alphafold.fetch_structure(gene_entry["uniprot_id"])
+        except Exception as exc:  # noqa: BLE001
+            # AlphaFold DB doesn't cover every protein — the classic gap is
+            # very large ones (BRCA2 at 3,418 residues exceeds the cutoff).
+            # We still want a card to appear; the frontend renders a text
+            # placeholder instead of a 3D viewer.
+            logger.info(
+                "AlphaFold structure unavailable for %s (%s): %s",
+                gene_sym,
+                gene_entry["uniprot_id"],
+                exc,
+            )
+            unavailable_reason = _explain_missing_structure(gene_sym, str(exc))
+
         out.append(
             OffTargetStructure(
                 gene_symbol=gene_sym,
@@ -323,9 +337,29 @@ async def _build_off_target_structures(
                 protein_pdb_url=pdb_url,
                 positions=uniq_positions,
                 variant_labels=uniq_labels,
+                unavailable_reason=unavailable_reason,
             )
         )
     return out
+
+
+def _explain_missing_structure(gene_symbol: str, raw_error: str) -> str:
+    """Patient-readable explanation for why a 3D structure isn't shown."""
+    big_proteins = {
+        "BRCA2": (
+            "BRCA2 is one of the longest human proteins (3,418 residues). "
+            "AlphaFold DB only covers proteins up to about 2,700 residues, "
+            "so there's no full-length 3D model for it."
+        ),
+        "DMD": "DMD (dystrophin) is too large for AlphaFold DB's full-length coverage.",
+        "TTN": "TTN (titin) is the longest human protein — no full-length model exists.",
+    }
+    if gene_symbol in big_proteins:
+        return big_proteins[gene_symbol]
+    return (
+        f"A full-length AlphaFold structure isn't available for {gene_symbol}. "
+        "The clinical link is still explained in the verdict below."
+    )
 
 
 async def _resolve_variants(

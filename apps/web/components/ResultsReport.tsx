@@ -1,7 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { AlertTriangle, ArrowRight, HelpCircle } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowRight,
+  ChevronLeft,
+  ChevronRight,
+  HelpCircle,
+} from "lucide-react";
 
 import { CurrentDrugAssessmentCard } from "./CurrentDrugAssessmentCard";
 import { DoctorVisitPdfButton } from "./DoctorVisitPdfButton";
@@ -39,29 +45,12 @@ export function ResultsReport({ result, patient, onSwitchDrug }: Props) {
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 md:gap-8">
         <div className="lg:col-span-2 space-y-6 md:space-y-8">
           <div className="no-print">
-            <MolecularCard result={result} />
+            <StructureSlideshow result={result} />
           </div>
           <WhatYouSeeCard result={result} />
-          {result.off_target_structures?.length > 0 ? (
-            <div className="no-print space-y-6">
-              {result.off_target_structures.map((s) => (
-                <OffTargetStructureCard key={s.gene_symbol} structure={s} />
-              ))}
-            </div>
-          ) : null}
         </div>
 
         <div className="lg:col-span-3 space-y-6 md:space-y-8">
-          {/* Download card lives at the top so it's not buried below the
-              scroll fold. The PDF is the primary "take this to your doctor"
-              artefact — it should be findable without hunting. */}
-          <div className="no-print">
-            <DoctorVisitPdfButton
-              result={result}
-              patientLabel={patient?.persona_name ?? null}
-            />
-          </div>
-
           {result.hrd ? (
             <HrdCard
               hrd={result.hrd}
@@ -75,6 +64,15 @@ export function ResultsReport({ result, patient, onSwitchDrug }: Props) {
               onSwitchDrug={onSwitchDrug}
             />
           ) : null}
+
+          {/* Download card sits at the bottom of the right column as the
+              natural "now take it to your doctor" closing action. */}
+          <div className="no-print">
+            <DoctorVisitPdfButton
+              result={result}
+              patientLabel={patient?.persona_name ?? null}
+            />
+          </div>
         </div>
       </div>
     </div>
@@ -144,7 +142,98 @@ function WhatYouSeeCard({ result }: { result: AnalysisResult }) {
   );
 }
 
-function MolecularCard({ result }: { result: AnalysisResult }) {
+/**
+ * Single 3D card that shows the drug-on-target view and every per-variant
+ * protein view in one place, swappable with arrows at the top. The card
+ * size + chrome stay constant so the left column doesn't reflow when the
+ * patient flips between views.
+ */
+function StructureSlideshow({ result }: { result: AnalysisResult }) {
+  // Each "slide" is either the docked drug + target (kind="main") or a
+  // single off-target protein with its variant residue highlighted
+  // (kind="off_target"). We include unavailable-structure entries too so
+  // BRCA2 surfaces a helpful placeholder instead of being silently dropped.
+  type Slide =
+    | { kind: "main" }
+    | { kind: "off_target"; structure: OffTargetStructure };
+
+  const slides: Slide[] = [
+    { kind: "main" },
+    ...(result.off_target_structures ?? []).map(
+      (s): Slide => ({ kind: "off_target", structure: s }),
+    ),
+  ];
+  const [idx, setIdx] = useState(0);
+  const clamped = Math.min(idx, slides.length - 1);
+  const slide = slides[clamped];
+  const total = slides.length;
+
+  const titleFor = (s: Slide) =>
+    s.kind === "main"
+      ? `${result.drug_name} binding to ${result.target_gene}`
+      : `Your variant on ${s.structure.gene_symbol}`;
+
+  return (
+    <div className="bg-card rounded-2xl overflow-hidden border">
+      {total > 1 ? (
+        <div className="flex items-center gap-2 px-3 py-2 border-b bg-muted/40">
+          <button
+            type="button"
+            onClick={() => setIdx((i) => (i - 1 + total) % total)}
+            className="p-1.5 rounded-md hover:bg-white/80 transition-colors"
+            aria-label="Previous view"
+          >
+            <ChevronLeft className="w-4 h-4" aria-hidden />
+          </button>
+          <div className="flex-1 text-center text-xs text-muted-foreground">
+            <span className="font-medium text-foreground">{titleFor(slide)}</span>
+            <span className="mx-2 text-muted-foreground/70">·</span>
+            {clamped + 1} of {total}
+          </div>
+          <button
+            type="button"
+            onClick={() => setIdx((i) => (i + 1) % total)}
+            className="p-1.5 rounded-md hover:bg-white/80 transition-colors"
+            aria-label="Next view"
+          >
+            <ChevronRight className="w-4 h-4" aria-hidden />
+          </button>
+        </div>
+      ) : null}
+      {slide.kind === "main" ? (
+        <MolecularCard result={result} hideOuterBorder />
+      ) : (
+        <OffTargetStructureCard
+          structure={slide.structure}
+          hideOuterBorder
+        />
+      )}
+      {total > 1 ? (
+        <div className="flex justify-center gap-1.5 pb-3 pt-1">
+          {slides.map((_, i) => (
+            <button
+              key={i}
+              type="button"
+              onClick={() => setIdx(i)}
+              aria-label={`Go to view ${i + 1}`}
+              className={`w-1.5 h-1.5 rounded-full transition-colors ${
+                i === clamped ? "bg-primary" : "bg-muted-foreground/30"
+              }`}
+            />
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function MolecularCard({
+  result,
+  hideOuterBorder = false,
+}: {
+  result: AnalysisResult;
+  hideOuterBorder?: boolean;
+}) {
   const [showHelp, setShowHelp] = useState(false);
   const pdbUrl = result.pose_pdb_url ?? result.protein_pdb_url;
   const highlights = result.pocket_residues.map((r) => ({
@@ -152,8 +241,12 @@ function MolecularCard({ result }: { result: AnalysisResult }) {
     inPocket: r.in_pocket,
   }));
 
+  const shell = hideOuterBorder
+    ? "bg-transparent"
+    : "bg-card rounded-2xl overflow-hidden border";
+
   return (
-    <div className="bg-card rounded-2xl overflow-hidden border">
+    <div className={shell}>
       <div className="p-5 border-b space-y-2">
         <div className="flex items-center justify-between gap-3">
           <h3 className="text-lg font-semibold">
@@ -207,42 +300,68 @@ function MolecularCard({ result }: { result: AnalysisResult }) {
  * drug binds), just the protein with the variant residue highlighted
  * so the patient can actually see where their mutation sits.
  */
-function OffTargetStructureCard({ structure }: { structure: OffTargetStructure }) {
+function OffTargetStructureCard({
+  structure,
+  hideOuterBorder = false,
+}: {
+  structure: OffTargetStructure;
+  hideOuterBorder?: boolean;
+}) {
   const highlights = structure.positions.map((p) => ({
     position: p,
     inPocket: false,
   }));
   const variantSummary = structure.variant_labels.join(", ");
 
+  const headerBody =
+    structure.unavailable_reason ? (
+      <p className="text-sm text-muted-foreground leading-relaxed">
+        <span className="font-mono text-xs">{variantSummary}</span> sits on{" "}
+        {structure.gene_name}.
+      </p>
+    ) : (
+      <p className="text-sm text-muted-foreground leading-relaxed">
+        The yellow residue{highlights.length === 1 ? "" : "s"} mark
+        {highlights.length === 1 ? "s" : ""} where{" "}
+        <span className="font-mono text-xs">{variantSummary}</span> sits on{" "}
+        {structure.gene_name}.
+      </p>
+    );
+
+  const shell = hideOuterBorder
+    ? "bg-transparent"
+    : "bg-card rounded-2xl overflow-hidden border";
+
   return (
-    <div className="bg-card rounded-2xl overflow-hidden border">
+    <div className={shell}>
       <div className="p-5 border-b space-y-1">
         <h3 className="text-lg font-semibold">
           Your variant on {structure.gene_symbol}
         </h3>
-        <p className="text-sm text-muted-foreground leading-relaxed">
-          The yellow residue{highlights.length === 1 ? "" : "s"} mark
-          {highlights.length === 1 ? "s" : ""} where{" "}
-          <span className="font-mono text-xs">{variantSummary}</span> sits on{" "}
-          {structure.gene_name}.
-        </p>
+        {headerBody}
       </div>
-      <div className="relative h-[360px]">
-        <MolViewer
-          key={structure.protein_pdb_url}
-          pdbUrl={structure.protein_pdb_url}
-          highlights={highlights}
-        />
-        <div className="absolute top-2 left-2 bg-white/95 backdrop-blur-sm border rounded-md px-3 py-2 text-[11px] space-y-1 shadow-sm pointer-events-none">
-          <div className="font-semibold text-muted-foreground uppercase tracking-wide text-[10px]">
-            Legend
-          </div>
-          <LegendRow color="bg-slate-400" label={structure.gene_symbol} />
-          {highlights.length > 0 ? (
-            <LegendRow color="bg-yellow-400" label="Your variant residue" />
-          ) : null}
+      {structure.unavailable_reason ? (
+        <div className="p-5 md:p-6 text-sm text-muted-foreground leading-relaxed bg-muted/40">
+          {structure.unavailable_reason}
         </div>
-      </div>
+      ) : (
+        <div className="relative h-[360px]">
+          <MolViewer
+            key={structure.protein_pdb_url}
+            pdbUrl={structure.protein_pdb_url}
+            highlights={highlights}
+          />
+          <div className="absolute top-2 left-2 bg-white/95 backdrop-blur-sm border rounded-md px-3 py-2 text-[11px] space-y-1 shadow-sm pointer-events-none">
+            <div className="font-semibold text-muted-foreground uppercase tracking-wide text-[10px]">
+              Legend
+            </div>
+            <LegendRow color="bg-slate-400" label={structure.gene_symbol} />
+            {highlights.length > 0 ? (
+              <LegendRow color="bg-yellow-400" label="Your variant residue" />
+            ) : null}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

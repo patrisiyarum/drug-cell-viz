@@ -44,7 +44,7 @@ export default function LandingPage() {
                 href="/screen"
                 className="inline-flex items-center gap-2 px-7 py-4 border border-border bg-white rounded-xl hover:bg-accent transition-colors text-sm"
               >
-                Virtual screening (experimental)
+                Virtual screening
               </Link>
             </div>
           </div>

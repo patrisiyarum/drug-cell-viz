@@ -136,18 +136,28 @@ class OffTargetStructure(BaseModel):
     Used to render a second 3D viewer on the results page so patients can
     actually see their variant residue on its own protein — not just see
     "the drug bound to something unrelated."
+
+    When AlphaFold DB doesn't have a prediction for this protein (BRCA2 is
+    too large at 3,418 residues, some membrane proteins aren't covered)
+    `protein_pdb_url` is an empty string and `unavailable_reason` carries a
+    short patient-readable explanation for the frontend to render in place
+    of the 3D viewer.
     """
 
     gene_symbol: str
     gene_name: str
     uniprot_id: str
-    protein_pdb_url: str
+    protein_pdb_url: str = ""
     # Residue positions carrying variants, 1-indexed. The frontend passes these
     # to Mol* as highlights.
     positions: list[int] = []
     # Short human-readable label for each position, e.g. "p.Cys61Gly" — used
     # as the card subtitle next to the gene.
     variant_labels: list[str] = []
+    # When non-null, a 3D viewer can't be shown — the card renders a text
+    # placeholder instead. e.g. "BRCA2 is a 3,418-residue protein; AlphaFold
+    # DB only covers proteins up to about 2,700 residues."
+    unavailable_reason: str | None = None
 
 
 class AnalysisResult(BaseModel):

@@ -8,6 +8,8 @@ import { createPluginUI } from "molstar/lib/mol-plugin-ui";
 import { renderReact18 } from "molstar/lib/mol-plugin-ui/react18";
 import { DefaultPluginUISpec } from "molstar/lib/mol-plugin-ui/spec";
 import type { PluginUIContext } from "molstar/lib/mol-plugin-ui/context";
+import { Color } from "molstar/lib/mol-util/color";
+import { setStructureOverpaint } from "molstar/lib/mol-plugin-state/helpers/structure-overpaint";
 import { Script } from "molstar/lib/mol-script/script";
 import { StructureSelection } from "molstar/lib/mol-model/structure";
 import "molstar/lib/mol-plugin-ui/skin/light.scss";
@@ -125,7 +127,11 @@ async function highlightResidues(
   const structure = structureRef.cell.obj.data;
 
   const positions = highlights.map((h) => h.position);
+  if (positions.length === 0) return;
 
+  // Build a structure selection for every residue whose auth_seq_id matches
+  // a variant position. Mol*'s structure-query language is the reliable way
+  // to do this across chain relabelling in AlphaFold PDBs.
   const selection = Script.getStructureSelection(
     (Q: any) =>
       Q.struct.generator.atomGroups({
@@ -139,7 +145,30 @@ async function highlightResidues(
   const loci = StructureSelection.toLociWithSourceUnits(selection);
   if (loci.elements.length === 0) return;
 
+  // Bright yellow overpaint layered on top of the default cartoon coloring —
+  // recolors just the variant residue(s) without touching the rest of the
+  // protein. Way more visible than the cyan selection-ring default.
+  const YELLOW = Color(0xf5d000);
+  const components = structureRef.components ?? [];
+  // setStructureOverpaint's selector callback receives a Structure and
+  // returns a Loci. We re-run the same atom-groups query per structure so
+  // the overpaint picks up the right atoms even when there are multiple
+  // components (cartoon, ligand, etc.) sharing the underlying model.
+  await setStructureOverpaint(plugin, components, YELLOW, async (s) => {
+    const sel = Script.getStructureSelection(
+      (Q: any) =>
+        Q.struct.generator.atomGroups({
+          "residue-test": Q.core.set.has([
+            Q.set(...positions),
+            Q.struct.atomProperty.macromolecular.auth_seq_id(),
+          ]),
+        }),
+      s,
+    );
+    return StructureSelection.toLociWithSourceUnits(sel);
+  });
+
+  // Also set a persistent selection so hovering the legend highlights the
+  // residue and the built-in "focus selection" button zooms to it.
   plugin.managers.structure.selection.fromLoci("set", loci);
-  // Deliberately not re-focusing camera here — the ligand zoom is the
-  // primary anchor, and variants sit within its framing when they matter.
 }
