@@ -182,6 +182,7 @@ export interface AnalysisResult {
   relevance_warning: string | null;
   suggested_drugs: SuggestedDrug[];
   classifiable_brca1_variants: string[];
+  classifiable_brca2_variants: string[];
   off_target_structures: OffTargetStructure[];
   hrd: HrdResult | null;
   current_drug_assessment: CurrentDrugAssessment | null;

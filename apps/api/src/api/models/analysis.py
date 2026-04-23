@@ -187,6 +187,10 @@ class AnalysisResult(BaseModel):
     # Protein-level HGVS strings like "p.C61G". Frameshift / splice variants
     # are excluded because the classifier only handles point AA changes.
     classifiable_brca1_variants: list[str] = []
+    # BRCA2 missense variants the BRCA2 DBD classifier (Huang 2025 SGE) can
+    # score. Frameshifts, splice defects, and truncations are excluded — SGE
+    # classifiers only handle one-amino-acid swaps.
+    classifiable_brca2_variants: list[str] = []
     # When the patient's variants sit on genes OTHER than the drug's primary
     # target (e.g. olaparib + BRCA1 — olaparib binds PARP1, not BRCA1), we
     # still fetch those proteins' AlphaFold structures so the UI can show

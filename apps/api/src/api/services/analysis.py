@@ -166,6 +166,7 @@ async def run_analysis(
 
     # --- 4c) BRCA1 variants the Tier-3 classifier can handle ---
     classifiable_brca1 = _extract_classifiable_brca1(resolved)
+    classifiable_brca2 = _extract_classifiable_brca2(resolved)
 
     # --- 4d) "Is the current drug right for me?" assessment ---
     current_drug_assessment = _assess_current_drug(
@@ -247,6 +248,7 @@ async def run_analysis(
         relevance_warning=relevance_warning,
         suggested_drugs=suggested_drugs,
         classifiable_brca1_variants=classifiable_brca1,
+        classifiable_brca2_variants=classifiable_brca2,
         hrd=hrd_result,
         current_drug_assessment=current_drug_assessment,
         off_target_structures=off_target_structures,
@@ -581,24 +583,43 @@ def _assess_current_drug(
 
 
 def _extract_classifiable_brca1(resolved: list[dict]) -> list[str]:
-    """Find BRCA1 point-AA variants that the Tier-3 classifier can handle.
+    """Find BRCA1 missense variants the Tier-3 classifier can score."""
+    return _extract_classifiable_missense(resolved, "BRCA1")
 
-    Parses the resolved variant `label` field, which is either "BRCA1 p.X###Y"
-    (1-letter) for pasted sequences or "BRCA1 p.Xxx###Yyy" (3-letter) for
-    catalog variants. Skips anything without recognisable p.-notation
-    (frameshifts, splice variants, indels — those need a different model).
+
+def _extract_classifiable_brca2(resolved: list[dict]) -> list[str]:
+    """Find BRCA2 missense variants the DBD classifier (Huang 2025 SGE) can score.
+
+    Only missense in the DBD region is in the model's training distribution,
+    but we return all missense here and let the classifier / UI explain
+    out-of-distribution cases. Frameshifts, splice defects, and truncations
+    are skipped — SGE-trained classifiers don't handle those.
+    """
+    return _extract_classifiable_missense(resolved, "BRCA2")
+
+
+def _extract_classifiable_missense(resolved: list[dict], gene: str) -> list[str]:
+    """Extract protein-level missense HGVS strings for the given gene.
+
+    Parses the resolved variant `label` field, which is either
+    "{GENE} p.X###Y" (1-letter) for pasted sequences or
+    "{GENE} p.Xxx###Yyy" (3-letter) for catalog variants. Skips anything
+    without recognisable p.-notation (frameshifts, splice variants, indels —
+    those aren't in the SGE-trained classifier's input domain).
     """
     import re
 
-    # Allow both "p.C61G" and "p.Cys61Gly" forms.
+    # Allow both "p.C61G" and "p.Cys61Gly" forms. Note: three-letter form
+    # explicitly excludes Ter (stop-gain) and fs (frameshift) — those are
+    # not missense.
     pattern = re.compile(
-        r"p\.(?:([A-Z])(\d+)([A-Z*])|([A-Z][a-z]{2})(\d+)([A-Z][a-z]{2}|Ter))"
+        r"p\.(?:([A-Z])(\d+)([A-Z])|([A-Z][a-z]{2})(\d+)([A-Z][a-z]{2}))"
     )
 
     out: list[str] = []
     seen: set[str] = set()
     for r in resolved:
-        if r.get("gene_symbol") != "BRCA1":
+        if r.get("gene_symbol") != gene:
             continue
         label = r.get("label", "")
         m = pattern.search(label)
@@ -608,7 +629,6 @@ def _extract_classifiable_brca1(resolved: list[dict]) -> list[str]:
         if m.group(1):
             hgvs = f"p.{m.group(1)}{m.group(2)}{m.group(3)}"
         else:
-            # 3-letter form — pass through; the classifier's parser handles both.
             hgvs = f"p.{m.group(4)}{m.group(5)}{m.group(6)}"
         if hgvs not in seen:
             seen.add(hgvs)
