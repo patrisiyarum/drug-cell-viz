@@ -95,10 +95,84 @@ terminal or forwarding in an email.
 - **gnomAD AF filter**: drop variants with AF > 1% before classification.
 - **Parallel per-sample execution**: already supported — pass `--cores N`.
 
+## Upstream: FASTQ → VCF via NVIDIA Clara Parabricks
+
+`rules/fastq_to_vcf.smk` adds an optional upstream stage that accepts
+paired-end FASTQ and produces a BAM + VCF using NVIDIA Clara Parabricks
+on a CUDA-capable GPU. Configure samples under `fastq_samples:` and
+select the backend with `fastq_backend: parabricks`.
+
+Runtime comparison on a 30× whole-genome sample:
+
+| Backend | Environment | Wall time |
+|---|---|---|
+| `parabricks` (default) | A100 / H100 via docker or singularity + NGC image | ~45 min |
+| `bwa_gatk` (fallback) | 32 CPU cores, BWA-MEM 2 + GATK4 HaplotypeCaller | ~9 h |
+
+Both emit the same bgzipped VCF so downstream `normalize` / `filter_catalog`
+/ `classify` don't need to change. Parabricks docs:
+<https://docs.nvidia.com/clara/parabricks/latest/gettingstarted.html>.
+
+Set up once:
+
+```yaml
+# pipelines/config.yaml
+reference_fa: /data/genome/GRCh38.fa
+parabricks_image: nvcr.io/nvidia/clara/clara-parabricks:4.3.1-1
+fastq_backend: parabricks
+
+fastq_samples:
+  patient_42:
+    fastq_r1: data/raw/patient_42_R1.fastq.gz
+    fastq_r2: data/raw/patient_42_R2.fastq.gz
+```
+
+## Tumor signal: genome-graph SV calls + HRDetect scar score
+
+`rules/genome_graph_sv.smk` re-aligns the tumor BAM onto a pangenome
+(HPRC gbz graph) with `vg giraffe` (or `minigraph --call`), emits a
+structural-variant VCF, then aggregates the SVs into the three
+HRDetect / Myriad myChoice scar features — HRD-LOH, LST, NTAI.
+
+The scoring logic lives in `apps/api/src/api/services/hrd_scars.py` and
+is the same code path the API endpoint `POST /api/hrd/scars` uses, so
+the pipeline and the web app share one implementation:
+
+```
+aligned.bam
+    │
+    ▼
+vg giraffe / minigraph --call      ← pangenome-graph realignment
+    │
+    ▼
+scars.vcf.gz                       ← SV calls (bubbles + genotypes)
+    │
+    ▼
+extract_hrd_features.py            ← count LOH + LST + NTAI
+    │
+    ▼
+hrd_features.json                  ← three integers
+    │
+    ▼
+score_hrd_scars.py                 ← api.services.hrd_scars.score()
+    │
+    ▼
+hrd_scars.json                     ← label + sum + interpretation
+```
+
+HRD-sum ≥ 42 → `hr_deficient_scar` (Myriad myChoice cutoff). Sums between
+33 and 41 are flagged as borderline; below 33 the tumor is scored
+`hr_proficient_scar`.
+
+Config:
+
+```yaml
+pangenome_graph: /data/graphs/hprc-v1.1.gbz
+graph_backend: vg              # or "minigraph"
+```
+
 ## Non-goals
 
-- This pipeline does NOT call variants (no FASTQ → VCF). Bring your own
-  clinically-validated VCFs.
-- This pipeline does NOT output a clinical report suitable for treatment
-  decisions. Every output cites its source; interpretation is the
-  clinician's job.
+- Clinical-grade FDA-cleared HRD assay: use Myriad myChoice, FoundationOne
+  CDx, or a CLIA-certified lab. Our scar scorer is a demonstration of the
+  method, not a certified device.

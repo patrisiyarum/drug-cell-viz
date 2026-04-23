@@ -86,6 +86,18 @@ export const api = {
     }),
 
   /**
+   * Score tumor-level HRD-LOH / LST / NTAI feature counts into the
+   * Myriad-style three-tier label. Feature counts typically come from a
+   * clinical lab report (myChoice, FoundationOne CDx) or from the
+   * pangenome-graph SV pipeline in `pipelines/rules/genome_graph_sv.smk`.
+   */
+  scoreHrdScars: (body: { loh: number; lst: number; ntai: number }) =>
+    request<HrdScarResponse>("/api/hrd/scars", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  /**
    * Request the doctor-visit PDF for an analysis.
    *
    * The backend returns binary PDF; we hand it back as a Blob so the caller
@@ -141,6 +153,17 @@ export interface CandidateScore {
   heavy_atom_count: number;
   pose_pdb_url: string | null;
   rank: number;
+}
+
+export interface HrdScarResponse {
+  loh: number;
+  lst: number;
+  ntai: number;
+  hrd_sum: number;
+  label: "hr_deficient_scar" | "borderline_scar" | "hr_proficient_scar" | "insufficient";
+  summary: string;
+  interpretation: string;
+  caveats: string[];
 }
 
 export interface ScreeningResponse {

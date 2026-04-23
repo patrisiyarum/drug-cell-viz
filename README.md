@@ -118,6 +118,28 @@ rules: **normalize** → **filter_catalog** → **classify** → **render_text_r
 Outputs per sample: `detections.tsv`, `classifications.tsv`, `report.json`,
 `report.txt`. Full docs in [`pipelines/README.md`](./pipelines/README.md).
 
+### Upstream: FASTQ → VCF on NVIDIA Clara Parabricks
+
+`rules/fastq_to_vcf.smk` adds a GPU-accelerated upstream stage: paired-end
+FASTQ in, aligned BAM + germline VCF out, via `pbrun fq2bam` and
+`pbrun haplotypecaller` on an A100/H100. A CPU fallback (`bwa-mem2` +
+GATK4) keeps the pipeline runnable without a GPU. A 30× WGS sample takes
+~45 minutes on GPU vs ~9 hours on 32 CPU cores.
+
+### Tumor signal: genome-graph HRD scars
+
+`rules/genome_graph_sv.smk` realigns the tumor BAM onto an HPRC pangenome
+graph with `vg giraffe` (or `minigraph --call`), emits a structural-variant
+VCF, and aggregates the SVs into the three HRDetect / Myriad myChoice
+scar features — **HRD-LOH + LST + NTAI**. The three counts feed a
+Python scorer ([`api/services/hrd_scars.py`](apps/api/src/api/services/hrd_scars.py))
+that returns the Myriad-style HRD-sum + three-tier label
+(`hr_deficient_scar` ≥ 42, `borderline_scar` 33-41, `hr_proficient_scar`
+below). The web UI surfaces the same scorer via `POST /api/hrd/scars`
+and a compact card on the results page, so patients with a myChoice /
+FoundationOne CDx report can type in the three counts and get the
+interpretation without re-running the pipeline.
+
 ---
 
 ## Quick start (local)

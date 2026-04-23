@@ -32,13 +32,22 @@ configfile: "pipelines/config.yaml"
 
 PIPELINE_DIR = Path(workflow.basedir)
 SAMPLES = list(config["samples"].keys())
+FASTQ_SAMPLES = list(config.get("fastq_samples", {}).keys())
 RESULTS = Path(config.get("results_dir", "results"))
+
+# Upstream (FASTQ → VCF via Parabricks) and SV / HRD-scar rules live in
+# their own modules so the main pipeline stays readable.
+include: "rules/fastq_to_vcf.smk"
+include: "rules/genome_graph_sv.smk"
 
 
 rule all:
     input:
         expand(str(RESULTS / "{sample}" / "report.json"), sample=SAMPLES),
         expand(str(RESULTS / "{sample}" / "report.txt"),  sample=SAMPLES),
+        # When a sample is configured under `fastq_samples`, run the full
+        # FASTQ → pangenome-graph SV → HRD-scar chain end-to-end.
+        expand(str(RESULTS / "{sample}" / "hrd_scars.json"), sample=FASTQ_SAMPLES),
 
 
 rule normalize:

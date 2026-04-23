@@ -20,6 +20,7 @@ from api.routes import (
     brca1_router,
     brca2_router,
     export_router,
+    hrd_scars_router,
     jobs_limiter,
     jobs_router,
     molecular_router,
@@ -68,6 +69,7 @@ app.include_router(brca1_router)
 app.include_router(brca2_router)
 app.include_router(vcf_router)
 app.include_router(screening_router)
+app.include_router(hrd_scars_router)
 
 # Serve local blob storage so the frontend can fetch PDBs and thumbnails by URL.
 if settings.storage_backend == "local":

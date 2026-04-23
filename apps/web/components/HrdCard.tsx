@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { FlaskConical } from "lucide-react";
+import { FlaskConical, Activity } from "lucide-react";
 
 import { Brca1FunctionCard } from "./Brca1FunctionCard";
+import { api, type HrdScarResponse } from "@/lib/api";
 import type { HrdResult } from "@/lib/bc-types";
 
 interface Props {
@@ -140,6 +141,8 @@ export function HrdCard({ hrd, classifiableBrca1Variants = [] }: Props) {
         <Brca1PredictionNested hgvsList={classifiableBrca1Variants} />
       ) : null}
 
+      <TumorScarPanel />
+
       <details className="text-xs text-muted-foreground">
         <summary className="cursor-pointer hover:text-foreground">
           Caveats
@@ -151,6 +154,147 @@ export function HrdCard({ hrd, classifiableBrca1Variants = [] }: Props) {
         </ul>
       </details>
     </section>
+  );
+}
+
+/**
+ * Compact form for users who have a Myriad myChoice / FoundationOne CDx
+ * report and want to run the three feature counts through our scar
+ * scorer. This complements the germline-variant HRD call above: the
+ * germline score tells you whether the patient is an HR-repair carrier,
+ * this tumor-scar score tells you whether the tumor is *currently*
+ * HR-deficient — the FDA biomarker question for PARP-inhibitor eligibility.
+ */
+function TumorScarPanel() {
+  const [open, setOpen] = useState(false);
+  const [loh, setLoh] = useState("");
+  const [lst, setLst] = useState("");
+  const [ntai, setNtai] = useState("");
+  const [running, setRunning] = useState(false);
+  const [result, setResult] = useState<HrdScarResponse | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setErr(null);
+    setRunning(true);
+    try {
+      const resp = await api.scoreHrdScars({
+        loh: Number(loh),
+        lst: Number(lst),
+        ntai: Number(ntai),
+      });
+      setResult(resp);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "scoring failed");
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  if (!open) {
+    return (
+      <div className="rounded-lg border-2 border-dashed border-muted-foreground/30 p-3 flex items-center gap-3 flex-wrap">
+        <Activity className="w-4 h-4 text-primary flex-shrink-0" aria-hidden />
+        <div className="flex-1 min-w-[180px] text-sm">
+          <div className="font-medium">
+            Have a tumor HRD test result?
+          </div>
+          <div className="text-xs text-muted-foreground mt-0.5">
+            Score your myChoice / FoundationOne CDx feature counts
+            (HRD-LOH + LST + NTAI).
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="inline-flex items-center justify-center rounded-lg bg-primary text-primary-foreground px-3 py-1.5 text-xs font-medium hover:opacity-90 transition-opacity"
+        >
+          Enter counts
+        </button>
+      </div>
+    );
+  }
+
+  const labelStyles: Record<HrdScarResponse["label"], string> = {
+    hr_deficient_scar: "text-success bg-success/10 border-success/40",
+    borderline_scar: "text-warning bg-warning/10 border-warning/40",
+    hr_proficient_scar: "text-muted-foreground bg-muted border-border",
+    insufficient: "text-muted-foreground bg-muted border-border",
+  };
+  const labelText: Record<HrdScarResponse["label"], string> = {
+    hr_deficient_scar: "HR-deficient (tumor scar signal)",
+    borderline_scar: "Borderline scar burden",
+    hr_proficient_scar: "HR-proficient (low scar burden)",
+    insufficient: "Insufficient data",
+  };
+
+  return (
+    <div className="rounded-lg border bg-white/60 p-3 md:p-4 space-y-3">
+      <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted-foreground font-semibold">
+        <Activity className="w-3.5 h-3.5 text-primary" aria-hidden />
+        Tumor HRD scar score
+      </div>
+
+      <form onSubmit={onSubmit} className="flex flex-wrap gap-2 items-end">
+        <LabeledNumber label="HRD-LOH" value={loh} onChange={setLoh} />
+        <LabeledNumber label="LST" value={lst} onChange={setLst} />
+        <LabeledNumber label="NTAI" value={ntai} onChange={setNtai} />
+        <button
+          type="submit"
+          disabled={running || !loh || !lst || !ntai}
+          className="inline-flex items-center justify-center rounded-lg bg-primary text-primary-foreground px-3 py-1.5 text-xs font-medium hover:opacity-90 disabled:opacity-50 transition-opacity"
+        >
+          {running ? "Scoring…" : "Score"}
+        </button>
+      </form>
+      {err ? <p className="text-xs text-red-600">{err}</p> : null}
+
+      {result ? (
+        <div className={`rounded-lg border p-3 space-y-2 text-sm ${labelStyles[result.label]}`}>
+          <div className="flex items-baseline justify-between gap-2 flex-wrap">
+            <span className="font-semibold">{labelText[result.label]}</span>
+            <span className="text-xs">HRD-sum {result.hrd_sum} / 100</span>
+          </div>
+          <p className="text-xs leading-relaxed">{result.summary}</p>
+          <p className="text-xs leading-relaxed">{result.interpretation}</p>
+        </div>
+      ) : null}
+
+      <p className="text-[11px] text-muted-foreground leading-relaxed">
+        Scar scoring needs paired tumor/normal sequencing — a genome-graph
+        SV pipeline (<code>vg call</code> or <code>minigraph</code>) or a
+        clinical assay produces these three counts. See the README for the
+        end-to-end Snakemake pipeline.
+      </p>
+    </div>
+  );
+}
+
+function LabeledNumber({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <label className="text-xs flex flex-col gap-0.5">
+      <span className="font-medium uppercase tracking-wide text-muted-foreground">
+        {label}
+      </span>
+      <input
+        type="number"
+        min={0}
+        inputMode="numeric"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-20 border rounded px-2 py-1 bg-white text-sm"
+        placeholder="0"
+      />
+    </label>
   );
 }
 
