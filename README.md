@@ -30,7 +30,22 @@ prepared:
 
 Explicitly positioned as an **educational tool** that helps patients walk into
 oncology appointments prepared. Never makes treatment recommendations of its
-own — always surfaces the evidence and cites the source.
+own, it always surfaces the evidence and cites the source.
+
+### Where this sits in the HRD-research landscape
+
+The HRD label is contested: the Friends of Cancer Research HRD Harmonization
+Project (2024) ran 20 independent assays on matched samples and declined to
+declare a gold standard, and ~30% of Myriad-HRD-positive patients fail PARP
+inhibitors because scar scores are **historical** and don't reflect post-PARPi
+reversion. This project is a working clinical-grade baseline for
+patient-facing HRD interpretation; it's also a platform for the broader
+research program mapped in [`docs/research-roadmap.md`](docs/research-roadmap.md)
+— 11 concrete directions from panel-only HRD callers to pathology foundation-
+model benchmarks to BRCA1/2 reversion predictors, each with a current baseline
+(if we have one) and a concrete extension path. The HrdCard surfaces a
+**Reversion Awareness** callout for patients on a PARP inhibitor to flag
+exactly this static-vs-dynamic gap.
 
 ---
 

@@ -55,6 +55,7 @@ export function ResultsReport({ result, patient, onSwitchDrug }: Props) {
             <HrdCard
               hrd={result.hrd}
               classifiableBrca1Variants={result.classifiable_brca1_variants}
+              drugId={result.drug_id}
             />
           ) : null}
 

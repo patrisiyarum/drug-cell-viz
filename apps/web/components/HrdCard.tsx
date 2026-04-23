@@ -1,11 +1,20 @@
 "use client";
 
 import { useState } from "react";
-import { FlaskConical, Activity } from "lucide-react";
+import { FlaskConical, Activity, Clock } from "lucide-react";
 
 import { Brca1FunctionCard } from "./Brca1FunctionCard";
 import { api, type HrdScarResponse } from "@/lib/api";
 import type { HrdResult } from "@/lib/bc-types";
+
+// Drugs in the PARP-inhibitor class. When the patient's current drug is one
+// of these AND they have HR-deficient evidence, we surface a reversion-
+// monitoring callout — a scar-based HRD score is historical (it records the
+// tumor's past HR state), and ~20-30% of PARPi-treated BRCA-associated
+// tumors develop reversion mutations that restore HR repair under drug
+// pressure (Silverman & Schonhoft, Clin Cancer Res 2025). The Myriad scar
+// cutoff of 42 doesn't see that reversion.
+const PARP_INHIBITOR_DRUG_IDS = new Set(["olaparib", "niraparib", "rucaparib", "talazoparib"]);
 
 interface Props {
   hrd: HrdResult;
@@ -16,6 +25,8 @@ interface Props {
    * rather than as a separate card further down the page.
    */
   classifiableBrca1Variants?: string[];
+  /** Drug id the patient is on — used to gate the PARPi reversion callout. */
+  drugId?: string | null;
 }
 
 /**
@@ -29,7 +40,11 @@ interface Props {
  * elsewhere (e.g. Diana has a CYP2D6 metabolism variant, not an HR variant
  * — her HRD status genuinely isn't the story).
  */
-export function HrdCard({ hrd, classifiableBrca1Variants = [] }: Props) {
+export function HrdCard({ hrd, classifiableBrca1Variants = [], drugId = null }: Props) {
+  const showReversionCallout =
+    hrd.label === "hr_deficient" &&
+    !!drugId &&
+    PARP_INHIBITOR_DRUG_IDS.has(drugId);
   // Compact "not applicable" rendering for patients without HR-panel variants.
   if (hrd.label === "indeterminate" && hrd.evidence.length === 0) {
     return (
@@ -140,6 +155,8 @@ export function HrdCard({ hrd, classifiableBrca1Variants = [] }: Props) {
       {classifiableBrca1Variants.length > 0 ? (
         <Brca1PredictionNested hgvsList={classifiableBrca1Variants} />
       ) : null}
+
+      {showReversionCallout ? <ReversionAwarenessNote /> : null}
 
       <TumorScarPanel />
 
@@ -296,6 +313,51 @@ function LabeledNumber({
         placeholder="0"
       />
     </label>
+  );
+}
+
+/**
+ * A short patient-facing note that reminds someone on a PARP inhibitor that
+ * the HR-deficient call is *historical* — it reflects the tumor's past HR
+ * state, not its current state. Roughly 20-30% of PARPi-responding BRCA-
+ * associated tumors develop reversion mutations under drug pressure that
+ * quietly restore HR repair; scar-based scores (including ours) don't see
+ * that because the scars are permanent records.
+ *
+ * Based on Silverman & Schonhoft, Clin Cancer Res 2025 (Repare TRESR/ATTACC
+ * trials, 44% reversions in BRCA-associated post-PARPi tumors) and the
+ * PRIMA / PAOLA-1 observation that ~30% of Myriad-HRD-positive patients fail
+ * PARPi. The right follow-up is serial ctDNA monitoring for in-frame-
+ * restoring indels near the pathogenic locus.
+ */
+function ReversionAwarenessNote() {
+  return (
+    <div className="rounded-lg border-l-4 border-warning bg-warning/10 p-3 md:p-4 text-sm space-y-2">
+      <div className="flex items-center gap-2 text-xs uppercase tracking-wide font-semibold text-warning">
+        <Clock className="w-3.5 h-3.5" aria-hidden />
+        Reversion awareness
+      </div>
+      <p className="leading-relaxed">
+        An HR-deficient result is <strong>historical</strong>. It describes
+        the tumor&apos;s past DNA-repair state, not its current one.
+      </p>
+      <p className="leading-relaxed text-muted-foreground">
+        Roughly 20 to 30 percent of BRCA-associated tumors treated with a
+        PARP inhibitor develop small &ldquo;reversion&rdquo; mutations that
+        quietly restore the broken BRCA gene under drug pressure. When that
+        happens the tumor is no longer HR-deficient, but the scar-based
+        score on this card won&apos;t reflect it (the scars are permanent).
+      </p>
+      <p className="leading-relaxed text-muted-foreground">
+        If you&apos;ve been on a PARP inhibitor for six months or more, ask
+        your oncologist about <strong>serial ctDNA testing</strong> to catch
+        reversion mutations early.
+      </p>
+      <p className="text-xs text-muted-foreground pt-1 border-t border-warning/20">
+        Source: Silverman &amp; Schonhoft, Clinical Cancer Research, 2025
+        (Repare TRESR / ATTACC trials).
+      </p>
+    </div>
   );
 }
 
