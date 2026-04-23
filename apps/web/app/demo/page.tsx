@@ -80,7 +80,7 @@ function CaseCard({ patient }: { patient: DemoPatient }) {
 
   return (
     <Link
-      href={`/results/${patient.id}`}
+      href={`/walkthrough/${patient.id}`}
       className="group bg-card border rounded-2xl p-6 md:p-8 hover:border-primary/50 hover:shadow-sm transition-all"
     >
       <div className="flex items-start gap-5 md:gap-6">
