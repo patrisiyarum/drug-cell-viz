@@ -199,7 +199,7 @@ export function DrugPickerSection({ form }: { form: BCAnalysisFormHandle }) {
       >
         {form.catalog.drugs.map((d) => (
           <option key={d.id} value={d.id}>
-            {d.name} — {drugAudience(d.category)}
+            {d.name} ({drugAudience(d.category)})
           </option>
         ))}
       </select>

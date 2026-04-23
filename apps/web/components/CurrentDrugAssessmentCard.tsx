@@ -85,7 +85,7 @@ export function CurrentDrugAssessmentCard({
                 type="button"
               >
                 <span className="font-medium">{opt.name}</span>
-                <span className="text-muted-foreground"> — {opt.reason}</span>
+                <span className="text-muted-foreground">. {opt.reason}</span>
               </button>
             ))}
           </div>

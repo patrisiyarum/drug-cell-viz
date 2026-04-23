@@ -177,14 +177,14 @@ export default function ScreenPage() {
             </p>
             <ul className="text-muted-foreground leading-relaxed list-disc pl-5 space-y-1">
               <li>
-                <span className="font-medium text-foreground">3D fit</span> —
+                <span className="font-medium text-foreground">3D fit</span>:
                 how well the compound packs into the binding pocket.
               </li>
               <li>
                 <span className="font-medium text-foreground">
                   Chemical similarity
-                </span>{" "}
-                — how close it looks to drugs already known to bind this
+                </span>
+                : how close it looks to drugs already known to bind this
                 target.
               </li>
             </ul>
@@ -220,7 +220,7 @@ export default function ScreenPage() {
                   return (
                     <option key={sym} value={sym}>
                       {sym}
-                      {gene ? ` — ${gene.name}` : ""}
+                      {gene ? ` (${gene.name})` : ""}
                     </option>
                   );
                 })}
@@ -381,7 +381,7 @@ function ResultRow({
         {(s.chem_similarity * 100).toFixed(0)}%
       </td>
       <td className="px-4 py-3 text-xs text-muted-foreground">
-        {s.closest_reference ?? "—"}
+        {s.closest_reference ?? "n/a"}
       </td>
     </tr>
   );
@@ -425,7 +425,7 @@ function BindingPoseCard({
               <>
                 {" · "}
                 <span className="text-warning">
-                  pose unavailable — showing apo structure
+                  pose unavailable, showing apo structure
                 </span>
               </>
             ) : null}

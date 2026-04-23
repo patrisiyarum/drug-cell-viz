@@ -123,8 +123,8 @@ function DomainLine({ data }: { data: Brca1Classification }) {
     <div className="text-xs text-muted-foreground">
       The mutated residue sits in the{" "}
       <strong>{domainLabel(data.domain)}</strong> region of BRCA1 (a{" "}
-      {data.consequence.toLowerCase()} change — one amino acid swap, not a
-      deletion or stop codon).
+      {data.consequence.toLowerCase()} change, meaning one amino acid
+      was swapped rather than a deletion or stop codon).
     </div>
   );
 }
@@ -200,7 +200,7 @@ function ConformalBox({ data }: { data: Brca1Classification }) {
       <div className="font-semibold text-sm mt-0.5">{label}</div>
       <div className="text-xs mt-1 opacity-90">
         {c.label === "uncertain"
-          ? `At the ${pct}% coverage guarantee the model can't narrow it down to a single answer — both "loss of function" and "functional" remain plausible.`
+          ? `At the ${pct}% coverage guarantee the model can't narrow it down to a single answer. Both "loss of function" and "functional" remain plausible.`
           : `Conformal prediction is a calibration method: across similar variants, the true answer lands in the prediction set at least ${pct}% of the time. Here the set contains only one label, so the call is unambiguous at this coverage.`}
       </div>
     </div>
@@ -227,7 +227,7 @@ function EnsembleBreakdown({ data }: { data: Brca1Classification }) {
         />
         <ScoreBox
           label="AlphaMissense"
-          value={c.alphamissense_covered && am !== null ? am.toFixed(3) : "—"}
+          value={c.alphamissense_covered && am !== null ? am.toFixed(3) : "n/a"}
           hint={
             c.alphamissense_covered
               ? c.alphamissense_class ?? ""
@@ -364,7 +364,7 @@ function labelStyle(label: Brca1Label): {
       return {
         title: "Likely breaks BRCA1",
         plain:
-          "The ML model predicts this variant stops BRCA1 from doing its DNA-repair job. Tumors with a broken BRCA1 can't fix DNA double-strand breaks properly — which is exactly what makes them sensitive to PARP inhibitors like olaparib.",
+          "The ML model predicts this variant stops BRCA1 from doing its DNA-repair job. Tumors with a broken BRCA1 can't fix DNA double-strand breaks properly, which is exactly what makes them sensitive to PARP inhibitors like olaparib.",
         Icon: AlertCircle,
         color: "text-red-700",
         bg: "bg-red-50",

@@ -46,7 +46,7 @@ export function HrdCard({ hrd, classifiableBrca1Variants = [] }: Props) {
         <p className="text-xs text-muted-foreground leading-relaxed">
           Your variants aren&apos;t in the HR-repair panel (BRCA1, BRCA2, PALB2,
           ATM, RAD51C/D, BRIP1, BARD1, FANC). That doesn&apos;t mean your tumor
-          is HR-proficient — it just means this tool can&apos;t tell from what
+          is HR-proficient. It just means this tool can&apos;t tell from what
           you&apos;ve entered. A clinical hereditary-cancer panel (Myriad, Ambry,
           Invitae) covers thousands more variants.
         </p>
@@ -198,11 +198,12 @@ function TumorScarPanel() {
         <Activity className="w-4 h-4 text-primary flex-shrink-0" aria-hidden />
         <div className="flex-1 min-w-[180px] text-sm">
           <div className="font-medium">
-            Have a tumor HRD test result?
+            Already have a myChoice or FoundationOne CDx report?
           </div>
           <div className="text-xs text-muted-foreground mt-0.5">
-            Score your myChoice / FoundationOne CDx feature counts
-            (HRD-LOH + LST + NTAI).
+            If your doctor ran one of those tumor tests, type in the three
+            scar numbers they printed and we&apos;ll translate them into
+            plain English.
           </div>
         </div>
         <button
@@ -210,7 +211,7 @@ function TumorScarPanel() {
           onClick={() => setOpen(true)}
           className="inline-flex items-center justify-center rounded-lg bg-primary text-primary-foreground px-3 py-1.5 text-xs font-medium hover:opacity-90 transition-opacity"
         >
-          Enter counts
+          Enter numbers
         </button>
       </div>
     );
@@ -262,7 +263,7 @@ function TumorScarPanel() {
       ) : null}
 
       <p className="text-[11px] text-muted-foreground leading-relaxed">
-        Scar scoring needs paired tumor/normal sequencing — a genome-graph
+        Scar scoring needs paired tumor/normal sequencing from a genome-graph
         SV pipeline (<code>vg call</code> or <code>minigraph</code>) or a
         clinical assay produces these three counts. See the README for the
         end-to-end Snakemake pipeline.
