@@ -155,6 +155,19 @@ and a compact card on the results page, so patients with a myChoice /
 FoundationOne CDx report can type in the three counts and get the
 interpretation without re-running the pipeline.
 
+### Imaging path: CT upload → HRD prediction
+
+`POST /api/radiogenomics/upload` accepts a DICOM zip or NIfTI file, runs
+the crop → resample-to-96³ → HU-normalise preprocessing pipeline, and
+returns an HRD probability. The preprocessing is shared with the
+training pipeline in
+[hrd-radiogenomics](https://github.com/patrisiyarum/hrd-radiogenomics),
+a companion research repo doing CT → HRD transfer learning from Med3D /
+MONAI pretrained 3D CNNs on TCGA-OV × TCIA paired data. Until that
+project ships trained weights, the endpoint returns a labelled stub
+prediction and the UI surfaces a "research prototype, model not yet
+trained" card on `/build` Step 2.
+
 ---
 
 ## Quick start (local)
