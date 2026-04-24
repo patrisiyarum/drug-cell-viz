@@ -56,10 +56,12 @@ export function ResultsReport({ result, patient, onSwitchDrug }: Props) {
               hrd={result.hrd}
               classifiableBrca1Variants={result.classifiable_brca1_variants}
               drugId={result.drug_id}
+              currentDrugAssessment={result.current_drug_assessment}
+              onSwitchDrug={onSwitchDrug}
             />
-          ) : null}
-
-          {result.current_drug_assessment ? (
+          ) : result.current_drug_assessment ? (
+            // If we didn't render an HRD card (unusual — compute_hrd always
+            // emits one), surface the drug verdict on its own as a fallback.
             <CurrentDrugAssessmentCard
               assessment={result.current_drug_assessment}
               onSwitchDrug={onSwitchDrug}

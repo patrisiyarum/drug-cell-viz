@@ -285,17 +285,11 @@ export default function WalkthroughPage() {
           </details>
         </div>
 
-        {/* ---- STEP 4: full report ---- */}
+        {/* Full report — no step header; the report cards speak for themselves. */}
         <div
           ref={reportRef}
           className="max-w-[1600px] mx-auto mt-10 scroll-mt-6"
         >
-          <div className="max-w-3xl mx-auto mb-4 flex items-center gap-3">
-            <StepNumber n={4} />
-            <h2 className="text-xl md:text-2xl font-semibold">
-              Your full report
-            </h2>
-          </div>
           {analysis.isLoading ? (
             <p className="text-sm text-muted-foreground max-w-3xl mx-auto">
               Running the analysis.

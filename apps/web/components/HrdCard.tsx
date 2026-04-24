@@ -4,8 +4,9 @@ import { useState } from "react";
 import { FlaskConical, Activity, Clock } from "lucide-react";
 
 import { Brca1FunctionCard } from "./Brca1FunctionCard";
+import { CurrentDrugAssessmentCard } from "./CurrentDrugAssessmentCard";
 import { api, type HrdScarResponse } from "@/lib/api";
-import type { HrdResult } from "@/lib/bc-types";
+import type { CurrentDrugAssessment, HrdResult } from "@/lib/bc-types";
 
 // Drugs in the PARP-inhibitor class. When the patient's current drug is one
 // of these AND they have HR-deficient evidence, we surface a reversion-
@@ -27,6 +28,14 @@ interface Props {
   classifiableBrca1Variants?: string[];
   /** Drug id the patient is on — used to gate the PARPi reversion callout. */
   drugId?: string | null;
+  /**
+   * Current-drug assessment. When provided, renders as a nested subsection
+   * inside the HRD card so the HR-deficiency call and the drug-match
+   * verdict read as one connected story instead of two separate cards.
+   */
+  currentDrugAssessment?: CurrentDrugAssessment | null;
+  /** Passed through to the nested CurrentDrugAssessmentCard. */
+  onSwitchDrug?: (drugId: string) => void;
 }
 
 /**
@@ -40,7 +49,13 @@ interface Props {
  * elsewhere (e.g. Diana has a CYP2D6 metabolism variant, not an HR variant
  * — her HRD status genuinely isn't the story).
  */
-export function HrdCard({ hrd, classifiableBrca1Variants = [], drugId = null }: Props) {
+export function HrdCard({
+  hrd,
+  classifiableBrca1Variants = [],
+  drugId = null,
+  currentDrugAssessment = null,
+  onSwitchDrug,
+}: Props) {
   const showReversionCallout =
     hrd.label === "hr_deficient" &&
     !!drugId &&
@@ -48,23 +63,33 @@ export function HrdCard({ hrd, classifiableBrca1Variants = [], drugId = null }: 
   // Compact "not applicable" rendering for patients without HR-panel variants.
   if (hrd.label === "indeterminate" && hrd.evidence.length === 0) {
     return (
-      <section className="rounded-2xl border border-border bg-muted/40 p-4 md:p-5 text-sm space-y-2">
-        <div className="flex items-baseline justify-between gap-3 flex-wrap">
-          <div>
-            <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
-              HR-deficiency status
+      <section className="rounded-2xl border border-border bg-muted/40 p-4 md:p-5 text-sm space-y-4">
+        <div className="space-y-2">
+          <div className="flex items-baseline justify-between gap-3 flex-wrap">
+            <div>
+              <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                HR-deficiency status
+              </div>
+              <div className="font-medium">Not assessed</div>
             </div>
-            <div className="font-medium">Not assessed</div>
+            <span className="text-[11px] text-muted-foreground">Score 0 / 100</span>
           </div>
-          <span className="text-[11px] text-muted-foreground">Score 0 / 100</span>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            Your variants aren&apos;t in the HR-repair panel (BRCA1, BRCA2, PALB2,
+            ATM, RAD51C/D, BRIP1, BARD1, FANC). That doesn&apos;t mean your tumor
+            is HR-proficient. It just means this tool can&apos;t tell from what
+            you&apos;ve entered. A clinical hereditary-cancer panel (Myriad, Ambry,
+            Invitae) covers thousands more variants.
+          </p>
         </div>
-        <p className="text-xs text-muted-foreground leading-relaxed">
-          Your variants aren&apos;t in the HR-repair panel (BRCA1, BRCA2, PALB2,
-          ATM, RAD51C/D, BRIP1, BARD1, FANC). That doesn&apos;t mean your tumor
-          is HR-proficient. It just means this tool can&apos;t tell from what
-          you&apos;ve entered. A clinical hereditary-cancer panel (Myriad, Ambry,
-          Invitae) covers thousands more variants.
-        </p>
+        {currentDrugAssessment ? (
+          <div className="rounded-lg border bg-white/70 p-3 md:p-4">
+            <CurrentDrugAssessmentCard
+              assessment={currentDrugAssessment}
+              onSwitchDrug={onSwitchDrug}
+            />
+          </div>
+        ) : null}
       </section>
     );
   }
@@ -151,6 +176,15 @@ export function HrdCard({ hrd, classifiableBrca1Variants = [], drugId = null }: 
           </div>
         );
       })()}
+
+      {currentDrugAssessment ? (
+        <div className="rounded-lg border bg-white/70 p-3 md:p-4">
+          <CurrentDrugAssessmentCard
+            assessment={currentDrugAssessment}
+            onSwitchDrug={onSwitchDrug}
+          />
+        </div>
+      ) : null}
 
       {classifiableBrca1Variants.length > 0 ? (
         <Brca1PredictionNested hgvsList={classifiableBrca1Variants} />
