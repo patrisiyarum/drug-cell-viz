@@ -13,6 +13,7 @@ import { CurrentDrugAssessmentCard } from "./CurrentDrugAssessmentCard";
 import { DoctorVisitPdfButton } from "./DoctorVisitPdfButton";
 import { HrdCard } from "./HrdCard";
 import { MolViewer } from "./MolViewer";
+import { VolumeViewer } from "./VolumeViewer";
 import type {
   AnalysisResult,
   DemoPatient,
@@ -36,18 +37,14 @@ export function ResultsReport({ result, patient, onSwitchDrug }: Props) {
   // that supports her HR-deficient germline call; Diana ships with one that
   // demonstrates the somatic-HRD story (germline panel clean, CT still
   // flagged HRD by the model — the pre-screen use case). Patients without
-  // a fixture pass null and the CT slide + run panel are hidden.
+  // a fixture pass null and the CT slide + run panel are hidden. The same
+  // NIfTI URL feeds both the volumetric viewer in the slideshow and the
+  // radiogenomics run panel in the HrdCard.
   const ctScanUrl =
     patient?.id === "maya"
       ? "/fixtures/maya_ct_scan.nii.gz"
       : patient?.id === "diana"
         ? "/fixtures/diana_ct_scan.nii.gz"
-        : null;
-  const ctScanPngUrl =
-    patient?.id === "maya"
-      ? "/fixtures/maya_ct_axial.png"
-      : patient?.id === "diana"
-        ? "/fixtures/diana_ct_axial.png"
         : null;
   const ctScanLabel =
     patient?.id === "maya"
@@ -71,7 +68,7 @@ export function ResultsReport({ result, patient, onSwitchDrug }: Props) {
           <div className="no-print">
             <StructureSlideshow
               result={result}
-              ctScanPngUrl={ctScanPngUrl}
+              ctScanVolumeUrl={ctScanUrl}
               ctScanLabel={ctScanLabel}
             />
           </div>
@@ -169,32 +166,33 @@ function RelevanceWarning({
  */
 function StructureSlideshow({
   result,
-  ctScanPngUrl,
+  ctScanVolumeUrl,
   ctScanLabel,
 }: {
   result: AnalysisResult;
-  ctScanPngUrl?: string | null;
+  ctScanVolumeUrl?: string | null;
   ctScanLabel?: string | null;
 }) {
   // Each "slide" is either the docked drug + target (kind="main"), a
   // single off-target protein with its variant residue highlighted
-  // (kind="off_target"), or the patient's CT scan (kind="ct_scan") — the
-  // radiogenomics input that the HrdCard's "Run model" button scores.
+  // (kind="off_target"), or the patient's CT scan (kind="ct_scan"). The
+  // CT slide renders the full 3D volume via niivue (WebGL2 ray-marching)
+  // on the same .nii.gz the HrdCard's "Run model" button scores.
   type Slide =
     | { kind: "main" }
     | { kind: "off_target"; structure: OffTargetStructure }
-    | { kind: "ct_scan"; imageUrl: string; label: string };
+    | { kind: "ct_scan"; volumeUrl: string; label: string };
 
   const slides: Slide[] = [
     { kind: "main" },
     ...(result.off_target_structures ?? []).map(
       (s): Slide => ({ kind: "off_target", structure: s }),
     ),
-    ...(ctScanPngUrl
+    ...(ctScanVolumeUrl
       ? [
           {
             kind: "ct_scan" as const,
-            imageUrl: ctScanPngUrl,
+            volumeUrl: ctScanVolumeUrl,
             label: ctScanLabel ?? "Preoperative CT",
           },
         ]
@@ -254,7 +252,7 @@ function StructureSlideshow({
             hideOuterBorder
           />
         ) : (
-          <CtScanSlide imageUrl={slide.imageUrl} label={slide.label} />
+          <CtScanSlide volumeUrl={slide.volumeUrl} label={slide.label} />
         )}
       </div>
       {total > 1 ? (
@@ -283,24 +281,20 @@ function StructureSlideshow({
  * HrdCard on the right column, so the two reinforce each other
  * visually — "this is the picture, here's what the model says about it".
  */
-function CtScanSlide({ imageUrl, label }: { imageUrl: string; label: string }) {
+function CtScanSlide({ volumeUrl, label }: { volumeUrl: string; label: string }) {
   return (
     <div className="flex-1 flex flex-col">
       <div className="p-5 border-b space-y-1">
         <h3 className="text-lg font-semibold">{label}</h3>
         <p className="text-sm text-muted-foreground leading-relaxed">
-          Axial slice through the pelvis. Demo fixture only, not a real patient
-          scan. Run the radiogenomics model from the HR-deficiency panel to see
-          what it predicts from this image.
+          Full 3D volume render of the pelvis. Click and drag to rotate, scroll
+          to zoom. Demo fixture only, not a real patient scan. Run the
+          radiogenomics model from the HR-deficiency panel to see what it
+          predicts from this volume.
         </p>
       </div>
-      <div className="relative bg-black flex-1 flex items-center justify-center min-h-[440px]">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={imageUrl}
-          alt={label}
-          className="max-h-[440px] w-auto object-contain"
-        />
+      <div className="relative bg-black flex-1 min-h-[440px]">
+        <VolumeViewer volumeUrl={volumeUrl} />
       </div>
     </div>
   );
