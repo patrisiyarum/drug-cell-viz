@@ -441,7 +441,6 @@ function RadiogenomicsCtPanel({
   ctScanUrl: string;
   ctScanLabel: string;
 }) {
-  const [open, setOpen] = useState(false);
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<CtScanResponse | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -464,60 +463,40 @@ function RadiogenomicsCtPanel({
     }
   }
 
-  if (!open) {
-    return (
-      <div className="rounded-lg border-2 border-dashed border-muted-foreground/30 p-3 flex items-center gap-3 flex-wrap">
-        <Scan className="w-4 h-4 text-primary flex-shrink-0" aria-hidden />
-        <div className="flex-1 min-w-[180px] text-sm">
-          <div className="font-medium">
-            Predict HRD from {ctScanLabel}{" "}
-            <span className="text-xs font-normal text-muted-foreground">
-              · experimental radiogenomics ML
-            </span>
-          </div>
-          <div className="text-xs text-muted-foreground">
-            Runs a 3D CNN trained on TCGA-OV paired imaging + genomics to
-            estimate HR-deficiency from the preoperative CT alone.
-          </div>
-        </div>
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          className="inline-flex items-center justify-center rounded-lg bg-primary text-primary-foreground px-3 py-1.5 text-xs font-medium hover:opacity-90 transition-opacity"
-        >
-          Show run panel
-        </button>
-      </div>
-    );
-  }
-
+  // One-click panel. The teaser + "Show run panel" intermediate step used to
+  // collapse the action behind two clicks; now the card always shows a
+  // single "Run radiogenomics model" button and the result renders inline
+  // below it on success.
   return (
     <div className="rounded-lg border bg-white/60 p-3 md:p-4 space-y-3">
-      <div className="flex items-center justify-between gap-2 flex-wrap">
-        <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted-foreground font-semibold">
-          <Scan className="w-3.5 h-3.5 text-primary" aria-hidden />
-          Radiogenomics CT model · experimental
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-start gap-2 min-w-[180px] flex-1">
+          <Scan className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" aria-hidden />
+          <div className="text-sm">
+            <div className="font-medium">
+              Predict HRD from {ctScanLabel}{" "}
+              <span className="text-xs font-normal text-muted-foreground">
+                · experimental radiogenomics ML
+              </span>
+            </div>
+            <div className="text-xs text-muted-foreground">
+              Runs a 3D CNN trained on TCGA-OV paired imaging + genomics to
+              estimate HR-deficiency from the preoperative CT alone.
+            </div>
+          </div>
         </div>
         <button
           type="button"
           onClick={onRun}
           disabled={running}
-          className="inline-flex items-center justify-center rounded-lg bg-primary text-primary-foreground px-3 py-1.5 text-xs font-medium hover:opacity-90 disabled:opacity-50 transition-opacity"
+          className="inline-flex items-center justify-center rounded-lg bg-primary text-primary-foreground px-3 py-1.5 text-xs font-medium hover:opacity-90 disabled:opacity-50 transition-opacity flex-shrink-0"
         >
           {running ? "Running…" : result ? "Re-run" : "Run radiogenomics model"}
         </button>
       </div>
 
       {err ? <p className="text-xs text-red-600">{err}</p> : null}
-
-      {result ? (
-        <CtPredictionResult result={result} />
-      ) : (
-        <p className="text-xs text-muted-foreground leading-relaxed">
-          The model consumes a preoperative CT (DICOM or NIfTI) and returns a
-          scalar probability of HR-deficiency. Results are research-only.
-        </p>
-      )}
+      {result ? <CtPredictionResult result={result} /> : null}
     </div>
   );
 }
