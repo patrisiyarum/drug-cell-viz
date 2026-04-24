@@ -120,7 +120,7 @@ export default function BuildPage() {
           <StepCard
             n={2}
             title="Upload your data"
-            subtitle="Optional — skip if you already know which variants to pick."
+            subtitle="Optional. Skip if you already know which variants to pick."
           >
             <div className="space-y-4">
               <UploadCard
@@ -633,7 +633,7 @@ function CtScanSummary({ resp }: { resp: CtScanResponse }) {
           style={{ background: "rgba(217,119,6,0.08)", borderColor: "rgba(217,119,6,0.35)" }}
         >
           <div className="font-medium text-sm text-foreground">
-            Research prototype — model not yet trained
+            Research prototype. Model not yet trained
           </div>
           <ul className="list-disc pl-5 space-y-0.5 text-muted-foreground">
             {resp.caveats.map((c, i) => (

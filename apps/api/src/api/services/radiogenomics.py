@@ -499,13 +499,13 @@ def _real_prediction(
         perf_caveat = (
             f"Model trained on 135 TCGA-OV patients; this fold had held-out "
             f"validation AUROC {float(fold_auroc):.2f} ({backbone_name} backbone). "
-            "Real-world accuracy on out-of-distribution scanners may be lower — "
-            "expect a drop of up to 0.15 AUROC across scanner manufacturers."
+            "Real-world accuracy on out-of-distribution scanners may be lower. "
+            "Expect a drop of up to 0.15 AUROC across scanner manufacturers."
         )
     else:
         perf_caveat = (
             "Model trained on 135 TCGA-OV patients. Real-world accuracy on "
-            "out-of-distribution scanners may be lower — expect a drop of up "
+            "out-of-distribution scanners may be lower. Expect a drop of up "
             "to 0.15 AUROC across scanner manufacturers."
         )
 
@@ -515,7 +515,7 @@ def _real_prediction(
         label=label,
         confidence=confidence,
         caveats=[
-            "Research prototype — not FDA-cleared, not a medical device.",
+            "Research prototype. Not FDA-cleared, not a medical device.",
             perf_caveat,
             "This prediction alone is not sufficient for a clinical decision. "
             "Definitive HRD status still requires tumor sequencing (Myriad "

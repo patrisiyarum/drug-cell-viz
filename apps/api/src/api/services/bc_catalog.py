@@ -102,7 +102,7 @@ GENES: dict[str, GeneEntry] = {
         "symbol": "ERBB2",
         "name": "Receptor tyrosine-protein kinase erbB-2 (HER2)",
         "uniprot_id": "P04626",
-        "role": "Amplified/overexpressed in ~15–20% of breast cancers. Target "
+        "role": "Amplified/overexpressed in ~15-20% of breast cancers. Target "
         "of trastuzumab, pertuzumab, T-DM1. Activating kinase domain mutations "
         "(e.g. L755S, V777L) seen in HER2-low disease.",
     },
@@ -119,7 +119,7 @@ GENES: dict[str, GeneEntry] = {
         "name": "Cytochrome P450 2D6",
         "uniprot_id": "P10635",
         "role": "Metabolizes tamoxifen into its active form, endoxifen. "
-        "Poor metabolizers (*3/*4/*5/*6 homozygotes) convert ~60–90% less "
+        "Poor metabolizers (*3/*4/*5/*6 homozygotes) convert ~60-90% less "
         "tamoxifen → endoxifen. CPIC recommends alternative endocrine "
         "therapy for PMs in premenopausal women.",
     },
@@ -359,7 +359,7 @@ DRUGS: dict[str, DrugEntry] = {
         "primary_target_gene": "PARP1",
         "metabolizing_gene": None,
         "mechanism": "PARP1/2 inhibitor. Broader ovarian approval than "
-        "olaparib — works as maintenance after platinum response regardless "
+        "olaparib. Works as maintenance after platinum response regardless "
         "of BRCA status, though BRCA+/HRD+ tumors benefit most.",
         "context_genes": ["BRCA1", "BRCA2", "PALB2"],
         "breast_cancer_indication": "Primarily used in advanced ovarian "
@@ -934,7 +934,7 @@ PGX_RULES: list[PGxRule] = [
         "aromatase inhibitors. Emerging oral SERDs (elacestrant) target "
         "ESR1-mutated disease specifically (EMERALD, FDA 2023).",
         "evidence_level": "B",
-        "source": "EMERALD, PADA-1 trials; ASCO 2022–2023",
+        "source": "EMERALD, PADA-1 trials; ASCO 2022-2023",
     },
     # --- Trastuzumab / ERBB2 ---
     {

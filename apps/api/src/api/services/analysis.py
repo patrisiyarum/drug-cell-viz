@@ -354,7 +354,7 @@ def _explain_missing_structure(gene_symbol: str, raw_error: str) -> str:
             "so there's no full-length 3D model for it."
         ),
         "DMD": "DMD (dystrophin) is too large for AlphaFold DB's full-length coverage.",
-        "TTN": "TTN (titin) is the longest human protein — no full-length model exists.",
+        "TTN": "TTN (titin) is the longest human protein. No full-length model exists.",
     }
     if gene_symbol in big_proteins:
         return big_proteins[gene_symbol]

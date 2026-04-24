@@ -252,7 +252,7 @@ def build_plain_language(
             what_you_see = (
                 f"{ligand_phrase.capitalize()} is {drug_name} bound to "
                 f"{target_gene}. Your {names} variant isn't on this "
-                f"protein — see the verdict below for how the two connect."
+                f"protein. See the verdict below for how the two connect."
             )
         else:
             what_you_see = (

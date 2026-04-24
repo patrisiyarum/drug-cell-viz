@@ -153,7 +153,7 @@ def compute_hrd(
             is_fda_parpi = gene in FDA_PARPI_ELIGIBLE_MODERATE
             weight = 45 if is_fda_parpi else 15
             detail = (
-                "FDA-recognized PARPi-eligible HR gene — an FDA-approved "
+                "FDA-recognized PARPi-eligible HR gene. An FDA-approved "
                 "ovarian-cancer biomarker for PARP-inhibitor maintenance."
                 if is_fda_parpi
                 else f"Moderate-penetrance HR-adjacent gene. Elevates "

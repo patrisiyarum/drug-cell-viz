@@ -130,7 +130,7 @@ def build_pdf(result: AnalysisResult, patient_label: str | None = None) -> bytes
     doc = SimpleDocTemplate(
         buf,
         pagesize=LETTER,
-        title=f"Pharmacogenomic report — {result.drug_name}",
+        title=f"Pharmacogenomic report: {result.drug_name}",
         author="drug-cell-viz",
         subject="Doctor-visit report",
         leftMargin=0.75 * inch,
@@ -213,7 +213,7 @@ def build_pdf(result: AnalysisResult, patient_label: str | None = None) -> bytes
             flow.append(_p("Drugs worth asking about", S["h3"]))
             for s in cda.better_options:
                 flow.append(_p(
-                    f"<b>{_esc(s.name)}</b> — {_esc(s.reason)}",
+                    f"<b>{_esc(s.name)}</b>. {_esc(s.reason)}",
                     S["body"],
                 ))
 
@@ -264,7 +264,7 @@ def build_pdf(result: AnalysisResult, patient_label: str | None = None) -> bytes
 
     # --- Disclaimers ---
     flow.append(PageBreak())
-    flow.append(_p("Important — read this", S["h2"]))
+    flow.append(_p("Important: read this", S["h2"]))
     for d in result.disclaimers:
         flow.append(_psafe("• " + d, S["body"]))
     if result.hrd:
@@ -276,7 +276,7 @@ def build_pdf(result: AnalysisResult, patient_label: str | None = None) -> bytes
         flow.append(_p("Glossary", S["h2"]))
         for g in pl.glossary:
             flow.append(_p(
-                f"<b>{_esc(g.term)}</b> — {_esc(g.definition)}",
+                f"<b>{_esc(g.term)}</b>: {_esc(g.definition)}",
                 S["body"],
             ))
 

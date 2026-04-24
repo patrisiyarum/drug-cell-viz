@@ -267,7 +267,7 @@ function CtScanSlide({ imageUrl, label }: { imageUrl: string; label: string }) {
       <div className="p-5 border-b space-y-1">
         <h3 className="text-lg font-semibold">{label}</h3>
         <p className="text-sm text-muted-foreground leading-relaxed">
-          Axial slice through the pelvis. Demo fixture only — not a real patient
+          Axial slice through the pelvis. Demo fixture only, not a real patient
           scan. Run the radiogenomics model from the HR-deficiency panel to see
           what it predicts from this image.
         </p>

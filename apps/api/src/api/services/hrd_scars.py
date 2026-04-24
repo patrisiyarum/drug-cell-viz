@@ -141,7 +141,7 @@ def score(features: HrdScarFeatures) -> HrdScarScore:
         "pancreatic and prostate cancer may need recalibration.",
         "Scar scoring captures the historical HR state of the tumor. After "
         "PARPi exposure, revertant mutations can restore HR without changing "
-        "the scar score — so scars predict first-line response better than "
+        "the scar score, so scars predict first-line response better than "
         "later-line response.",
     ]
 
