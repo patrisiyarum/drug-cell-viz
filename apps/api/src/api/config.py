@@ -82,5 +82,14 @@ class Settings(BaseSettings):
     otel_service_name: str = "drug-cell-viz-api"
     logfire_token: str = ""
 
+    # Radiogenomics inference. When this points at a .pt file produced by
+    # the hrd-radiogenomics training pipeline (fold0.pt etc.), the
+    # /api/radiogenomics/upload endpoint switches from stub predictions to
+    # real inference. Empty string = stub path (UI shows "model not trained"
+    # banner). Must be set together with the `radiogenomics` extra
+    # (pyproject.toml) that brings in torch + monai.
+    radiogenomics_model_weights: str = ""
+    radiogenomics_backbone: str = "monai_densenet"  # or "med3d"
+
 
 settings = Settings()

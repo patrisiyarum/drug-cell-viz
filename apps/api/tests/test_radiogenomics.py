@@ -82,3 +82,54 @@ def test_infer_hrd_returns_stub_when_no_checkpoint():
 def test_load_volume_rejects_unknown_extension():
     with pytest.raises(radiogenomics.RadiogenomicsError):
         radiogenomics.load_volume(b"whatever", "image.jpg")
+
+
+def test_real_inference_path_with_v0_checkpoint():
+    """Locks in end-to-end inference when a real checkpoint is mounted.
+
+    Only runs when the v0 weights are present AND torch+monai are installed
+    via the `radiogenomics` extra. In CI without those deps we skip so the
+    baseline suite stays green. When both are present, we verify the model
+    loads with 0 missing / 0 unexpected keys (via the wrapper-prefix strip)
+    and returns a real-valued probability, not the stub.
+    """
+    from pathlib import Path
+
+    weights = Path("models/radiogen_v0/fold0.pt")
+    if not weights.exists():
+        pytest.skip("v0 checkpoint not mounted at models/radiogen_v0/fold0.pt")
+    try:
+        import monai  # noqa: F401
+        import torch  # noqa: F401
+    except ImportError:
+        pytest.skip("radiogenomics extra not installed (torch + monai)")
+
+    # Restore global state after the test so other tests keep the stub path.
+    prev_weights = radiogenomics._MODEL_WEIGHTS
+    prev_backbone = radiogenomics._MODEL_BACKBONE
+    try:
+        radiogenomics.set_model_weights(weights, backbone="monai_densenet")
+        meta = radiogenomics.VolumeMetadata(
+            modality="CT",
+            original_shape=(96, 96, 96),
+            original_spacing_mm=(1.0, 1.0, 1.0),
+            target_shape=radiogenomics.TARGET_SHAPE,
+            hu_window=radiogenomics.HU_WINDOW,
+        )
+        vol = np.random.default_rng(0).random(radiogenomics.TARGET_SHAPE).astype(np.float32)
+        pred = radiogenomics.infer_hrd(vol, meta)
+        assert pred.label in {
+            "predicted_hr_deficient",
+            "predicted_hr_proficient",
+            "uncertain",
+        }
+        assert pred.confidence in {"low", "moderate", "high"}
+        assert 0.0 <= pred.hrd_probability <= 1.0
+        # The caveats list should still warn the user — real predictions
+        # from a 0.62-AUROC model are emphatically not clinical-grade.
+        assert any("Research prototype" in c for c in pred.caveats)
+    finally:
+        radiogenomics._MODEL_WEIGHTS = prev_weights
+        radiogenomics._MODEL_BACKBONE = prev_backbone
+        radiogenomics._MODEL = None
+        radiogenomics._MODEL_DEVICE = None

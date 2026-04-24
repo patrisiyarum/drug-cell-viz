@@ -38,6 +38,32 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings.local_storage_root.mkdir(parents=True, exist_ok=True)
     configure_telemetry(app)
     await init_db()
+
+    # Wire the radiogenomics model if a checkpoint was provisioned. If the
+    # path is unset or missing, the upload endpoint stays on the stub path
+    # and the UI surfaces the "model not trained" banner. Failing to load
+    # does NOT crash the API — we log loudly and keep serving.
+    if settings.radiogenomics_model_weights:
+        from pathlib import Path
+
+        from api.services import radiogenomics as rg
+
+        weights_path = Path(settings.radiogenomics_model_weights)
+        if weights_path.exists():
+            try:
+                rg.set_model_weights(
+                    weights_path, backbone=settings.radiogenomics_backbone,
+                )
+            except Exception:
+                logging.getLogger(__name__).exception(
+                    "failed to wire radiogenomics model — staying on stub path",
+                )
+        else:
+            logging.getLogger(__name__).warning(
+                "RADIOGENOMICS_MODEL_WEIGHTS set to %s but file does not exist; "
+                "serving stub predictions", weights_path,
+            )
+
     yield
     await close_events()
 

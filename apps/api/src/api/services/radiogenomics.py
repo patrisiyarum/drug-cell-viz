@@ -278,6 +278,10 @@ def normalize_intensity(
 # placeholder that the UI labels "model not yet trained" so patients don't
 # mistake the stub for a real score.
 _MODEL_WEIGHTS: Path | None = None
+_MODEL_BACKBONE: str = "monai_densenet"
+# Cached loaded model + device so we don't rebuild + reload on every request.
+_MODEL = None  # type: ignore[assignment]
+_MODEL_DEVICE: str | None = None
 
 
 def infer_hrd(preprocessed: np.ndarray, metadata: VolumeMetadata) -> RadiogenomicsPrediction:
@@ -292,11 +296,22 @@ def infer_hrd(preprocessed: np.ndarray, metadata: VolumeMetadata) -> Radiogenomi
     return _real_prediction(preprocessed, metadata)
 
 
-def set_model_weights(path: Path) -> None:
-    """Point the inference path at a trained checkpoint."""
-    global _MODEL_WEIGHTS
+def set_model_weights(path: Path, backbone: str = "monai_densenet") -> None:
+    """Point the inference path at a trained checkpoint.
+
+    `backbone` must match the architecture the checkpoint was saved from:
+        - "monai_densenet" (the v0 fold*.pt set)
+        - "med3d"          (the v1 fold*.pt set — 3D ResNet-50 topology)
+
+    Invalidates the cached model if the path/backbone changes so the next
+    request rebuilds.
+    """
+    global _MODEL_WEIGHTS, _MODEL_BACKBONE, _MODEL, _MODEL_DEVICE
     _MODEL_WEIGHTS = path
-    logger.info("radiogenomics model weights set to %s", path)
+    _MODEL_BACKBONE = backbone
+    _MODEL = None
+    _MODEL_DEVICE = None
+    logger.info("radiogenomics model weights set to %s (backbone=%s)", path, backbone)
 
 
 def _stub_prediction(metadata: VolumeMetadata) -> RadiogenomicsPrediction:
@@ -319,26 +334,158 @@ def _stub_prediction(metadata: VolumeMetadata) -> RadiogenomicsPrediction:
     )
 
 
-def _real_prediction(
-    preprocessed: np.ndarray,
-    metadata: VolumeMetadata,
-) -> RadiogenomicsPrediction:
-    # Lazy-import torch so the stub path stays light.
+def _build_backbone(backbone: str):
+    """Build the same architecture used for training so the state_dict loads.
+
+    Kept in-process here (not imported from hrd-radiogenomics) so drug-cell-viz
+    has no build-time dependency on the research repo. The two definitions
+    must stay in lockstep — the shared preprocessing contract (96^3 cube,
+    HU window [-200, 250], [0, 1] normalised) means the tensors match, but
+    the model topology also has to.
+    """
+    # Lazy-import — keeps the stub path light and avoids pulling torch/monai
+    # into the dependency tree unless someone actually wires a checkpoint.
+    from monai.networks.nets import DenseNet121, ResNet
+
+    if backbone == "monai_densenet":
+        return DenseNet121(
+            spatial_dims=3,
+            in_channels=1,
+            out_channels=1,
+            pretrained=False,  # PyTorch Hub has no 3D ImageNet; random-init.
+        )
+    if backbone == "med3d":
+        return ResNet(
+            block="bottleneck",
+            layers=[3, 4, 6, 3],
+            block_inplanes=[64, 128, 256, 512],
+            spatial_dims=3,
+            n_input_channels=1,
+            num_classes=1,
+        )
+    raise RadiogenomicsError(f"unknown radiogenomics backbone: {backbone!r}")
+
+
+def _load_or_get_model():
+    """Lazy-load the model on first use, then cache it.
+
+    Initial request takes ~2-4 s (torch import + architecture build + state
+    load); subsequent requests reuse the cached module.
+    """
+    global _MODEL, _MODEL_DEVICE
+    if _MODEL is not None:
+        return _MODEL, _MODEL_DEVICE
+
     import torch
 
-    # The research repo's eventual contract: load the saved state_dict into
-    # a Med3D / MONAI DenseNet121-3D backbone with a two-class head. The
-    # weights file also carries the training-time metadata (training AUROC,
-    # external-validation delta, seed). For now we assert a minimal contract
-    # and fail loudly if the checkpoint shape doesn't match.
     assert _MODEL_WEIGHTS is not None
-    ckpt = torch.load(_MODEL_WEIGHTS, map_location="cpu")
+    ckpt = torch.load(_MODEL_WEIGHTS, map_location="cpu", weights_only=False)
     if "model_state" not in ckpt or "model_card" not in ckpt:
         raise RadiogenomicsError(
             "model checkpoint missing model_state / model_card keys; expected "
             "a checkpoint produced by the hrd-radiogenomics training pipeline"
         )
-    # TODO: instantiate the backbone, load_state_dict, forward pass on a
-    # (1, 1, 96, 96, 96) tensor, softmax, return p_lof. Not shipped here
-    # because the model checkpoint lives in the research repo.
-    raise NotImplementedError("real inference path wired when the research repo ships weights")
+    # Prefer the backbone stored in the checkpoint's model_card so a v1 Med3D
+    # file still loads even if RADIOGENOMICS_BACKBONE wasn't updated. Fall
+    # back to the globally-configured backbone if the card doesn't record it.
+    backbone = ckpt.get("model_card", {}).get("backbone", _MODEL_BACKBONE)
+    model = _build_backbone(backbone)
+
+    # The training repo wraps each backbone in an nn.Module for a clean
+    # API (MonaiDenseNetClassifier.model.* and Med3DResNet50.backbone.*),
+    # so the saved state_dict has a wrapper prefix on every key. Strip the
+    # wrapper so the keys align with the bare DenseNet121 / ResNet we build
+    # here. If neither prefix is present we fall through with the raw state.
+    raw_state = ckpt["model_state"]
+    for prefix in ("model.", "backbone."):
+        if all(k.startswith(prefix) for k in raw_state.keys()):
+            stripped = {k.removeprefix(prefix): v for k, v in raw_state.items()}
+            logger.debug(
+                "radiogenomics state: stripped %r prefix from %d keys",
+                prefix, len(stripped),
+            )
+            raw_state = stripped
+            break
+
+    missing, unexpected = model.load_state_dict(raw_state, strict=False)
+    if missing or unexpected:
+        # Keep load non-strict so v0 and v1 heads can diverge slightly, but
+        # complain loudly at WARN so a broken wire-up is visible at startup.
+        logger.warning(
+            "radiogenomics model load: %d missing / %d unexpected keys "
+            "(backbone=%s)", len(missing), len(unexpected), backbone,
+        )
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    model.to(device).eval()
+    _MODEL = model
+    _MODEL_DEVICE = device
+    card = ckpt.get("model_card", {})
+    logger.info(
+        "radiogenomics model loaded (backbone=%s, device=%s, val_auroc=%s, fold=%s)",
+        backbone, device, card.get("val_auroc"), card.get("fold"),
+    )
+    return _MODEL, _MODEL_DEVICE
+
+
+def _real_prediction(
+    preprocessed: np.ndarray,
+    metadata: VolumeMetadata,
+) -> RadiogenomicsPrediction:
+    """Run a forward pass and return a calibrated prediction.
+
+    Inference pipeline:
+        1. Reshape the preprocessed (Z, Y, X) array to (1, 1, 96, 96, 96).
+        2. Forward pass on CPU/CUDA depending on host.
+        3. sigmoid(logit) → HRD probability in [0, 1].
+        4. Threshold at 0.5 for the binary label; confidence tier is a
+           simple function of how far the probability sits from 0.5.
+    """
+    import torch
+
+    model, device = _load_or_get_model()
+    tensor = torch.from_numpy(preprocessed).float().unsqueeze(0).unsqueeze(0)  # (1,1,Z,Y,X)
+    tensor = tensor.to(device)
+    with torch.no_grad():
+        logit = model(tensor)
+        # MONAI DenseNet returns (B, num_classes=1); Med3D ResNet squeezes
+        # similarly. Normalise to a single scalar regardless of shape.
+        logit_scalar = float(logit.detach().cpu().view(-1)[0].item())
+        probability = float(torch.sigmoid(torch.tensor(logit_scalar)).item())
+
+    distance_from_boundary = abs(probability - 0.5)
+    if distance_from_boundary < 0.10:
+        confidence: Literal["low", "moderate", "high", "stub"] = "low"
+    elif distance_from_boundary < 0.25:
+        confidence = "moderate"
+    else:
+        confidence = "high"
+
+    if probability >= 0.5:
+        label: Literal[
+            "predicted_hr_deficient",
+            "predicted_hr_proficient",
+            "uncertain",
+            "model_not_trained",
+        ] = "predicted_hr_deficient"
+    else:
+        label = "predicted_hr_proficient"
+    if confidence == "low":
+        label = "uncertain"
+
+    return RadiogenomicsPrediction(
+        metadata=metadata,
+        hrd_probability=probability,
+        label=label,
+        confidence=confidence,
+        caveats=[
+            "Research prototype — not FDA-cleared, not a medical device.",
+            "Model trained on 135 TCGA-OV patients with mean cross-validation "
+            "AUROC 0.62 (v0 baseline). Real-world accuracy on out-of-distribution "
+            "scanners may be lower; expect a drop of up to 0.15 AUROC across "
+            "scanner manufacturers.",
+            "This prediction alone is not sufficient for a clinical decision. "
+            "Definitive HRD status still requires tumor sequencing (Myriad "
+            "myChoice, FoundationOne CDx, or equivalent CLIA-certified assay).",
+            "Do not use for any clinical decision without oncologist review.",
+        ],
+    )

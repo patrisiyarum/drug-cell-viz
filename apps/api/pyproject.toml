@@ -76,6 +76,13 @@ pipeline = [
 modal = [
     "modal>=0.64",
 ]
+# Enable this extra when a trained radiogenomics checkpoint is deployed
+# (MODEL_WEIGHTS_PATH set to a .pt file produced by the hrd-radiogenomics
+# pipeline). Without it, services.radiogenomics stays on the stub path.
+radiogenomics = [
+    "torch>=2.2",
+    "monai>=1.3",
+]
 
 [build-system]
 requires = ["hatchling"]

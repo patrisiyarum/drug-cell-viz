@@ -41,6 +41,13 @@ results/
 !apps/api/src/api/ml/data/
 !apps/api/src/api/ml/data/**
 
+# Radiogenomics model checkpoints — pulled from hrd-radiogenomics research
+# runs via scp, not committed. Deploy sets RADIOGENOMICS_MODEL_WEIGHTS to
+# the mounted/copied location.
+apps/api/models/
+*.pt
+*.pth
+
 # TypeScript incremental build artifact
 tsconfig.tsbuildinfo
 **/tsconfig.tsbuildinfo
