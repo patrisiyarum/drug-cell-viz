@@ -62,6 +62,9 @@ export function HrdCard({
     !!drugId &&
     PARP_INHIBITOR_DRUG_IDS.has(drugId);
   // Compact "not applicable" rendering for patients without HR-panel variants.
+  // When a CT fixture is provided we still render the radiogenomics panel so
+  // the patient sees that even a germline-clean result doesn't rule out an
+  // HR-deficient tumor (somatic BRCA loss, BRCA1 promoter methylation, etc.).
   if (hrd.label === "indeterminate" && hrd.evidence.length === 0) {
     return (
       <section className="rounded-2xl border border-border bg-muted/40 p-4 md:p-5 text-sm space-y-4">
@@ -83,6 +86,35 @@ export function HrdCard({
             Invitae) covers thousands more variants.
           </p>
         </div>
+
+        {ctScanUrl ? (
+          <div className="rounded-lg border-l-4 border-primary/60 bg-primary/5 p-3 md:p-4 space-y-2">
+            <div className="flex items-center gap-2 text-xs uppercase tracking-wide font-semibold text-primary">
+              <Info className="w-3.5 h-3.5" aria-hidden />
+              A clean germline panel doesn&apos;t rule out HRD
+            </div>
+            <p className="text-sm leading-relaxed">
+              Roughly one in three HR-deficient ovarian tumors have no inherited
+              BRCA-family mutation. The deficiency comes from somatic events
+              the germline panel can&apos;t see: BRCA1 promoter methylation, a
+              somatic BRCA1/2 hit acquired by the tumor, or loss of another HR
+              gene. Imaging-based HRD prediction is a non-invasive pre-screen
+              that can flag these patients so their oncologist knows to order
+              tumor sequencing.
+            </p>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Run the radiogenomics model below on {ctScanLabel ?? "this CT scan"}
+              {" "}to see what it predicts.
+            </p>
+          </div>
+        ) : null}
+
+        {ctScanUrl ? (
+          <RadiogenomicsCtPanel
+            ctScanUrl={ctScanUrl}
+            ctScanLabel={ctScanLabel ?? "this CT scan"}
+          />
+        ) : null}
       </section>
     );
   }

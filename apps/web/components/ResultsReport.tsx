@@ -32,15 +32,29 @@ interface Props {
 }
 
 export function ResultsReport({ result, patient, onSwitchDrug }: Props) {
-  // Per-patient radiogenomics fixture wiring. Only Maya ships with a synthetic
-  // pelvic CT right now; other patients fall through with ctScanUrl=null and
-  // the CT run panel + slideshow slide are hidden.
+  // Per-patient radiogenomics fixture wiring. Maya ships with a pelvic CT
+  // that supports her HR-deficient germline call; Diana ships with one that
+  // demonstrates the somatic-HRD story (germline panel clean, CT still
+  // flagged HRD by the model — the pre-screen use case). Patients without
+  // a fixture pass null and the CT slide + run panel are hidden.
   const ctScanUrl =
-    patient?.id === "maya" ? "/fixtures/maya_ct_scan.nii.gz" : null;
+    patient?.id === "maya"
+      ? "/fixtures/maya_ct_scan.nii.gz"
+      : patient?.id === "diana"
+        ? "/fixtures/diana_ct_scan.nii.gz"
+        : null;
   const ctScanPngUrl =
-    patient?.id === "maya" ? "/fixtures/maya_ct_axial.png" : null;
+    patient?.id === "maya"
+      ? "/fixtures/maya_ct_axial.png"
+      : patient?.id === "diana"
+        ? "/fixtures/diana_ct_axial.png"
+        : null;
   const ctScanLabel =
-    patient?.id === "maya" ? "Maya's pelvic CT" : null;
+    patient?.id === "maya"
+      ? "Maya's pelvic CT"
+      : patient?.id === "diana"
+        ? "Diana's staging CT"
+        : null;
 
   return (
     <div className="space-y-6">
