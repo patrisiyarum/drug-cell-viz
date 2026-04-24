@@ -212,13 +212,14 @@ function StructureSlideshow({
     return s.label;
   };
 
-  // Fixed min-height on the slideshow frame + a flex-1 content area so the
-  // page layout stays static when the user cycles through slides. Without
-  // this, headers + viewers of different heights (3D viewer ~440px,
-  // off-target ~360px, CT image variable) caused the right column to shift
-  // up and down on every click.
+  // Hard-pinned height on the slideshow frame so cycling slides never shifts
+  // the column. min-h on its own wasn't enough: the main drug-target slide's
+  // header is taller than the others by ~16-20px (help button + longer
+  // intro paragraph), so the frame still grew when scrolling to it. A hard
+  // h-[680px] plus overflow-hidden means any inner variance is absorbed
+  // internally, not reflowed to the rest of the page.
   return (
-    <div className="bg-card rounded-2xl overflow-hidden border flex flex-col min-h-[620px]">
+    <div className="bg-card rounded-2xl overflow-hidden border flex flex-col h-[680px]">
       {total > 1 ? (
         <div className="flex items-center gap-2 px-3 py-2 border-b bg-muted/40">
           <button
@@ -244,7 +245,7 @@ function StructureSlideshow({
           </button>
         </div>
       ) : null}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col overflow-hidden">
         {slide.kind === "main" ? (
           <MolecularCard result={result} hideOuterBorder />
         ) : slide.kind === "off_target" ? (

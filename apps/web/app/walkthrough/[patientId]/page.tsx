@@ -18,7 +18,6 @@ import type {
   Catalog,
   DemoPatient,
   Demos,
-  VariantInput,
 } from "@/lib/bc-types";
 
 /**
@@ -96,11 +95,6 @@ export default function WalkthroughPage() {
   // "uploaded"; if there's no matching fixture we fall back to a short
   // "catalog-only" explanation in that step.
   const fixtureFor = FIXTURES[patientId ?? ""];
-
-  const preset: VariantInput[] = patient.variant_ids.map((vid) => ({
-    catalog_id: vid,
-    zygosity: patient.zygosity_overrides[vid] ?? "heterozygous",
-  }));
 
   return (
     <div className="flex flex-col bg-white min-h-screen">
@@ -268,21 +262,6 @@ export default function WalkthroughPage() {
               ))}
             </ul>
           </StepCard>
-
-          {/* Preset inputs — logged for transparency so a reader can replay
-              the analysis via curl against the API with the same payload. */}
-          <details className="text-xs text-muted-foreground">
-            <summary className="cursor-pointer hover:text-foreground">
-              Exact API payload used for this walkthrough
-            </summary>
-            <pre className="mt-2 bg-slate-50 border rounded-lg p-3 text-[11px] font-mono overflow-x-auto">
-              {JSON.stringify(
-                { drug_id: patient.drug_id, variants: preset },
-                null,
-                2,
-              )}
-            </pre>
-          </details>
         </div>
 
         {/* Full report — no step header; the report cards speak for themselves. */}
