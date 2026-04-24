@@ -100,9 +100,22 @@ def load_volume(raw: bytes, filename: str) -> tuple[np.ndarray, VolumeMetadata]:
 def _load_nifti(raw: bytes) -> tuple[np.ndarray, VolumeMetadata]:
     # Deferred import so the API module stays importable without nibabel
     # installed (e.g. in the web-only unit tests).
+    import gzip
+
     import nibabel as nib
 
-    with io.BytesIO(raw) as fh:
+    # `Nifti1Image.from_bytes` doesn't auto-decompress the gzip wrapper
+    # that every `.nii.gz` ships with, so we peel it first if present.
+    # Magic bytes 0x1f 0x8b mark the gzip stream start; uncompressed
+    # `.nii` starts with a 348-byte int header.
+    payload = raw
+    if len(raw) >= 2 and raw[0] == 0x1F and raw[1] == 0x8B:
+        try:
+            payload = gzip.decompress(raw)
+        except Exception as exc:
+            raise RadiogenomicsError(f"could not decompress NIfTI gzip: {exc}") from exc
+
+    with io.BytesIO(payload) as fh:
         try:
             img = nib.Nifti1Image.from_bytes(fh.read())
         except Exception as exc:

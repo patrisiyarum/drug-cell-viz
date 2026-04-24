@@ -32,6 +32,16 @@ interface Props {
 }
 
 export function ResultsReport({ result, patient, onSwitchDrug }: Props) {
+  // Per-patient radiogenomics fixture wiring. Only Maya ships with a synthetic
+  // pelvic CT right now; other patients fall through with ctScanUrl=null and
+  // the CT run panel + slideshow slide are hidden.
+  const ctScanUrl =
+    patient?.id === "maya" ? "/fixtures/maya_ct_scan.nii.gz" : null;
+  const ctScanPngUrl =
+    patient?.id === "maya" ? "/fixtures/maya_ct_axial.png" : null;
+  const ctScanLabel =
+    patient?.id === "maya" ? "Maya's pelvic CT" : null;
+
   return (
     <div className="space-y-6">
       {result.relevance_warning ? (
@@ -45,9 +55,21 @@ export function ResultsReport({ result, patient, onSwitchDrug }: Props) {
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 md:gap-8">
         <div className="lg:col-span-2 space-y-6 md:space-y-8">
           <div className="no-print">
-            <StructureSlideshow result={result} />
+            <StructureSlideshow
+              result={result}
+              ctScanPngUrl={ctScanPngUrl}
+              ctScanLabel={ctScanLabel}
+            />
           </div>
-          <WhatYouSeeCard result={result} />
+          {/* Drug-match verdict lives under the 3D view so the "HR-deficient
+              → olaparib is explicitly endorsed" narrative reads
+              top-to-bottom on the left column. */}
+          {result.current_drug_assessment ? (
+            <CurrentDrugAssessmentCard
+              assessment={result.current_drug_assessment}
+              onSwitchDrug={onSwitchDrug}
+            />
+          ) : null}
         </div>
 
         <div className="lg:col-span-3 space-y-6 md:space-y-8">
@@ -56,15 +78,8 @@ export function ResultsReport({ result, patient, onSwitchDrug }: Props) {
               hrd={result.hrd}
               classifiableBrca1Variants={result.classifiable_brca1_variants}
               drugId={result.drug_id}
-              currentDrugAssessment={result.current_drug_assessment}
-              onSwitchDrug={onSwitchDrug}
-            />
-          ) : result.current_drug_assessment ? (
-            // If we didn't render an HRD card (unusual — compute_hrd always
-            // emits one), surface the drug verdict on its own as a fallback.
-            <CurrentDrugAssessmentCard
-              assessment={result.current_drug_assessment}
-              onSwitchDrug={onSwitchDrug}
+              ctScanUrl={ctScanUrl}
+              ctScanLabel={ctScanLabel}
             />
           ) : null}
 
@@ -132,49 +147,56 @@ function RelevanceWarning({
   );
 }
 
-/** Tight explainer card paired with the 3D viewer: what the ribbons and
- * highlights in the image mean, in one short paragraph. */
-function WhatYouSeeCard({ result }: { result: AnalysisResult }) {
-  return (
-    <div className="bg-card border rounded-2xl p-5 space-y-2">
-      <h3 className="text-sm font-semibold">What you see in the 3D view</h3>
-      <p className="text-sm leading-relaxed text-muted-foreground">
-        {result.plain_language.what_you_see}
-      </p>
-    </div>
-  );
-}
-
 /**
- * Single 3D card that shows the drug-on-target view and every per-variant
- * protein view in one place, swappable with arrows at the top. The card
- * size + chrome stay constant so the left column doesn't reflow when the
- * patient flips between views.
+ * Single 3D card that shows the drug-on-target view, every per-variant
+ * protein view, and (when available) the patient's preoperative CT scan
+ * in one place, swappable with arrows at the top. The card size + chrome
+ * stay constant so the left column doesn't reflow when flipping views.
  */
-function StructureSlideshow({ result }: { result: AnalysisResult }) {
-  // Each "slide" is either the docked drug + target (kind="main") or a
+function StructureSlideshow({
+  result,
+  ctScanPngUrl,
+  ctScanLabel,
+}: {
+  result: AnalysisResult;
+  ctScanPngUrl?: string | null;
+  ctScanLabel?: string | null;
+}) {
+  // Each "slide" is either the docked drug + target (kind="main"), a
   // single off-target protein with its variant residue highlighted
-  // (kind="off_target"). We include unavailable-structure entries too so
-  // BRCA2 surfaces a helpful placeholder instead of being silently dropped.
+  // (kind="off_target"), or the patient's CT scan (kind="ct_scan") — the
+  // radiogenomics input that the HrdCard's "Run model" button scores.
   type Slide =
     | { kind: "main" }
-    | { kind: "off_target"; structure: OffTargetStructure };
+    | { kind: "off_target"; structure: OffTargetStructure }
+    | { kind: "ct_scan"; imageUrl: string; label: string };
 
   const slides: Slide[] = [
     { kind: "main" },
     ...(result.off_target_structures ?? []).map(
       (s): Slide => ({ kind: "off_target", structure: s }),
     ),
+    ...(ctScanPngUrl
+      ? [
+          {
+            kind: "ct_scan" as const,
+            imageUrl: ctScanPngUrl,
+            label: ctScanLabel ?? "Preoperative CT",
+          },
+        ]
+      : []),
   ];
   const [idx, setIdx] = useState(0);
   const clamped = Math.min(idx, slides.length - 1);
   const slide = slides[clamped];
   const total = slides.length;
 
-  const titleFor = (s: Slide) =>
-    s.kind === "main"
-      ? `${result.drug_name} binding to ${result.target_gene}`
-      : `Your variant on ${s.structure.gene_symbol}`;
+  const titleFor = (s: Slide) => {
+    if (s.kind === "main")
+      return `${result.drug_name} binding to ${result.target_gene}`;
+    if (s.kind === "off_target") return `Your variant on ${s.structure.gene_symbol}`;
+    return s.label;
+  };
 
   return (
     <div className="bg-card rounded-2xl overflow-hidden border">
@@ -205,11 +227,13 @@ function StructureSlideshow({ result }: { result: AnalysisResult }) {
       ) : null}
       {slide.kind === "main" ? (
         <MolecularCard result={result} hideOuterBorder />
-      ) : (
+      ) : slide.kind === "off_target" ? (
         <OffTargetStructureCard
           structure={slide.structure}
           hideOuterBorder
         />
+      ) : (
+        <CtScanSlide imageUrl={slide.imageUrl} label={slide.label} />
       )}
       {total > 1 ? (
         <div className="flex justify-center gap-1.5 pb-3 pt-1">
@@ -226,6 +250,36 @@ function StructureSlideshow({ result }: { result: AnalysisResult }) {
           ))}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * Patient's preoperative CT scan shown as a single axial slice. This is
+ * the image the radiogenomics model scores from; actually running the
+ * model is the job of the `RadiogenomicsCtPanel` button inside the
+ * HrdCard on the right column, so the two reinforce each other
+ * visually — "this is the picture, here's what the model says about it".
+ */
+function CtScanSlide({ imageUrl, label }: { imageUrl: string; label: string }) {
+  return (
+    <div>
+      <div className="p-5 border-b space-y-1">
+        <h3 className="text-lg font-semibold">{label}</h3>
+        <p className="text-sm text-muted-foreground leading-relaxed">
+          Axial slice through the pelvis. Demo fixture only — not a real patient
+          scan. Run the radiogenomics model from the HR-deficiency panel to see
+          what it predicts from this image.
+        </p>
+      </div>
+      <div className="relative bg-black flex items-center justify-center min-h-[360px] md:min-h-[440px]">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={imageUrl}
+          alt={label}
+          className="max-h-[440px] w-auto object-contain"
+        />
+      </div>
     </div>
   );
 }

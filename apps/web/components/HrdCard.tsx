@@ -1,12 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { FlaskConical, Activity, Clock } from "lucide-react";
+import { FlaskConical, Activity, Clock, Info, Scan } from "lucide-react";
 
 import { Brca1FunctionCard } from "./Brca1FunctionCard";
-import { CurrentDrugAssessmentCard } from "./CurrentDrugAssessmentCard";
-import { api, type HrdScarResponse } from "@/lib/api";
-import type { CurrentDrugAssessment, HrdResult } from "@/lib/bc-types";
+import { api, type CtScanResponse, type HrdScarResponse } from "@/lib/api";
+import type { HrdResult } from "@/lib/bc-types";
 
 // Drugs in the PARP-inhibitor class. When the patient's current drug is one
 // of these AND they have HR-deficient evidence, we surface a reversion-
@@ -29,13 +28,15 @@ interface Props {
   /** Drug id the patient is on — used to gate the PARPi reversion callout. */
   drugId?: string | null;
   /**
-   * Current-drug assessment. When provided, renders as a nested subsection
-   * inside the HRD card so the HR-deficiency call and the drug-match
-   * verdict read as one connected story instead of two separate cards.
+   * Path to a CT-scan fixture (served from /public) or an upload URL that
+   * the radiogenomics model should score. When provided, renders a
+   * "Run radiogenomics model" panel inside this card so the CT prediction
+   * lives with the other HR-deficiency evidence. null = no CT available
+   * for this patient → panel hidden.
    */
-  currentDrugAssessment?: CurrentDrugAssessment | null;
-  /** Passed through to the nested CurrentDrugAssessmentCard. */
-  onSwitchDrug?: (drugId: string) => void;
+  ctScanUrl?: string | null;
+  /** Display label for the CT fixture, e.g. "Maya's pelvic CT". */
+  ctScanLabel?: string | null;
 }
 
 /**
@@ -53,8 +54,8 @@ export function HrdCard({
   hrd,
   classifiableBrca1Variants = [],
   drugId = null,
-  currentDrugAssessment = null,
-  onSwitchDrug,
+  ctScanUrl = null,
+  ctScanLabel = null,
 }: Props) {
   const showReversionCallout =
     hrd.label === "hr_deficient" &&
@@ -82,14 +83,6 @@ export function HrdCard({
             Invitae) covers thousands more variants.
           </p>
         </div>
-        {currentDrugAssessment ? (
-          <div className="rounded-lg border bg-white/70 p-3 md:p-4">
-            <CurrentDrugAssessmentCard
-              assessment={currentDrugAssessment}
-              onSwitchDrug={onSwitchDrug}
-            />
-          </div>
-        ) : null}
       </section>
     );
   }
@@ -123,13 +116,14 @@ export function HrdCard({
       className={`rounded-2xl border p-5 md:p-6 space-y-4 ${style.bg} ${style.border}`}
     >
       <header className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <div className="text-xs uppercase tracking-wide text-muted-foreground mb-1">
-            HR-deficiency result
+        <div className="flex items-center gap-2 flex-wrap">
+          <div>
+            <div className="text-xs uppercase tracking-wide text-muted-foreground mb-1">
+              HR-deficiency result
+            </div>
+            <h3 className="text-lg md:text-xl font-semibold">{style.label}</h3>
           </div>
-          <h3 className="text-lg md:text-xl font-semibold">
-            {style.label}
-          </h3>
+          {showReversionCallout ? <ReversionAwarenessInfo /> : null}
         </div>
         <div className={`px-3 py-1.5 rounded-full text-sm font-semibold ${style.pill}`}>
           Score {hrd.score} / 100
@@ -137,13 +131,6 @@ export function HrdCard({
       </header>
 
       <p className="text-sm leading-relaxed">{style.oneLiner}</p>
-
-      <div className="rounded-lg bg-white/60 border p-3 text-sm leading-relaxed">
-        <div className="text-[11px] font-medium uppercase text-muted-foreground mb-1">
-          PARP inhibitors
-        </div>
-        {hrd.parp_inhibitor_context}
-      </div>
 
       {(() => {
         // When the inline BRCA1 classifier card is being offered, drop the
@@ -177,20 +164,16 @@ export function HrdCard({
         );
       })()}
 
-      {currentDrugAssessment ? (
-        <div className="rounded-lg border bg-white/70 p-3 md:p-4">
-          <CurrentDrugAssessmentCard
-            assessment={currentDrugAssessment}
-            onSwitchDrug={onSwitchDrug}
-          />
-        </div>
-      ) : null}
-
       {classifiableBrca1Variants.length > 0 ? (
         <Brca1PredictionNested hgvsList={classifiableBrca1Variants} />
       ) : null}
 
-      {showReversionCallout ? <ReversionAwarenessNote /> : null}
+      {ctScanUrl ? (
+        <RadiogenomicsCtPanel
+          ctScanUrl={ctScanUrl}
+          ctScanLabel={ctScanLabel ?? "this CT scan"}
+        />
+      ) : null}
 
       <TumorScarPanel />
 
@@ -351,46 +334,193 @@ function LabeledNumber({
 }
 
 /**
- * A short patient-facing note that reminds someone on a PARP inhibitor that
- * the HR-deficient call is *historical* — it reflects the tumor's past HR
- * state, not its current state. Roughly 20-30% of PARPi-responding BRCA-
- * associated tumors develop reversion mutations under drug pressure that
- * quietly restore HR repair; scar-based scores (including ours) don't see
- * that because the scars are permanent records.
+ * Collapsible info button that surfaces the reversion-awareness caveat for
+ * PARPi patients. Click the ⓘ icon next to the HR-deficient pill and a
+ * popover shows why a scar-based HRD call is *historical* — ~20-30% of
+ * PARPi-responding BRCA tumors develop reversion mutations under drug
+ * pressure that restore HR repair, which scar scores can't see.
  *
  * Based on Silverman & Schonhoft, Clin Cancer Res 2025 (Repare TRESR/ATTACC
  * trials, 44% reversions in BRCA-associated post-PARPi tumors) and the
  * PRIMA / PAOLA-1 observation that ~30% of Myriad-HRD-positive patients fail
- * PARPi. The right follow-up is serial ctDNA monitoring for in-frame-
+ * PARPi. The right follow-up is serial ctDNA monitoring for in-frame
  * restoring indels near the pathogenic locus.
  */
-function ReversionAwarenessNote() {
+function ReversionAwarenessInfo() {
+  const [open, setOpen] = useState(false);
   return (
-    <div className="rounded-lg border-l-4 border-warning bg-warning/10 p-3 md:p-4 text-sm space-y-2">
-      <div className="flex items-center gap-2 text-xs uppercase tracking-wide font-semibold text-warning">
-        <Clock className="w-3.5 h-3.5" aria-hidden />
+    <div className="relative inline-flex">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="inline-flex items-center gap-1 rounded-full border border-warning/40 bg-warning/10 px-2 py-0.5 text-[11px] font-medium text-warning hover:bg-warning/20 transition-colors"
+        aria-label="Reversion awareness info"
+        aria-expanded={open}
+      >
+        <Info className="w-3 h-3" aria-hidden />
         Reversion awareness
+      </button>
+      {open ? (
+        <div className="absolute left-0 top-7 z-30 w-80 rounded-xl border border-warning/40 bg-white p-4 shadow-xl text-sm leading-relaxed space-y-2">
+          <div className="flex items-center gap-2 text-xs uppercase tracking-wide font-semibold text-warning">
+            <Clock className="w-3.5 h-3.5" aria-hidden />
+            Reversion awareness
+          </div>
+          <p>
+            An HR-deficient result is <strong>historical</strong>. It describes
+            the tumor&apos;s past DNA-repair state, not its current one.
+          </p>
+          <p className="text-muted-foreground">
+            Roughly 20 to 30 percent of BRCA-associated tumors treated with a
+            PARP inhibitor develop small &ldquo;reversion&rdquo; mutations that
+            quietly restore the broken BRCA gene under drug pressure. When that
+            happens the tumor is no longer HR-deficient, but the scar-based
+            score on this card won&apos;t reflect it (the scars are permanent).
+          </p>
+          <p className="text-muted-foreground">
+            If you&apos;ve been on a PARP inhibitor for six months or more, ask
+            your oncologist about <strong>serial ctDNA testing</strong> to catch
+            reversion mutations early.
+          </p>
+          <p className="text-xs text-muted-foreground pt-2 border-t border-warning/20">
+            Source: Silverman &amp; Schonhoft, Clinical Cancer Research, 2025
+            (Repare TRESR / ATTACC trials).
+          </p>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * Nested "run the radiogenomics CT model" panel.
+ *
+ * For demo patients who ship with a fixture CT (currently just Maya's
+ * synthetic ovarian-pelvis scan), this panel pulls the NIfTI, uploads it
+ * to /api/radiogenomics/upload, and renders the model's HR-deficiency
+ * probability + caveats inline. The scan itself is shown in the left-column
+ * 3D slideshow; this panel is the "run the model" action, paired with
+ * the other HR-deficiency evidence.
+ */
+function RadiogenomicsCtPanel({
+  ctScanUrl,
+  ctScanLabel,
+}: {
+  ctScanUrl: string;
+  ctScanLabel: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [running, setRunning] = useState(false);
+  const [result, setResult] = useState<CtScanResponse | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function onRun() {
+    setErr(null);
+    setRunning(true);
+    try {
+      const resp = await fetch(ctScanUrl);
+      if (!resp.ok) throw new Error(`could not fetch ${ctScanUrl}`);
+      const blob = await resp.blob();
+      const name = ctScanUrl.split("/").pop() ?? "ct_scan.nii.gz";
+      const file = new File([blob], name, { type: "application/gzip" });
+      const out = await api.uploadCtScan(file);
+      setResult(out);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "CT upload failed");
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  if (!open) {
+    return (
+      <div className="rounded-lg border-2 border-dashed border-muted-foreground/30 p-3 flex items-center gap-3 flex-wrap">
+        <Scan className="w-4 h-4 text-primary flex-shrink-0" aria-hidden />
+        <div className="flex-1 min-w-[180px] text-sm">
+          <div className="font-medium">
+            Predict HRD from {ctScanLabel}{" "}
+            <span className="text-xs font-normal text-muted-foreground">
+              · experimental radiogenomics ML
+            </span>
+          </div>
+          <div className="text-xs text-muted-foreground">
+            Runs a 3D CNN trained on TCGA-OV paired imaging + genomics to
+            estimate HR-deficiency from the preoperative CT alone.
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="inline-flex items-center justify-center rounded-lg bg-primary text-primary-foreground px-3 py-1.5 text-xs font-medium hover:opacity-90 transition-opacity"
+        >
+          Show run panel
+        </button>
       </div>
-      <p className="leading-relaxed">
-        An HR-deficient result is <strong>historical</strong>. It describes
-        the tumor&apos;s past DNA-repair state, not its current one.
-      </p>
-      <p className="leading-relaxed text-muted-foreground">
-        Roughly 20 to 30 percent of BRCA-associated tumors treated with a
-        PARP inhibitor develop small &ldquo;reversion&rdquo; mutations that
-        quietly restore the broken BRCA gene under drug pressure. When that
-        happens the tumor is no longer HR-deficient, but the scar-based
-        score on this card won&apos;t reflect it (the scars are permanent).
-      </p>
-      <p className="leading-relaxed text-muted-foreground">
-        If you&apos;ve been on a PARP inhibitor for six months or more, ask
-        your oncologist about <strong>serial ctDNA testing</strong> to catch
-        reversion mutations early.
-      </p>
-      <p className="text-xs text-muted-foreground pt-1 border-t border-warning/20">
-        Source: Silverman &amp; Schonhoft, Clinical Cancer Research, 2025
-        (Repare TRESR / ATTACC trials).
-      </p>
+    );
+  }
+
+  return (
+    <div className="rounded-lg border bg-white/60 p-3 md:p-4 space-y-3">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted-foreground font-semibold">
+          <Scan className="w-3.5 h-3.5 text-primary" aria-hidden />
+          Radiogenomics CT model · experimental
+        </div>
+        <button
+          type="button"
+          onClick={onRun}
+          disabled={running}
+          className="inline-flex items-center justify-center rounded-lg bg-primary text-primary-foreground px-3 py-1.5 text-xs font-medium hover:opacity-90 disabled:opacity-50 transition-opacity"
+        >
+          {running ? "Running…" : result ? "Re-run" : "Run radiogenomics model"}
+        </button>
+      </div>
+
+      {err ? <p className="text-xs text-red-600">{err}</p> : null}
+
+      {result ? (
+        <CtPredictionResult result={result} />
+      ) : (
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          The model consumes a preoperative CT (DICOM or NIfTI) and returns a
+          scalar probability of HR-deficiency. Results are research-only.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function CtPredictionResult({ result }: { result: CtScanResponse }) {
+  const labelText: Record<CtScanResponse["label"], string> = {
+    predicted_hr_deficient: "Predicted HR-deficient",
+    predicted_hr_proficient: "Predicted HR-proficient",
+    uncertain: "Uncertain",
+    model_not_trained: "Model not wired (stub)",
+  };
+  const labelStyles: Record<CtScanResponse["label"], string> = {
+    predicted_hr_deficient: "text-success bg-success/10 border-success/40",
+    predicted_hr_proficient: "text-muted-foreground bg-muted border-border",
+    uncertain: "text-warning bg-warning/10 border-warning/40",
+    model_not_trained: "text-muted-foreground bg-muted border-border",
+  };
+  return (
+    <div className={`rounded-lg border p-3 space-y-2 text-sm ${labelStyles[result.label]}`}>
+      <div className="flex items-baseline justify-between gap-2 flex-wrap">
+        <span className="font-semibold">{labelText[result.label]}</span>
+        <span className="text-xs">
+          p(HRD) = {result.hrd_probability.toFixed(2)} · {result.confidence} confidence
+        </span>
+      </div>
+      <details className="text-xs">
+        <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
+          Model caveats ({result.caveats.length})
+        </summary>
+        <ul className="mt-2 space-y-1 list-disc pl-5 text-muted-foreground">
+          {result.caveats.map((c, i) => (
+            <li key={i}>{c}</li>
+          ))}
+        </ul>
+      </details>
     </div>
   );
 }
