@@ -282,6 +282,10 @@ _MODEL_BACKBONE: str = "monai_densenet"
 # Cached loaded model + device so we don't rebuild + reload on every request.
 _MODEL = None  # type: ignore[assignment]
 _MODEL_DEVICE: str | None = None
+# Cached training-time metadata from the checkpoint's model_card so caveats
+# and the UI's confidence banner can cite the actual held-out AUROC of the
+# loaded fold, not a hardcoded number.
+_MODEL_CARD: dict = {}
 
 
 def infer_hrd(preprocessed: np.ndarray, metadata: VolumeMetadata) -> RadiogenomicsPrediction:
@@ -306,11 +310,12 @@ def set_model_weights(path: Path, backbone: str = "monai_densenet") -> None:
     Invalidates the cached model if the path/backbone changes so the next
     request rebuilds.
     """
-    global _MODEL_WEIGHTS, _MODEL_BACKBONE, _MODEL, _MODEL_DEVICE
+    global _MODEL_WEIGHTS, _MODEL_BACKBONE, _MODEL, _MODEL_DEVICE, _MODEL_CARD
     _MODEL_WEIGHTS = path
     _MODEL_BACKBONE = backbone
     _MODEL = None
     _MODEL_DEVICE = None
+    _MODEL_CARD = {}
     logger.info("radiogenomics model weights set to %s (backbone=%s)", path, backbone)
 
 
@@ -372,7 +377,7 @@ def _load_or_get_model():
     Initial request takes ~2-4 s (torch import + architecture build + state
     load); subsequent requests reuse the cached module.
     """
-    global _MODEL, _MODEL_DEVICE
+    global _MODEL, _MODEL_DEVICE, _MODEL_CARD
     if _MODEL is not None:
         return _MODEL, _MODEL_DEVICE
 
@@ -419,10 +424,10 @@ def _load_or_get_model():
     model.to(device).eval()
     _MODEL = model
     _MODEL_DEVICE = device
-    card = ckpt.get("model_card", {})
+    _MODEL_CARD = dict(ckpt.get("model_card", {}))
     logger.info(
         "radiogenomics model loaded (backbone=%s, device=%s, val_auroc=%s, fold=%s)",
-        backbone, device, card.get("val_auroc"), card.get("fold"),
+        backbone, device, _MODEL_CARD.get("val_auroc"), _MODEL_CARD.get("fold"),
     )
     return _MODEL, _MODEL_DEVICE
 
@@ -472,6 +477,25 @@ def _real_prediction(
     if confidence == "low":
         label = "uncertain"
 
+    # Cite the actual held-out AUROC of the loaded fold (dynamic so the
+    # caveat tracks v0 vs v1 without a code change). Falls back to a generic
+    # warning if the checkpoint was saved without model_card metrics.
+    fold_auroc = _MODEL_CARD.get("val_auroc")
+    backbone_name = _MODEL_CARD.get("backbone", _MODEL_BACKBONE)
+    if fold_auroc is not None:
+        perf_caveat = (
+            f"Model trained on 135 TCGA-OV patients; this fold had held-out "
+            f"validation AUROC {float(fold_auroc):.2f} ({backbone_name} backbone). "
+            "Real-world accuracy on out-of-distribution scanners may be lower — "
+            "expect a drop of up to 0.15 AUROC across scanner manufacturers."
+        )
+    else:
+        perf_caveat = (
+            "Model trained on 135 TCGA-OV patients. Real-world accuracy on "
+            "out-of-distribution scanners may be lower — expect a drop of up "
+            "to 0.15 AUROC across scanner manufacturers."
+        )
+
     return RadiogenomicsPrediction(
         metadata=metadata,
         hrd_probability=probability,
@@ -479,10 +503,7 @@ def _real_prediction(
         confidence=confidence,
         caveats=[
             "Research prototype — not FDA-cleared, not a medical device.",
-            "Model trained on 135 TCGA-OV patients with mean cross-validation "
-            "AUROC 0.62 (v0 baseline). Real-world accuracy on out-of-distribution "
-            "scanners may be lower; expect a drop of up to 0.15 AUROC across "
-            "scanner manufacturers.",
+            perf_caveat,
             "This prediction alone is not sufficient for a clinical decision. "
             "Definitive HRD status still requires tumor sequencing (Myriad "
             "myChoice, FoundationOne CDx, or equivalent CLIA-certified assay).",
