@@ -198,8 +198,13 @@ function StructureSlideshow({
     return s.label;
   };
 
+  // Fixed min-height on the slideshow frame + a flex-1 content area so the
+  // page layout stays static when the user cycles through slides. Without
+  // this, headers + viewers of different heights (3D viewer ~440px,
+  // off-target ~360px, CT image variable) caused the right column to shift
+  // up and down on every click.
   return (
-    <div className="bg-card rounded-2xl overflow-hidden border">
+    <div className="bg-card rounded-2xl overflow-hidden border flex flex-col min-h-[620px]">
       {total > 1 ? (
         <div className="flex items-center gap-2 px-3 py-2 border-b bg-muted/40">
           <button
@@ -225,16 +230,18 @@ function StructureSlideshow({
           </button>
         </div>
       ) : null}
-      {slide.kind === "main" ? (
-        <MolecularCard result={result} hideOuterBorder />
-      ) : slide.kind === "off_target" ? (
-        <OffTargetStructureCard
-          structure={slide.structure}
-          hideOuterBorder
-        />
-      ) : (
-        <CtScanSlide imageUrl={slide.imageUrl} label={slide.label} />
-      )}
+      <div className="flex-1 flex flex-col">
+        {slide.kind === "main" ? (
+          <MolecularCard result={result} hideOuterBorder />
+        ) : slide.kind === "off_target" ? (
+          <OffTargetStructureCard
+            structure={slide.structure}
+            hideOuterBorder
+          />
+        ) : (
+          <CtScanSlide imageUrl={slide.imageUrl} label={slide.label} />
+        )}
+      </div>
       {total > 1 ? (
         <div className="flex justify-center gap-1.5 pb-3 pt-1">
           {slides.map((_, i) => (
@@ -263,7 +270,7 @@ function StructureSlideshow({
  */
 function CtScanSlide({ imageUrl, label }: { imageUrl: string; label: string }) {
   return (
-    <div>
+    <div className="flex-1 flex flex-col">
       <div className="p-5 border-b space-y-1">
         <h3 className="text-lg font-semibold">{label}</h3>
         <p className="text-sm text-muted-foreground leading-relaxed">
@@ -272,7 +279,7 @@ function CtScanSlide({ imageUrl, label }: { imageUrl: string; label: string }) {
           what it predicts from this image.
         </p>
       </div>
-      <div className="relative bg-black flex items-center justify-center min-h-[360px] md:min-h-[440px]">
+      <div className="relative bg-black flex-1 flex items-center justify-center min-h-[440px]">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={imageUrl}
@@ -299,7 +306,7 @@ function MolecularCard({
   }));
 
   const shell = hideOuterBorder
-    ? "bg-transparent"
+    ? "bg-transparent flex-1 flex flex-col"
     : "bg-card rounded-2xl overflow-hidden border";
 
   return (
@@ -386,7 +393,7 @@ function OffTargetStructureCard({
     );
 
   const shell = hideOuterBorder
-    ? "bg-transparent"
+    ? "bg-transparent flex-1 flex flex-col"
     : "bg-card rounded-2xl overflow-hidden border";
 
   return (
@@ -402,7 +409,7 @@ function OffTargetStructureCard({
           {structure.unavailable_reason}
         </div>
       ) : (
-        <div className="relative h-[360px]">
+        <div className="relative h-[440px]">
           <MolViewer
             key={structure.protein_pdb_url}
             pdbUrl={structure.protein_pdb_url}
