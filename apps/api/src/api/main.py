@@ -25,6 +25,7 @@ from api.routes import (
     jobs_router,
     molecular_router,
     morphology_router,
+    radiogenomics_router,
     screening_router,
     vcf_router,
 )
@@ -70,6 +71,7 @@ app.include_router(brca2_router)
 app.include_router(vcf_router)
 app.include_router(screening_router)
 app.include_router(hrd_scars_router)
+app.include_router(radiogenomics_router)
 
 # Serve local blob storage so the frontend can fetch PDBs and thumbnails by URL.
 if settings.storage_backend == "local":

@@ -11,7 +11,7 @@ import {
   useBCAnalysisForm,
 } from "@/components/BCAnalysisForm";
 import { ResultsReport } from "@/components/ResultsReport";
-import { api } from "@/lib/api";
+import { api, type CtScanResponse } from "@/lib/api";
 import type { AnalysisResult, VariantInput, Zygosity } from "@/lib/bc-types";
 import {
   countSupportedSnps,
@@ -136,6 +136,12 @@ export default function BuildPage() {
                 onResult={(r, drugId) => {
                   setResult(r);
                   setLastContext({ drugId, variants: [] });
+                }}
+              />
+              <CtScanUploadCard
+                onResult={() => {
+                  /* the card renders its own preprocessing summary inline;
+                     no state needs to flow up to the analyze call */
                 }}
               />
             </div>
@@ -477,5 +483,165 @@ function VcfUploadCard({
         ) : null}
       </div>
     </details>
+  );
+}
+
+/**
+ * Radiogenomics CT-scan uploader — accepts a DICOM zip or NIfTI file, sends
+ * it to /api/radiogenomics/upload, and renders the preprocessing metadata
+ * and HRD probability that comes back. The backend's current prediction is
+ * a placeholder (`label: "model_not_trained"`); this card surfaces the
+ * preprocessing output honestly and tags the prediction as research-tier
+ * via the response's `model_available` flag.
+ */
+function CtScanUploadCard({
+  onResult,
+}: {
+  onResult: (r: CtScanResponse) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [parsing, setParsing] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [dragActive, setDragActive] = useState(false);
+  const [lastResp, setLastResp] = useState<CtScanResponse | null>(null);
+
+  async function onFile(ev: React.ChangeEvent<HTMLInputElement>) {
+    const file = ev.target.files?.[0];
+    if (!file) return;
+    setParsing(true);
+    setErr(null);
+    try {
+      const resp = await api.uploadCtScan(file);
+      setLastResp(resp);
+      onResult(resp);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "CT upload failed");
+    } finally {
+      setParsing(false);
+    }
+  }
+
+  return (
+    <details className="bg-card border rounded-2xl overflow-hidden group">
+      <summary className="cursor-pointer px-5 md:px-6 py-4 flex items-center gap-3 hover:bg-muted/40 transition-colors list-none">
+        <span className="w-6 h-6 rounded-full bg-primary text-primary-foreground text-xs font-semibold flex items-center justify-center flex-shrink-0">
+          C
+        </span>
+        <div className="flex-1">
+          <div className="font-medium flex items-center gap-2">
+            CT scan
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 uppercase tracking-wide font-semibold">
+              research
+            </span>
+          </div>
+        </div>
+        <span className="text-xs text-muted-foreground group-open:hidden">
+          (optional)
+        </span>
+      </summary>
+      <div className="border-t px-5 md:px-6 py-5 space-y-4">
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          Upload a DICOM .zip or NIfTI (.nii / .nii.gz) of the tumor CT. The
+          preprocessing pipeline crops to tumor, resamples to 96³ voxels,
+          and HU-windows to soft-tissue range. The HRD prediction is a
+          research-tier placeholder until the model in the{" "}
+          <a
+            href="https://github.com/patrisiyarum/hrd-radiogenomics"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary hover:underline"
+          >
+            hrd-radiogenomics
+          </a>{" "}
+          repo finishes training.
+        </p>
+        <input
+          ref={inputRef}
+          type="file"
+          accept=".zip,.nii,.nii.gz,application/zip,application/gzip"
+          onChange={onFile}
+          className="sr-only"
+        />
+        <div
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragActive(true);
+          }}
+          onDragLeave={() => setDragActive(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDragActive(false);
+            if (e.dataTransfer.files[0] && inputRef.current) {
+              inputRef.current.files = e.dataTransfer.files;
+              inputRef.current.dispatchEvent(new Event("change", { bubbles: true }));
+            }
+          }}
+          className={`border-2 border-dashed rounded-xl p-5 text-center transition-colors ${
+            dragActive ? "border-primary bg-primary/5" : "border-slate-300 bg-slate-50"
+          }`}
+        >
+          <FileUp className="w-7 h-7 mx-auto text-muted-foreground" aria-hidden />
+          <p className="mt-2 text-sm text-gray-700">
+            Drop your CT scan here, or click to pick it.
+          </p>
+          <button
+            type="button"
+            onClick={() => inputRef.current?.click()}
+            disabled={parsing}
+            className="mt-3 px-5 py-2 rounded-lg bg-primary text-primary-foreground text-sm hover:opacity-90 disabled:opacity-50"
+          >
+            {parsing ? "Analyzing…" : "Choose file"}
+          </button>
+        </div>
+
+        {err ? <div className="text-sm text-red-600">{err}</div> : null}
+        {lastResp ? <CtScanSummary resp={lastResp} /> : null}
+      </div>
+    </details>
+  );
+}
+
+function CtScanSummary({ resp }: { resp: CtScanResponse }) {
+  const shape = resp.metadata.original_shape.join(" × ");
+  const pct = Math.round(resp.hrd_probability * 100);
+  return (
+    <div className="space-y-3">
+      <div className="text-sm bg-green-50 border border-green-200 rounded-lg p-3 space-y-1">
+        <div>
+          <span className="font-medium">Preprocessed.</span>{" "}
+          <span className="text-muted-foreground">
+            Loaded a {resp.metadata.modality} volume of shape{" "}
+            <span className="font-mono">{shape}</span> voxels and resampled to{" "}
+            <span className="font-mono">
+              {resp.metadata.target_shape.join(" × ")}
+            </span>{" "}
+            for the CNN input.
+          </span>
+        </div>
+      </div>
+      {resp.model_available ? (
+        <div className="rounded-lg border p-3 text-sm space-y-1 bg-white">
+          <div className="font-medium">HRD prediction</div>
+          <div className="text-muted-foreground">
+            {pct}% probability of HR-deficiency ({resp.label.replace(/_/g, " ")};{" "}
+            {resp.confidence} confidence).
+          </div>
+        </div>
+      ) : (
+        <div
+          className="rounded-lg border p-3 text-xs space-y-2"
+          style={{ background: "rgba(217,119,6,0.08)", borderColor: "rgba(217,119,6,0.35)" }}
+        >
+          <div className="font-medium text-sm text-foreground">
+            Research prototype — model not yet trained
+          </div>
+          <ul className="list-disc pl-5 space-y-0.5 text-muted-foreground">
+            {resp.caveats.map((c, i) => (
+              <li key={i}>{c}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
   );
 }

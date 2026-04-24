@@ -49,6 +49,17 @@ dependencies = [
     "opentelemetry-instrumentation-fastapi>=0.48b0",
     "opentelemetry-instrumentation-sqlalchemy>=0.48b0",
     "opentelemetry-exporter-otlp-proto-http>=1.27",
+    # Radiogenomics: CT-scan ingestion + preprocessing. pydicom parses DICOM
+    # series (the standard hospital export), nibabel parses NIfTI (the
+    # research-standard volumetric format), scipy.ndimage handles the
+    # resample-to-fixed-shape step. We intentionally do NOT pull MONAI or
+    # torch here; heavyweight 3D-transform stack + the trained model live in
+    # the hrd-radiogenomics research repo. This backend only does enough to
+    # show the preprocessed volume and forward it to whichever inference
+    # endpoint is currently wired up.
+    "pydicom>=2.4",
+    "nibabel>=5.2",
+    "scipy>=1.13",
 ]
 
 [project.optional-dependencies]

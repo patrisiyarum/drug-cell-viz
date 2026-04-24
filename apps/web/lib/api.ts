@@ -52,6 +52,27 @@ export const api = {
       `/api/brca1/exchange?hgvs_protein=${encodeURIComponent(hgvsProtein)}`,
     ),
 
+  /**
+   * Upload a CT scan (DICOM zip or NIfTI) for radiogenomics HRD prediction.
+   *
+   * The preprocessing pipeline (load → crop → resample to 96^3 → HU-window
+   * normalise) is real; the prediction is a stub until the trained model
+   * from the hrd-radiogenomics research repo is wired up. `model_available`
+   * on the response tells the UI which banner to show.
+   */
+  uploadCtScan: async (file: File): Promise<CtScanResponse> => {
+    const form = new FormData();
+    form.append("file", file);
+    const res = await fetch(`${API_BASE}/api/radiogenomics/upload`, {
+      method: "POST",
+      body: form,
+    });
+    if (!res.ok) {
+      throw new Error(`CT upload failed: ${res.status} ${await res.text()}`);
+    }
+    return (await res.json()) as CtScanResponse;
+  },
+
   // VCF: multipart upload → backend runs cyvcf2 ingest + full drug analysis.
   // Returns the same AnalysisResult shape used everywhere else, plus VCF-level
   // metadata (record counts, detected sample, per-catalog-variant detections).
@@ -153,6 +174,21 @@ export interface CandidateScore {
   heavy_atom_count: number;
   pose_pdb_url: string | null;
   rank: number;
+}
+
+export interface CtScanResponse {
+  metadata: {
+    modality: string;
+    original_shape: [number, number, number];
+    original_spacing_mm: [number, number, number];
+    target_shape: [number, number, number];
+    hu_window: [number, number];
+  };
+  hrd_probability: number;
+  label: "predicted_hr_deficient" | "predicted_hr_proficient" | "uncertain" | "model_not_trained";
+  confidence: "low" | "moderate" | "high" | "stub";
+  caveats: string[];
+  model_available: boolean;
 }
 
 export interface HrdScarResponse {
