@@ -30,24 +30,37 @@ interface Props {
   // Called when the user clicks a suggested-drug chip. /build wires this to
   // re-run the analysis with the new drug; the demo route just ignores it.
   onSwitchDrug?: (drugId: string) => void;
+  /**
+   * /build users who uploaded their own CT scan can pass a blob URL here so
+   * the slideshow + radiogenomics panel target the user-uploaded volume
+   * instead of (or in addition to) the per-patient demo fixture.
+   */
+  uploadedCtScanUrl?: string | null;
 }
 
-export function ResultsReport({ result, patient, onSwitchDrug }: Props) {
+export function ResultsReport({
+  result,
+  patient,
+  onSwitchDrug,
+  uploadedCtScanUrl,
+}: Props) {
   // Per-patient radiogenomics fixture wiring. Maya ships with a pelvic CT
   // that supports her HR-deficient germline call; Diana ships with one that
   // demonstrates the somatic-HRD story (germline panel clean, CT still
   // flagged HRD by the model — the pre-screen use case). Patients without
-  // a fixture pass null and the CT slide + run panel are hidden. The same
-  // NIfTI URL feeds both the volumetric viewer in the slideshow and the
-  // radiogenomics run panel in the HrdCard.
+  // a fixture pass null. /build users who uploaded their own CT scan
+  // override either lookup with the blob URL of their upload so the
+  // radiogenomics panel + volume viewer target their scan.
   const ctScanUrl =
-    patient?.id === "maya"
+    uploadedCtScanUrl ??
+    (patient?.id === "maya"
       ? "/fixtures/maya_ct_scan.nii.gz"
       : patient?.id === "diana"
         ? "/fixtures/diana_ct_scan.nii.gz"
-        : null;
-  const ctScanLabel =
-    patient?.id === "maya"
+        : null);
+  const ctScanLabel = uploadedCtScanUrl
+    ? "Your uploaded CT"
+    : patient?.id === "maya"
       ? "Maya's pelvic CT"
       : patient?.id === "diana"
         ? "Diana's staging CT"

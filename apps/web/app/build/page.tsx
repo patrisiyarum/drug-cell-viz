@@ -37,6 +37,21 @@ export default function BuildPage() {
   const [uploadDetected, setUploadDetected] = useState<SelectedVariant[]>([]);
   const [parseResult, setParseResult] = useState<ParseResult | null>(null);
 
+  // CT-scan upload state. We hold the File itself (not just the response) so
+  // we can hand a blob URL to the results page; the HrdCard's
+  // RadiogenomicsCtPanel re-fetches that URL when the user clicks Run.
+  const [ctFile, setCtFile] = useState<File | null>(null);
+  const [ctBlobUrl, setCtBlobUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!ctFile) {
+      setCtBlobUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(ctFile);
+    setCtBlobUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [ctFile]);
+
   // Auto-scroll into view when a new result lands so the user doesn't have to
   // hunt for the report after clicking "Show me how this affects me."
   const resultsRef = useRef<HTMLDivElement | null>(null);
@@ -48,7 +63,8 @@ export default function BuildPage() {
 
   // Shared form state: DrugPickerSection and VariantPickerSection both read and
   // write this. Lives at the page level so the Step 1 and Step 3 cards stay in
-  // sync.
+  // sync. Empty variants are allowed when a CT scan has been uploaded —
+  // the radiogenomics panel on the results page is the input in that case.
   const form = useBCAnalysisForm({
     onResult: (r, ctx) => {
       setResult(r);
@@ -56,6 +72,7 @@ export default function BuildPage() {
     },
     drugIdOverride: lastContext?.drugId,
     presetVariants: uploadDetected,
+    allowEmptyVariants: !!ctFile,
   });
 
   async function onSwitchDrug(newDrugId: string) {
@@ -139,9 +156,13 @@ export default function BuildPage() {
                 }}
               />
               <CtScanUploadCard
-                onResult={() => {
-                  /* the card renders its own preprocessing summary inline;
-                     no state needs to flow up to the analyze call */
+                onResult={(_resp, file) => {
+                  // Capture the File so the results page can hand the same
+                  // scan to the radiogenomics panel via a blob URL. The
+                  // CtScanUploadCard already showed a "uploaded" green card
+                  // inline; the actual prediction surfaces on the results
+                  // page after the user clicks "Show me how this affects me."
+                  setCtFile(file);
                 }}
               />
             </div>
@@ -171,7 +192,11 @@ export default function BuildPage() {
             ref={resultsRef}
             className="max-w-[1600px] mx-auto mt-10 md:mt-14 scroll-mt-6"
           >
-            <ResultsReport result={result} onSwitchDrug={onSwitchDrug} />
+            <ResultsReport
+              result={result}
+              onSwitchDrug={onSwitchDrug}
+              uploadedCtScanUrl={ctBlobUrl}
+            />
           </div>
         ) : null}
       </main>
@@ -497,7 +522,7 @@ function VcfUploadCard({
 function CtScanUploadCard({
   onResult,
 }: {
-  onResult: (r: CtScanResponse) => void;
+  onResult: (r: CtScanResponse, file: File) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [parsing, setParsing] = useState(false);
@@ -513,7 +538,7 @@ function CtScanUploadCard({
     try {
       const resp = await api.uploadCtScan(file);
       setLastResp(resp);
-      onResult(resp);
+      onResult(resp, file);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "CT upload failed");
     } finally {
@@ -598,28 +623,16 @@ function CtScanUploadCard({
   );
 }
 
-function CtScanSummary({ resp }: { resp: CtScanResponse }) {
-  // Upload card only confirms the file was preprocessed cleanly. The HRD
-  // prediction surfaces later, alongside the variant analysis, in the
-  // ResultsReport's HrdCard radiogenomics panel — duplicating it here was
-  // confusing because the upload step came before the model run from the
-  // user's point of view.
-  const shape = resp.metadata.original_shape.join(" × ");
+function CtScanSummary({ resp: _resp }: { resp: CtScanResponse }) {
+  // Upload card only confirms the file landed cleanly. The HRD prediction
+  // surfaces in the ResultsReport's HrdCard radiogenomics panel after the
+  // user runs the analysis.
   return (
-    <div className="space-y-3">
-      <div className="text-sm bg-green-50 border border-green-200 rounded-lg p-3 space-y-1">
-        <div>
-          <span className="font-medium">Preprocessed.</span>{" "}
-          <span className="text-muted-foreground">
-            Loaded a {resp.metadata.modality} volume of shape{" "}
-            <span className="font-mono">{shape}</span> voxels and resampled to{" "}
-            <span className="font-mono">
-              {resp.metadata.target_shape.join(" × ")}
-            </span>{" "}
-            for the CNN input.
-          </span>
-        </div>
-      </div>
+    <div className="text-sm bg-green-50 border border-green-200 rounded-lg p-3">
+      <span className="font-medium">CT scan uploaded.</span>{" "}
+      <span className="text-muted-foreground">
+        Ready for the radiogenomics model.
+      </span>
     </div>
   );
 }

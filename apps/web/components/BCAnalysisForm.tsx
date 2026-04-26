@@ -66,6 +66,13 @@ interface HookProps {
   ) => void;
   drugIdOverride?: string;
   presetVariants?: SelectedVariant[];
+  /**
+   * When true, the submit guard against an empty variants list is dropped.
+   * Caller passes this in when they've satisfied the "need at least one
+   * input" rule via a different surface — e.g. an uploaded CT scan that
+   * the radiogenomics panel will score on the results page.
+   */
+  allowEmptyVariants?: boolean;
 }
 
 export interface BCAnalysisFormHandle {
@@ -89,6 +96,7 @@ export function useBCAnalysisForm({
   onResult,
   drugIdOverride,
   presetVariants,
+  allowEmptyVariants,
 }: HookProps): BCAnalysisFormHandle {
   const { data: catalog, isLoading } = useQuery<Catalog>({
     queryKey: ["bc-catalog"],
@@ -152,9 +160,9 @@ export function useBCAnalysisForm({
           zygosity: "heterozygous",
         });
       }
-      if (variants.length === 0) {
+      if (variants.length === 0 && !allowEmptyVariants) {
         throw new Error(
-          "pick at least one variant from the catalog or paste a sequence",
+          "pick at least one variant, paste a sequence, or upload a CT scan",
         );
       }
       const result = await api.analyze({ drug_id: drugId, variants });
