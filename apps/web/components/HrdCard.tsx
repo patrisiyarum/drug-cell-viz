@@ -125,14 +125,11 @@ export function HrdCard({
       className={`rounded-2xl border p-5 md:p-6 space-y-4 ${style.bg} ${style.border}`}
     >
       <header className="flex items-start justify-between gap-4 flex-wrap">
-        <div className="flex items-center gap-2 flex-wrap">
-          <div>
-            <div className="text-xs uppercase tracking-wide text-muted-foreground mb-1">
-              HR-deficiency result
-            </div>
-            <h3 className="text-lg md:text-xl font-semibold">{style.label}</h3>
+        <div>
+          <div className="text-xs uppercase tracking-wide text-muted-foreground mb-1">
+            HR-deficiency result
           </div>
-          {showReversionCallout ? <ReversionAwarenessInfo /> : null}
+          <h3 className="text-lg md:text-xl font-semibold">{style.label}</h3>
         </div>
         <div className={`px-3 py-1.5 rounded-full text-sm font-semibold ${style.pill}`}>
           Score {hrd.score} / 100
@@ -140,6 +137,12 @@ export function HrdCard({
       </header>
 
       <p className="text-sm leading-relaxed">{style.oneLiner}</p>
+
+      {showReversionCallout ? (
+        <div>
+          <ReversionAwarenessInfo />
+        </div>
+      ) : null}
 
       {(() => {
         // When the inline BRCA1 classifier card is being offered, drop the

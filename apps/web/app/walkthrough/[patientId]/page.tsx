@@ -117,14 +117,35 @@ export default function WalkthroughPage() {
 
       <main className="flex-1 px-6 md:px-8 py-10">
         <div className="max-w-3xl mx-auto space-y-6">
-          <div className="space-y-2">
+          <div className="space-y-3">
             <h1 className="text-3xl md:text-4xl font-semibold">
               {patient.persona_name}&apos;s walkthrough
             </h1>
-            <p className="text-muted-foreground text-base leading-relaxed">
-              {patient.persona_name}, {patient.age}. Starting{" "}
-              {patient.medication_display} for {patient.indication}. Below is
-              every step the app would take with this data already supplied.
+            <div className="rounded-xl border bg-card p-4 md:p-5 grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+              <div>
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-0.5">
+                  Patient
+                </div>
+                <div>
+                  {patient.persona_name}, {patient.age}
+                </div>
+              </div>
+              <div>
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-0.5">
+                  Diagnosis
+                </div>
+                <div>{patient.indication}</div>
+              </div>
+              <div>
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-0.5">
+                  Current medication
+                </div>
+                <div>{patient.medication_display}</div>
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Every step below is pre-filled with this patient&apos;s data so you
+              can see what the app would output.
             </p>
           </div>
 
@@ -277,6 +298,23 @@ export default function WalkthroughPage() {
             <ResultsReport result={analysis.data} patient={patient} />
           ) : null}
         </div>
+
+        {/* Closing CTA — sits centered at the bottom of the screen so a
+            visitor who's just read through one of the patient stories has
+            a one-click jump to running the same flow against their own
+            variants on /build. Keyed to whether the analysis actually
+            rendered so the button doesn't appear during loading or on
+            patient-not-found pages. */}
+        {analysis.data ? (
+          <div className="mt-10 mb-6 flex justify-center no-print">
+            <Link
+              href="/build"
+              className="inline-flex items-center gap-2 rounded-xl bg-primary text-primary-foreground px-6 py-3 text-base font-semibold shadow-md hover:opacity-90 transition-opacity"
+            >
+              Show me how this affects me
+            </Link>
+          </div>
+        ) : null}
       </main>
     </div>
   );

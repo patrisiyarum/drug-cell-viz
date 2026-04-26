@@ -555,7 +555,7 @@ function CtScanUploadCard({
         <input
           ref={inputRef}
           type="file"
-          accept=".zip,.nii,.nii.gz,application/zip,application/gzip"
+          accept=".zip,.nii,.nii.gz,.tcia,application/zip,application/gzip"
           onChange={onFile}
           className="sr-only"
         />

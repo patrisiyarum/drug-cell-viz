@@ -89,12 +89,95 @@ def load_volume(raw: bytes, filename: str) -> tuple[np.ndarray, VolumeMetadata]:
     name = filename.lower()
     if name.endswith((".nii", ".nii.gz")):
         return _load_nifti(raw)
+    if name.endswith(".tcia"):
+        # NBIA Data Retriever manifest. Tiny text file that lists series UIDs;
+        # we fetch the first series from TCIA on the user's behalf so the
+        # uploaded manifest "just works" instead of failing with a confusing
+        # "what's this?" error.
+        return _load_tcia_manifest(raw)
     if name.endswith(".zip") or _looks_like_dicom(raw):
         return _load_dicom_zip(raw)
     raise RadiogenomicsError(
         f"unsupported upload format: {filename!r}. Expected .nii, .nii.gz, "
-        "or a .zip containing a DICOM series."
+        ".tcia (NBIA manifest), or a .zip containing a DICOM series."
     )
+
+
+def _load_tcia_manifest(raw: bytes) -> tuple[np.ndarray, VolumeMetadata]:
+    """Parse an NBIA `.tcia` manifest, fetch the first series from TCIA,
+    and load it as if the user had uploaded the DICOM zip directly.
+
+    Manifest format (NBIA Data Retriever v3):
+        downloadServerUrl=...
+        includeAnnotation=true
+        databasketId=...
+        manifestVersion=3.0
+        ListOfSeriesToDownload=
+        1.2.840.113619.2.55.3.604688119.971.1259600000.123
+        1.2.840.113619.2.55.3.604688119.971.1259600000.456
+        ...
+
+    We fetch the first series by default (a typical TCGA-OV manifest
+    bundles axial + scout; the axial is usually first and is what the
+    radiogenomics model wants anyway). If the manifest is malformed or
+    TCIA returns nothing, raise a RadiogenomicsError with a clear message.
+    """
+    import requests
+
+    try:
+        text = raw.decode("utf-8", errors="replace")
+    except Exception as exc:
+        raise RadiogenomicsError(f"could not decode .tcia manifest: {exc}") from exc
+
+    # Walk past the header into the series-UID block.
+    series_uids: list[str] = []
+    in_block = False
+    for line in text.splitlines():
+        s = line.strip()
+        if not s:
+            continue
+        if s.lower().startswith("listofseriestodownload"):
+            in_block = True
+            continue
+        if in_block and "=" not in s:
+            series_uids.append(s)
+
+    if not series_uids:
+        raise RadiogenomicsError(
+            "no series UIDs found in the .tcia manifest. Try downloading the "
+            "actual DICOM .zip from TCIA's download options instead of the "
+            "NBIA Data Retriever manifest."
+        )
+
+    series_uid = series_uids[0]
+    logger.info(
+        "loading .tcia manifest with %d series; fetching the first one (%s) "
+        "from TCIA", len(series_uids), series_uid,
+    )
+
+    tcia_endpoint = (
+        "https://services.cancerimagingarchive.net/nbia-api/services/v1/getImage"
+    )
+    try:
+        resp = requests.get(
+            tcia_endpoint, params={"SeriesInstanceUID": series_uid},
+            stream=True, timeout=(15, 600),
+        )
+        resp.raise_for_status()
+        zip_bytes = resp.content
+    except Exception as exc:
+        raise RadiogenomicsError(
+            f"could not fetch series {series_uid} from TCIA: {exc}",
+        ) from exc
+
+    if len(zip_bytes) < 1024:
+        raise RadiogenomicsError(
+            f"TCIA returned an unexpectedly small payload ({len(zip_bytes)} "
+            "bytes) for the series in this manifest. Try downloading the "
+            "DICOM .zip directly from TCIA's web UI."
+        )
+
+    return _load_dicom_zip(zip_bytes)
 
 
 def _load_nifti(raw: bytes) -> tuple[np.ndarray, VolumeMetadata]:
