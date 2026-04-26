@@ -287,10 +287,12 @@ function CtScanSlide({ volumeUrl, label }: { volumeUrl: string; label: string })
       <div className="p-5 border-b space-y-1">
         <h3 className="text-lg font-semibold">{label}</h3>
         <p className="text-sm text-muted-foreground leading-relaxed">
-          Full 3D volume render of the pelvis. Click and drag to rotate, scroll
-          to zoom. Demo fixture only, not a real patient scan. Run the
-          radiogenomics model from the HR-deficiency panel to see what it
-          predicts from this volume.
+          Real preoperative abdominal/pelvic CT from a TCGA-OV patient,
+          published under CC-BY 3.0 by The Cancer Imaging Archive (Holback
+          et al. 2016). Three orthogonal slices plus a 3D render. Click any
+          panel and use the crosshair to navigate. Run the radiogenomics
+          model from the HR-deficiency panel to see what it predicts from
+          this volume.
         </p>
       </div>
       <div className="relative bg-black flex-1 min-h-[440px]">
