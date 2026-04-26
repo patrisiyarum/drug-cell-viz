@@ -122,6 +122,7 @@ export default function WalkthroughPage() {
             <h1 className="text-3xl md:text-4xl font-semibold">
               {patient.persona_name}&apos;s walkthrough
             </h1>
+            <div className="h-px max-w-md bg-gradient-to-r from-amber-400/40 via-amber-500 to-amber-400/40" />
             <div className="rounded-xl border bg-card p-4 md:p-5 grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
               <div>
                 <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-0.5">

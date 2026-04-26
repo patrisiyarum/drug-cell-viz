@@ -37,6 +37,24 @@ export default function BuildPage() {
   const [uploadDetected, setUploadDetected] = useState<SelectedVariant[]>([]);
   const [parseResult, setParseResult] = useState<ParseResult | null>(null);
 
+  // Which patient profile do uploads on this page get attached to? Defaults
+  // to Maya for the demo. When a user uploads a CT scan / VCF / 23andMe
+  // file, we POST it to /api/patients/<id>/uploads so the file shows up in
+  // the patient's Records section. localStorage persists the choice
+  // across page reloads.
+  const [patientId, setPatientId] = useState<string>("maya");
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const stored = window.localStorage.getItem("kintsugi:patientId");
+      if (stored) setPatientId(stored);
+    }
+  }, []);
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("kintsugi:patientId", patientId);
+    }
+  }, [patientId]);
+
   // CT-scan upload state. We hold the File so the HrdCard's
   // RadiogenomicsCtPanel can re-POST it to the upload endpoint when the
   // user clicks Run. We also store the backend-served NIfTI URL of the
@@ -116,26 +134,41 @@ export default function BuildPage() {
   return (
     <div className="flex flex-col bg-white">
       <header className="border-b bg-card">
-        <div className="max-w-[1600px] mx-auto px-6 md:px-8 py-5 flex items-center justify-between gap-4">
+        <div className="max-w-[1600px] mx-auto px-6 md:px-8 py-5 flex items-center justify-between gap-4 flex-wrap">
           <Link href="/" className="text-muted-foreground hover:text-foreground text-sm">
             ← Back
           </Link>
-          <Link href="/demo" className="text-sm text-primary hover:underline">
-            Or pick a preset case
-          </Link>
+          <div className="flex items-center gap-3 text-sm">
+            <label className="text-muted-foreground">Save to profile:</label>
+            <select
+              value={patientId}
+              onChange={(e) => setPatientId(e.target.value)}
+              className="border rounded-md px-2 py-1 bg-white"
+            >
+              <option value="maya">Maya</option>
+              <option value="diana">Diana</option>
+              <option value="priya">Priya</option>
+            </select>
+            <Link
+              href={`/patient/${patientId}`}
+              className="text-primary hover:underline"
+            >
+              Open profile
+            </Link>
+          </div>
         </div>
       </header>
 
       <main className="flex-1 px-6 md:px-8 py-12 md:py-16">
         <div className="max-w-3xl mx-auto space-y-6">
-          <div className="space-y-2 text-center">
+          <div className="space-y-3 text-center">
             <h1 className="text-3xl md:text-4xl font-semibold">
               See how a medication might affect you
             </h1>
-            <p className="text-muted-foreground text-base leading-relaxed max-w-2xl mx-auto">
-              Pick a drug, optionally upload your data, and select the
-              variants you know about. Your report will appear below.
+            <p className="text-muted-foreground text-sm">
+              Pick a drug. Upload data or pick variants. Get a report.
             </p>
+            <div className="h-px max-w-xs mx-auto bg-gradient-to-r from-transparent via-amber-500 to-transparent" />
           </div>
 
           <StepCard n={1} title="Pick a medication">
@@ -165,13 +198,19 @@ export default function BuildPage() {
               />
               <CtScanUploadCard
                 onResult={(resp, file) => {
-                  // Capture the File so the radiogenomics panel can re-POST
-                  // it on Run. Capture the backend-resolved NIfTI URL so
-                  // niivue can render the same 3D volume the model just
-                  // scored — important for .tcia manifests and DICOM zips
-                  // that niivue can't parse on its own.
                   setCtFile(file);
                   setCtVolumeUrl(resp.volume_url ?? null);
+                  // Persist the upload onto the selected patient's profile
+                  // so it shows up in /patient/<id>'s Records section.
+                  // Fire-and-forget; failure here doesn't block the upload
+                  // path the user just walked through.
+                  const summary = `HRD ${(resp.hrd_probability * 100).toFixed(0)}% (${resp.label.replace(/_/g, " ")}, ${resp.confidence})`;
+                  api.addPatientUpload(patientId, {
+                    upload_kind: "ct_scan",
+                    filename: file.name,
+                    asset_url: resp.volume_url ?? null,
+                    summary_json: summary,
+                  }).catch(() => undefined);
                 }}
               />
             </div>

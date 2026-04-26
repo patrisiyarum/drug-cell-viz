@@ -27,16 +27,12 @@ export default function DemoSelectorPage() {
         <div className="max-w-4xl mx-auto space-y-12">
           <div className="space-y-3 text-center">
             <h1 className="text-3xl md:text-4xl font-semibold">
-              Three examples based on real clinical guidelines.
+              Three examples, real clinical guidelines.
             </h1>
-            <p className="text-lg md:text-xl text-muted-foreground">
-              Select a case to see how genetics affects medication.
+            <p className="text-base text-muted-foreground">
+              Select a case.
             </p>
-            {data?.note ? (
-              <p className="text-xs italic text-muted-foreground max-w-2xl mx-auto pt-2">
-                {data.note}
-              </p>
-            ) : null}
+            <div className="h-px max-w-xs mx-auto bg-gradient-to-r from-transparent via-amber-500 to-transparent mt-4" />
           </div>
 
           {isLoading ? (
