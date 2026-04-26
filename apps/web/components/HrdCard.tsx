@@ -113,6 +113,7 @@ export function HrdCard({
           <RadiogenomicsCtPanel
             ctScanUrl={ctScanUrl}
             ctScanLabel={ctScanLabel ?? "this CT scan"}
+            currentDrugId={drugId}
           />
         ) : null}
       </section>
@@ -437,9 +438,11 @@ function ReversionAwarenessInfo() {
 function RadiogenomicsCtPanel({
   ctScanUrl,
   ctScanLabel,
+  currentDrugId = null,
 }: {
   ctScanUrl: string;
   ctScanLabel: string;
+  currentDrugId?: string | null;
 }) {
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<CtScanResponse | null>(null);
@@ -496,12 +499,20 @@ function RadiogenomicsCtPanel({
       </div>
 
       {err ? <p className="text-xs text-red-600">{err}</p> : null}
-      {result ? <CtPredictionResult result={result} /> : null}
+      {result ? (
+        <CtPredictionResult result={result} currentDrugId={currentDrugId} />
+      ) : null}
     </div>
   );
 }
 
-function CtPredictionResult({ result }: { result: CtScanResponse }) {
+function CtPredictionResult({
+  result,
+  currentDrugId,
+}: {
+  result: CtScanResponse;
+  currentDrugId?: string | null;
+}) {
   const labelText: Record<CtScanResponse["label"], string> = {
     predicted_hr_deficient: "Predicted HR-deficient",
     predicted_hr_proficient: "Predicted HR-proficient",
@@ -514,24 +525,101 @@ function CtPredictionResult({ result }: { result: CtScanResponse }) {
     uncertain: "text-warning bg-warning/10 border-warning/40",
     model_not_trained: "text-muted-foreground bg-muted border-border",
   };
+
+  // Action callout: surface a tumor-sequencing + PARP-inhibitor conversation
+  // ONLY when (a) the model called HR-deficient and (b) the patient isn't
+  // already on a PARP inhibitor. For Maya (already on olaparib) the prompt
+  // would be redundant; for Diana (on tamoxifen with a CYP2D6 PGx issue
+  // that already reduces tamoxifen activity) it's the actually-useful next
+  // clinical step.
+  const showParpCallout =
+    result.label === "predicted_hr_deficient" &&
+    !!currentDrugId &&
+    !PARP_INHIBITOR_DRUG_IDS.has(currentDrugId);
+
   return (
-    <div className={`rounded-lg border p-3 space-y-2 text-sm ${labelStyles[result.label]}`}>
-      <div className="flex items-baseline justify-between gap-2 flex-wrap">
-        <span className="font-semibold">{labelText[result.label]}</span>
-        <span className="text-xs">
-          p(HRD) = {result.hrd_probability.toFixed(2)} · {result.confidence} confidence
-        </span>
+    <div className="space-y-3">
+      <div className={`rounded-lg border p-3 space-y-2 text-sm ${labelStyles[result.label]}`}>
+        <div className="flex items-baseline justify-between gap-2 flex-wrap">
+          <span className="font-semibold">{labelText[result.label]}</span>
+          <span className="text-xs">
+            p(HRD) = {result.hrd_probability.toFixed(2)} · {result.confidence} confidence
+          </span>
+        </div>
+        <details className="text-xs">
+          <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
+            Model caveats ({result.caveats.length})
+          </summary>
+          <ul className="mt-2 space-y-1 list-disc pl-5 text-muted-foreground">
+            {result.caveats.map((c, i) => (
+              <li key={i}>{c}</li>
+            ))}
+          </ul>
+        </details>
       </div>
-      <details className="text-xs">
-        <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
-          Model caveats ({result.caveats.length})
-        </summary>
-        <ul className="mt-2 space-y-1 list-disc pl-5 text-muted-foreground">
-          {result.caveats.map((c, i) => (
-            <li key={i}>{c}</li>
-          ))}
-        </ul>
-      </details>
+
+      {showParpCallout ? (
+        <ParpInhibitorActionCallout currentDrugId={currentDrugId} />
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * Action callout that ties an HR-deficient imaging prediction to the next
+ * clinical step. The radiogenomics model isn't a diagnostic on its own —
+ * it's a pre-screen — so the recommendation chain is:
+ *
+ *   imaging-flagged HRD  ->  tumor sequencing to confirm  ->  if confirmed,
+ *   discuss PARP-inhibitor eligibility (olaparib / niraparib / rucaparib)
+ *   instead of (or in addition to) the current non-PARP regimen.
+ *
+ * For tamoxifen-on-poor-CYP2D6 specifically (Diana's scenario) the
+ * conversation is doubly motivated: the current drug isn't being activated
+ * efficiently AND a new line of HRD-targeted therapy is potentially open.
+ * We surface the tamoxifen-specific framing when we can detect it.
+ */
+function ParpInhibitorActionCallout({ currentDrugId }: { currentDrugId: string }) {
+  const isTamoxifen = currentDrugId === "tamoxifen";
+  return (
+    <div className="rounded-lg border-l-4 border-primary/60 bg-primary/5 p-3 md:p-4 space-y-2 text-sm">
+      <div className="flex items-center gap-2 text-xs uppercase tracking-wide font-semibold text-primary">
+        <Info className="w-3.5 h-3.5" aria-hidden />
+        Worth asking your oncologist about
+      </div>
+      {isTamoxifen ? (
+        <p className="leading-relaxed">
+          Two findings line up here. Your CYP2D6 *4/*4 status is reducing how
+          much active tamoxifen your body produces, AND the imaging-based HRD
+          predictor flagged your tumor as HR-deficient. Together that&apos;s a
+          strong case to discuss the next steps below at your next appointment.
+        </p>
+      ) : (
+        <p className="leading-relaxed">
+          The imaging-based HRD predictor flagged your tumor as HR-deficient
+          even though your germline variants don&apos;t explain it. That&apos;s
+          worth bringing up at your next appointment. Two next steps to discuss:
+        </p>
+      )}
+      <ol className="list-decimal pl-5 space-y-1 leading-relaxed">
+        <li>
+          <strong>Confirm with tumor sequencing.</strong> A Myriad myChoice or
+          FoundationOne CDx test scores HRD directly from the tumor and
+          catches somatic mechanisms (BRCA1 promoter methylation, somatic
+          BRCA loss) that a germline panel can&apos;t see.
+        </li>
+        <li>
+          <strong>If HRD is confirmed, ask about PARP inhibitors.</strong>{" "}
+          Olaparib (Lynparza), niraparib (Zejula), and rucaparib (Rubraca)
+          are FDA-approved for HRD-positive ovarian cancer and may be a
+          better fit than {isTamoxifen ? "tamoxifen alone" : "your current treatment alone"}.
+        </li>
+      </ol>
+      <p className="text-xs text-muted-foreground pt-1">
+        This is research-only software. Confirm any treatment change with
+        your oncologist; PARP-inhibitor eligibility requires a CLIA-certified
+        HRD test.
+      </p>
     </div>
   );
 }
