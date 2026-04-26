@@ -330,23 +330,6 @@ export default function WalkthroughPage() {
             <ResultsReport result={analysis.data} patient={patient} />
           ) : null}
         </div>
-
-        {/* Closing CTA — sits centered at the bottom of the screen so a
-            visitor who's just read through one of the patient stories has
-            a one-click jump to running the same flow against their own
-            variants on /build. Keyed to whether the analysis actually
-            rendered so the button doesn't appear during loading or on
-            patient-not-found pages. */}
-        {analysis.data ? (
-          <div className="mt-10 mb-6 flex justify-center no-print">
-            <Link
-              href="/build"
-              className="inline-flex items-center gap-2 rounded-xl bg-primary text-primary-foreground px-6 py-3 text-base font-semibold shadow-md hover:opacity-90 transition-opacity"
-            >
-              Show me how this affects me
-            </Link>
-          </div>
-        ) : null}
       </main>
     </div>
   );
