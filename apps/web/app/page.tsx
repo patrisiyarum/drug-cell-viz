@@ -33,10 +33,10 @@ export default function LandingPage() {
                 <ArrowRight className="w-4 h-4" />
               </Link>
               <Link
-                href="/patient/maya"
+                href="/demo"
                 className="inline-flex items-center gap-2 px-6 py-3 border border-border bg-white rounded-xl hover:bg-accent transition-colors text-sm"
               >
-                Patient profile
+                Patient profiles
               </Link>
               <Link
                 href="/screen"

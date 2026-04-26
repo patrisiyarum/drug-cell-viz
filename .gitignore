@@ -34,8 +34,9 @@ build/
 *.parquet
 scratch/
 data/
-# Snakemake pipeline outputs + state
-results/
+# Snakemake pipeline outputs + state. Anchored to repo root so the
+# pattern doesn't accidentally match Next.js's app/results/ route.
+/results/
 .snakemake/
 # Exception: bundled ML training data (reproducibility of BRCA1/2 classifiers)
 !apps/api/src/api/ml/data/

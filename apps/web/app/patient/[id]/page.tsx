@@ -46,8 +46,11 @@ export default function PatientProfilePage() {
     <div className="bg-white min-h-screen">
       <header className="border-b">
         <div className="max-w-3xl mx-auto px-6 py-4 flex items-center justify-between">
-          <Link href="/" className="text-sm text-muted-foreground hover:text-foreground">
-            ← Home
+          <Link
+            href="/demo"
+            className="text-sm text-muted-foreground hover:text-foreground"
+          >
+            ← All patients
           </Link>
           <Link
             href={`/walkthrough/${patient.id}`}

@@ -77,9 +77,9 @@ export default function WalkthroughPage() {
   if (!patient) {
     return (
       <CenteredMessage>
-        <p className="text-2xl font-semibold mb-3">Case not found</p>
+        <p className="text-2xl font-semibold mb-3">Patient not found</p>
         <Link href="/demo" className="text-primary hover:underline">
-          Back to cases
+          ← All patients
         </Link>
       </CenteredMessage>
     );
@@ -102,10 +102,10 @@ export default function WalkthroughPage() {
       <header className="border-b bg-card no-print">
         <div className="max-w-[1600px] mx-auto px-6 md:px-8 py-5 flex items-center justify-between gap-4 flex-wrap">
           <Link
-            href="/demo"
+            href={`/patient/${patientId}`}
             className="text-muted-foreground hover:text-foreground transition-colors text-sm"
           >
-            ← Back to cases
+            ← Back to {patient.persona_name}&apos;s profile
           </Link>
           <div className="text-right text-sm">
             <span className="text-muted-foreground">
