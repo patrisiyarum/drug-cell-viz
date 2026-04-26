@@ -37,11 +37,14 @@ export default function BuildPage() {
   const [uploadDetected, setUploadDetected] = useState<SelectedVariant[]>([]);
   const [parseResult, setParseResult] = useState<ParseResult | null>(null);
 
-  // CT-scan upload state. We hold the File itself (not just the response) so
-  // we can hand a blob URL to the results page; the HrdCard's
-  // RadiogenomicsCtPanel re-fetches that URL when the user clicks Run.
+  // CT-scan upload state. We hold the File so the HrdCard's
+  // RadiogenomicsCtPanel can re-POST it to the upload endpoint when the
+  // user clicks Run. We also store the backend-served NIfTI URL of the
+  // resolved volume — niivue uses that for the slideshow viewer because
+  // it can't render .tcia manifests or DICOM zips directly.
   const [ctFile, setCtFile] = useState<File | null>(null);
   const [ctBlobUrl, setCtBlobUrl] = useState<string | null>(null);
+  const [ctVolumeUrl, setCtVolumeUrl] = useState<string | null>(null);
   useEffect(() => {
     if (!ctFile) {
       setCtBlobUrl(null);
@@ -51,6 +54,11 @@ export default function BuildPage() {
     setCtBlobUrl(url);
     return () => URL.revokeObjectURL(url);
   }, [ctFile]);
+
+  // Prefer the backend-resolved NIfTI URL (works for .tcia + DICOM zip
+  // uploads) and fall back to the local blob URL when only a .nii.gz
+  // round-trips cleanly without backend assembly.
+  const ctScanSlideshowUrl = ctVolumeUrl ?? ctBlobUrl;
 
   // Auto-scroll into view when a new result lands so the user doesn't have to
   // hunt for the report after clicking "Show me how this affects me."
@@ -156,13 +164,14 @@ export default function BuildPage() {
                 }}
               />
               <CtScanUploadCard
-                onResult={(_resp, file) => {
-                  // Capture the File so the results page can hand the same
-                  // scan to the radiogenomics panel via a blob URL. The
-                  // CtScanUploadCard already showed a "uploaded" green card
-                  // inline; the actual prediction surfaces on the results
-                  // page after the user clicks "Show me how this affects me."
+                onResult={(resp, file) => {
+                  // Capture the File so the radiogenomics panel can re-POST
+                  // it on Run. Capture the backend-resolved NIfTI URL so
+                  // niivue can render the same 3D volume the model just
+                  // scored — important for .tcia manifests and DICOM zips
+                  // that niivue can't parse on its own.
                   setCtFile(file);
+                  setCtVolumeUrl(resp.volume_url ?? null);
                 }}
               />
             </div>
@@ -195,7 +204,7 @@ export default function BuildPage() {
             <ResultsReport
               result={result}
               onSwitchDrug={onSwitchDrug}
-              uploadedCtScanUrl={ctBlobUrl}
+              uploadedCtScanUrl={ctScanSlideshowUrl}
             />
           </div>
         ) : null}

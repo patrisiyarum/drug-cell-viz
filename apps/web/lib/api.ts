@@ -189,6 +189,11 @@ export interface CtScanResponse {
   confidence: "low" | "moderate" | "high" | "stub";
   caveats: string[];
   model_available: boolean;
+  // Backend-served NIfTI URL for the resolved 3D volume. Set whenever the
+  // server successfully assembled a volume (any input format); the
+  // slideshow viewer prefers this over the original uploaded blob URL
+  // because niivue can render NIfTI but not .tcia manifests or DICOM zips.
+  volume_url?: string | null;
 }
 
 export interface HrdScarResponse {
