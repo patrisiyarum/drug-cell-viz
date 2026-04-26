@@ -64,25 +64,21 @@ export function ResultsReport({ result, patient, onSwitchDrug }: Props) {
       ) : null}
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 md:gap-8">
-        <div className="lg:col-span-2 space-y-6 md:space-y-8">
-          <div className="no-print">
-            <StructureSlideshow
-              result={result}
-              ctScanVolumeUrl={ctScanUrl}
-              ctScanLabel={ctScanLabel}
-            />
-          </div>
-          {/* Drug-match verdict lives under the 3D view so the "HR-deficient
-              → olaparib is explicitly endorsed" narrative reads
-              top-to-bottom on the left column. */}
-          {result.current_drug_assessment ? (
-            <CurrentDrugAssessmentCard
-              assessment={result.current_drug_assessment}
-              onSwitchDrug={onSwitchDrug}
-            />
-          ) : null}
+        {/* Left column: slideshow only — just the visuals (drug on target,
+            patient variant, CT volume render). Everything text-y is on
+            the right. */}
+        <div className="lg:col-span-2 no-print">
+          <StructureSlideshow
+            result={result}
+            ctScanVolumeUrl={ctScanUrl}
+            ctScanLabel={ctScanLabel}
+          />
         </div>
 
+        {/* Right column: HRD result first, then the drug-match verdict
+            ("Olaparib is explicitly endorsed for your variants"), then
+            the doctor-visit PDF as the closing action. Everything reads
+            top-to-bottom in one column. */}
         <div className="lg:col-span-3 space-y-6 md:space-y-8">
           {result.hrd ? (
             <HrdCard
@@ -94,8 +90,13 @@ export function ResultsReport({ result, patient, onSwitchDrug }: Props) {
             />
           ) : null}
 
-          {/* Download card sits at the bottom of the right column as the
-              natural "now take it to your doctor" closing action. */}
+          {result.current_drug_assessment ? (
+            <CurrentDrugAssessmentCard
+              assessment={result.current_drug_assessment}
+              onSwitchDrug={onSwitchDrug}
+            />
+          ) : null}
+
           <div className="no-print">
             <DoctorVisitPdfButton
               result={result}
