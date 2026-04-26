@@ -66,8 +66,8 @@ export function ResultsReport({ result, patient, onSwitchDrug }: Props) {
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 md:gap-8">
         {/* Left column: slideshow only — just the visuals (drug on target,
             patient variant, CT volume render). Everything text-y is on
-            the right. */}
-        <div className="lg:col-span-2 no-print">
+            the right. Now wider so the 3D / CT viewer gets more room. */}
+        <div className="lg:col-span-3 no-print">
           <StructureSlideshow
             result={result}
             ctScanVolumeUrl={ctScanUrl}
@@ -77,9 +77,9 @@ export function ResultsReport({ result, patient, onSwitchDrug }: Props) {
 
         {/* Right column: HRD result first, then the drug-match verdict
             ("Olaparib is explicitly endorsed for your variants"), then
-            the doctor-visit PDF as the closing action. Everything reads
-            top-to-bottom in one column. */}
-        <div className="lg:col-span-3 space-y-6 md:space-y-8">
+            the doctor-visit PDF as the closing action. Narrower so the
+            text cards don't dominate the page. */}
+        <div className="lg:col-span-2 space-y-6 md:space-y-8">
           {result.hrd ? (
             <HrdCard
               hrd={result.hrd}
