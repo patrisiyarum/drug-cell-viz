@@ -599,8 +599,12 @@ function CtScanUploadCard({
 }
 
 function CtScanSummary({ resp }: { resp: CtScanResponse }) {
+  // Upload card only confirms the file was preprocessed cleanly. The HRD
+  // prediction surfaces later, alongside the variant analysis, in the
+  // ResultsReport's HrdCard radiogenomics panel — duplicating it here was
+  // confusing because the upload step came before the model run from the
+  // user's point of view.
   const shape = resp.metadata.original_shape.join(" × ");
-  const pct = Math.round(resp.hrd_probability * 100);
   return (
     <div className="space-y-3">
       <div className="text-sm bg-green-50 border border-green-200 rounded-lg p-3 space-y-1">
@@ -616,29 +620,6 @@ function CtScanSummary({ resp }: { resp: CtScanResponse }) {
           </span>
         </div>
       </div>
-      {resp.model_available ? (
-        <div className="rounded-lg border p-3 text-sm space-y-1 bg-white">
-          <div className="font-medium">HRD prediction</div>
-          <div className="text-muted-foreground">
-            {pct}% probability of HR-deficiency ({resp.label.replace(/_/g, " ")};{" "}
-            {resp.confidence} confidence).
-          </div>
-        </div>
-      ) : (
-        <div
-          className="rounded-lg border p-3 text-xs space-y-2"
-          style={{ background: "rgba(217,119,6,0.08)", borderColor: "rgba(217,119,6,0.35)" }}
-        >
-          <div className="font-medium text-sm text-foreground">
-            Research prototype. Model not yet trained
-          </div>
-          <ul className="list-disc pl-5 space-y-0.5 text-muted-foreground">
-            {resp.caveats.map((c, i) => (
-              <li key={i}>{c}</li>
-            ))}
-          </ul>
-        </div>
-      )}
     </div>
   );
 }
