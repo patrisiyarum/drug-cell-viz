@@ -573,7 +573,7 @@ VARIANTS: dict[str, VariantEntry] = {
     "CYP2D6_star4": {
         "id": "CYP2D6_star4",
         "gene_symbol": "CYP2D6",
-        "name": "CYP2D6*4 (c.1846G>A, splice defect)",
+        "name": "CYP2D6*4",
         "hgvs_protein": None,
         "residue_positions": [],
         "clinical_significance": "drug_response",

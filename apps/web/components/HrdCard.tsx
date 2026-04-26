@@ -79,10 +79,9 @@ export function HrdCard({
             <span className="text-[11px] text-muted-foreground">Score 0 / 100</span>
           </div>
           <p className="text-xs text-muted-foreground leading-relaxed">
-            None of your variants hit the HR-repair panel (BRCA1, BRCA2, PALB2,
-            ATM, RAD51C/D, BRIP1, BARD1, FANC). About one in three HR-deficient
-            ovarian tumors are still HRD via somatic events a germline panel
-            can&apos;t see {ctScanUrl ? "— run the imaging model below to check from that angle." : "— a tumor sequencing test would be the next step."}
+            None of your variants hit the HR-repair panel. About one in three
+            HR-deficient ovarian tumors are still HRD via somatic events a
+            germline panel can&apos;t see{ctScanUrl ? " — run the imaging model below to check from that angle." : " — a tumor sequencing test would be the next step."}
           </p>
         </div>
 
@@ -241,21 +240,17 @@ function TumorScarPanel() {
       <div className="rounded-lg border-2 border-dashed border-muted-foreground/30 p-3 flex items-center gap-3 flex-wrap">
         <Activity className="w-4 h-4 text-primary flex-shrink-0" aria-hidden />
         <div className="flex-1 min-w-[180px] text-sm">
-          <div className="font-medium">
-            Already have a myChoice or FoundationOne CDx report?
-          </div>
+          <div className="font-medium">Tumor scar HRD score</div>
           <div className="text-xs text-muted-foreground mt-0.5">
-            If your doctor ran one of those tumor tests, type in the three
-            scar numbers they printed and we&apos;ll translate them into
-            plain English.
+            myChoice / FoundationOne CDx report numbers
           </div>
         </div>
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="inline-flex items-center justify-center rounded-lg bg-primary text-primary-foreground px-3 py-1.5 text-xs font-medium hover:opacity-90 transition-opacity"
+          className="inline-flex items-center justify-center rounded-lg bg-primary text-primary-foreground px-3 py-1.5 text-xs font-medium hover:opacity-90 transition-opacity min-w-[5rem]"
         >
-          Enter numbers
+          Run
         </button>
       </div>
     );
@@ -450,18 +445,12 @@ function RadiogenomicsCtPanel({
   return (
     <div className="rounded-lg border bg-white/60 p-3 md:p-4 space-y-3">
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div className="flex items-start gap-2 min-w-[180px] flex-1">
-          <Scan className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" aria-hidden />
+        <div className="flex items-center gap-2 min-w-[180px] flex-1">
+          <Scan className="w-4 h-4 text-primary flex-shrink-0" aria-hidden />
           <div className="text-sm">
-            <div className="font-medium">
-              Predict HRD from {ctScanLabel}{" "}
-              <span className="text-xs font-normal text-muted-foreground">
-                · experimental radiogenomics ML
-              </span>
-            </div>
+            <div className="font-medium">CT scan HRD prediction</div>
             <div className="text-xs text-muted-foreground">
-              Runs a 3D CNN trained on TCGA-OV paired imaging + genomics to
-              estimate HR-deficiency from the preoperative CT alone.
+              3D CNN trained on TCGA-OV
             </div>
           </div>
         </div>
@@ -469,9 +458,9 @@ function RadiogenomicsCtPanel({
           type="button"
           onClick={onRun}
           disabled={running}
-          className="inline-flex items-center justify-center rounded-lg bg-primary text-primary-foreground px-3 py-1.5 text-xs font-medium hover:opacity-90 disabled:opacity-50 transition-opacity flex-shrink-0"
+          className="inline-flex items-center justify-center rounded-lg bg-primary text-primary-foreground px-3 py-1.5 text-xs font-medium hover:opacity-90 disabled:opacity-50 transition-opacity flex-shrink-0 min-w-[5rem]"
         >
-          {running ? "Running…" : result ? "Re-run" : "Run radiogenomics model"}
+          {running ? "Running…" : result ? "Re-run" : "Run"}
         </button>
       </div>
 
@@ -600,20 +589,13 @@ function stripGenePrefix(label: string, gene: string): string {
  */
 function Brca1PredictionNested({ hgvsList }: { hgvsList: string[] }) {
   const [open, setOpen] = useState(false);
-  const label =
-    hgvsList.length > 1 ? "these BRCA1 variants" : "this BRCA1 variant";
 
   if (!open) {
     return (
       <div className="rounded-lg border-2 border-dashed border-muted-foreground/30 p-3 flex items-center gap-3 flex-wrap">
         <FlaskConical className="w-4 h-4 text-primary flex-shrink-0" aria-hidden />
         <div className="flex-1 min-w-[180px] text-sm">
-          <div className="font-medium">
-            Predict {label}{" "}
-            <span className="text-xs font-normal text-muted-foreground">
-              · experimental ML
-            </span>
-          </div>
+          <div className="font-medium">BRCA1 variant prediction</div>
           <div className="text-xs text-muted-foreground font-mono truncate">
             {hgvsList.join(", ")}
           </div>
@@ -621,9 +603,9 @@ function Brca1PredictionNested({ hgvsList }: { hgvsList: string[] }) {
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="inline-flex items-center justify-center rounded-lg bg-primary text-primary-foreground px-3 py-1.5 text-xs font-medium hover:opacity-90 transition-opacity"
+          className="inline-flex items-center justify-center rounded-lg bg-primary text-primary-foreground px-3 py-1.5 text-xs font-medium hover:opacity-90 transition-opacity min-w-[5rem]"
         >
-          Run prediction
+          Run
         </button>
       </div>
     );
