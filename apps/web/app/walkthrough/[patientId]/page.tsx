@@ -95,6 +95,7 @@ export default function WalkthroughPage() {
   // "uploaded"; if there's no matching fixture we fall back to a short
   // "catalog-only" explanation in that step.
   const fixtureFor = FIXTURES[patientId ?? ""];
+  const ctFixtureFor = CT_FIXTURES[patientId ?? ""];
 
   return (
     <div className="flex flex-col bg-white min-h-screen">
@@ -174,48 +175,79 @@ export default function WalkthroughPage() {
             n={2}
             title="Upload your data"
             subtitle={
-              fixtureFor
-                ? `Fixture ${fixtureFor.path} loaded for this walkthrough.`
+              fixtureFor || ctFixtureFor
+                ? "Fixtures loaded for this walkthrough."
                 : `Variants for ${patient.persona_name} were selected directly from the curated catalog (no file upload needed).`
             }
             icon={<FileCheck2 className="w-4 h-4" aria-hidden />}
           >
-            {fixtureFor ? (
+            {fixtureFor || ctFixtureFor ? (
               <div className="space-y-3">
-                <div className="flex items-start gap-2 text-sm">
-                  <CheckCircle2
-                    className="w-4 h-4 text-success flex-shrink-0 mt-0.5"
-                    aria-hidden
-                  />
-                  <div className="flex-1">
-                    <span className="font-medium">File read.</span>{" "}
-                    <span className="text-muted-foreground">
-                      {fixtureFor.records} record
-                      {fixtureFor.records === 1 ? "" : "s"} scanned; matched{" "}
-                      {variants.length} catalog variant
-                      {variants.length === 1 ? "" : "s"}.
-                    </span>
+                {fixtureFor ? (
+                  <div className="space-y-2">
+                    <div className="flex items-start gap-2 text-sm">
+                      <CheckCircle2
+                        className="w-4 h-4 text-success flex-shrink-0 mt-0.5"
+                        aria-hidden
+                      />
+                      <div className="flex-1">
+                        <span className="font-medium">VCF read.</span>{" "}
+                        <span className="text-muted-foreground">
+                          {fixtureFor.records} record
+                          {fixtureFor.records === 1 ? "" : "s"} scanned; matched{" "}
+                          {variants.length} catalog variant
+                          {variants.length === 1 ? "" : "s"}.
+                        </span>
+                      </div>
+                    </div>
+                    <ul className="space-y-1">
+                      {variants.map((v) => (
+                        <li
+                          key={v.id}
+                          className="text-xs border rounded-lg p-2 bg-white"
+                        >
+                          <span className="font-mono">{v.name}</span>{" "}
+                          <span className="text-muted-foreground">
+                            · {v.gene_symbol} ·{" "}
+                            {(patient.zygosity_overrides[v.id] ?? "heterozygous") ===
+                            "homozygous"
+                              ? "both copies"
+                              : "one copy"}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
                   </div>
-                </div>
-                <ul className="space-y-1">
-                  {variants.map((v) => (
-                    <li
-                      key={v.id}
-                      className="text-xs border rounded-lg p-2 bg-white"
-                    >
-                      <span className="font-mono">{v.name}</span>{" "}
+                ) : null}
+
+                {ctFixtureFor ? (
+                  <div className="space-y-2">
+                    <div className="flex items-start gap-2 text-sm">
+                      <CheckCircle2
+                        className="w-4 h-4 text-success flex-shrink-0 mt-0.5"
+                        aria-hidden
+                      />
+                      <div className="flex-1">
+                        <span className="font-medium">CT scan uploaded.</span>{" "}
+                        <span className="text-muted-foreground">
+                          {ctFixtureFor.slices}-slice {ctFixtureFor.description},
+                          ready for the radiogenomics model below.
+                        </span>
+                      </div>
+                    </div>
+                    <div className="text-xs border rounded-lg p-2 bg-white">
+                      <span className="font-mono">
+                        {ctFixtureFor.tciaPatient}
+                      </span>{" "}
                       <span className="text-muted-foreground">
-                        · {v.gene_symbol} ·{" "}
-                        {(patient.zygosity_overrides[v.id] ?? "heterozygous") ===
-                        "homozygous"
-                          ? "both copies"
-                          : "one copy"}
+                        · TCGA-OV (TCIA) · NIfTI volume
                       </span>
-                    </li>
-                  ))}
-                </ul>
+                    </div>
+                  </div>
+                ) : null}
+
                 <p className="text-xs text-muted-foreground">
-                  You can also upload your own clinical VCF on{" "}
+                  You can also upload your own clinical VCF or DICOM CT on{" "}
                   <Link href="/build" className="text-primary hover:underline">
                     /build
                   </Link>
@@ -330,6 +362,28 @@ export default function WalkthroughPage() {
 const FIXTURES: Record<string, { path: string; records: number }> = {
   maya: { path: "fixtures/patients/patient_maya_brca1.vcf", records: 1 },
   diana: { path: "fixtures/patients/patient_diana_cyp2d6.vcf", records: 1 },
+};
+
+// CT fixtures shipped with the demo. Maya is TCGA-09-1659 (69-slice axial),
+// Diana is TCGA-13-1411 (103-slice contrast-enhanced abdominopelvic). Priya
+// doesn't have a paired CT in this demo. When set, Step 2 renders an
+// extra "CT scan also uploaded" row alongside the VCF.
+const CT_FIXTURES: Record<
+  string,
+  { label: string; tciaPatient: string; slices: number; description: string }
+> = {
+  maya: {
+    label: "fixtures/patients/maya_ct_scan.nii.gz",
+    tciaPatient: "TCGA-09-1659",
+    slices: 69,
+    description: "axial pelvic CT",
+  },
+  diana: {
+    label: "fixtures/patients/diana_ct_scan.nii.gz",
+    tciaPatient: "TCGA-13-1411",
+    slices: 103,
+    description: "contrast-enhanced abdominopelvic CT",
+  },
 };
 
 function StepCard({
