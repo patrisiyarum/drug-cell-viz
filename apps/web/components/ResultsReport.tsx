@@ -384,18 +384,23 @@ function OffTargetStructureCard({
   }));
   const variantSummary = structure.variant_labels.join(", ");
 
+  // Trailing protein-name phrase ("...sits on Breast cancer type 1
+  // susceptibility protein.") was confusing on the ovarian-cancer pages —
+  // it's the UniProt name for BRCA1 (the gene was first discovered in
+  // breast cancer), not a description of the patient's cancer. Use the
+  // gene SYMBOL instead so the sentence reads cleanly on every patient.
   const headerBody =
     structure.unavailable_reason ? (
       <p className="text-sm text-muted-foreground leading-relaxed">
         <span className="font-mono text-xs">{variantSummary}</span> sits on{" "}
-        {structure.gene_name}.
+        {structure.gene_symbol}.
       </p>
     ) : (
       <p className="text-sm text-muted-foreground leading-relaxed">
         The pink residue{highlights.length === 1 ? "" : "s"} mark
         {highlights.length === 1 ? "s" : ""} where{" "}
         <span className="font-mono text-xs">{variantSummary}</span> sits on{" "}
-        {structure.gene_name}.
+        {structure.gene_symbol}.
       </p>
     );
 
