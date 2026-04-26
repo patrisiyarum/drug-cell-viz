@@ -97,9 +97,19 @@ def load_volume(raw: bytes, filename: str) -> tuple[np.ndarray, VolumeMetadata]:
         return _load_tcia_manifest(raw)
     if name.endswith(".zip") or _looks_like_dicom(raw):
         return _load_dicom_zip(raw)
+    # Unrecognised. The most common confused-upload from TCIA users is a
+    # single UUID-named .dcm file extracted from an NBIA download folder
+    # (one slice, no extension). The model needs the full 3D series, not
+    # one slice, so explain how to package it.
     raise RadiogenomicsError(
-        f"unsupported upload format: {filename!r}. Expected .nii, .nii.gz, "
-        ".tcia (NBIA manifest), or a .zip containing a DICOM series."
+        f"can't read {filename!r} — the radiogenomics model needs a full 3D "
+        "CT volume. Accepted formats:\n"
+        "  • .nii / .nii.gz  (NIfTI, the standard research format)\n"
+        "  • .tcia           (NBIA manifest from TCIA's download dialog)\n"
+        "  • .zip            (a zip of the entire DICOM series — not one slice)\n"
+        "If you downloaded a TCIA series and got a folder of UUID-named "
+        "files, zip the whole folder and upload the .zip; uploading one of "
+        "those .dcm files alone is just one slice and won't work."
     )
 
 

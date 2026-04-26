@@ -477,7 +477,10 @@ def _assess_current_drug(
             rationale=(
                 "Add one or more variants (or upload a 23andMe file / VCF) "
                 "and we'll tell you whether your current drug is the right "
-                "match based on public CPIC and FDA guidance."
+                "match based on public CPIC and FDA guidance. If you "
+                "uploaded a CT scan, the radiogenomics HRD prediction in "
+                "the panel above is still based on imaging alone and can "
+                "guide a tumor-sequencing conversation with your oncologist."
             ),
             better_options=[],
         )
