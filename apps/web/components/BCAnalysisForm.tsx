@@ -109,9 +109,11 @@ export function useBCAnalysisForm({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [drugIdOverride]);
 
-  const [picked, setPicked] = useState<SelectedVariant[]>([
-    { catalog_id: "CYP2D6_star4", zygosity: "homozygous" },
-  ]);
+  // Empty by default — the user picks variants in Step 3, or uploads a VCF
+  // / 23andMe / CT scan. The previous default of CYP2D6*4 made sense when the
+  // app was breast-cancer focused and Diana's case drove the demo, but it
+  // bleeds into every fresh /build session and silently biases the analysis.
+  const [picked, setPicked] = useState<SelectedVariant[]>([]);
 
   // Merge upload-detected variants into the picker without clobbering manual
   // selections. Runs whenever presetVariants changes — i.e. after a new
