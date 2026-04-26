@@ -208,23 +208,32 @@ export function DrugPickerSection({ form }: { form: BCAnalysisFormHandle }) {
           <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground inline-block">
             What is {drug.name}?
           </summary>
-          <div className="mt-2 p-3 bg-slate-50 rounded-lg text-xs text-gray-700 space-y-1.5 border">
+          <div className="mt-2 p-4 bg-slate-50 rounded-lg text-sm text-gray-700 space-y-3 border leading-relaxed">
             <div>
-              <span className="font-medium">Used for:</span> {drug.indication}
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-0.5">
+                Used for
+              </div>
+              <div>{drug.indication}</div>
             </div>
             <div>
-              <span className="font-medium">How it works:</span> {drug.mechanism}
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-0.5">
+                How it works
+              </div>
+              <div>{drug.mechanism}</div>
             </div>
             <div>
-              <span className="font-medium">Main target:</span>{" "}
-              {drug.primary_target_gene}
-              {drug.metabolizing_gene ? (
-                <>
-                  {" · "}
-                  <span className="font-medium">Processed by:</span>{" "}
-                  {drug.metabolizing_gene}
-                </>
-              ) : null}
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-0.5">
+                Main target
+              </div>
+              <div>
+                {drug.primary_target_gene}
+                {drug.metabolizing_gene ? (
+                  <span className="text-muted-foreground">
+                    {" · processed by "}
+                    {drug.metabolizing_gene}
+                  </span>
+                ) : null}
+              </div>
             </div>
           </div>
         </details>

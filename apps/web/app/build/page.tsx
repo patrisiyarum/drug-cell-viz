@@ -541,10 +541,7 @@ function CtScanUploadCard({
       </summary>
       <div className="border-t px-5 md:px-6 py-5 space-y-4">
         <p className="text-xs text-muted-foreground leading-relaxed">
-          Upload a DICOM .zip or NIfTI (.nii / .nii.gz) of the tumor CT. The
-          preprocessing pipeline crops to tumor, resamples to 96³ voxels,
-          and HU-windows to soft-tissue range. The HRD prediction is a
-          research-tier placeholder until the model in the{" "}
+          DICOM .zip or NIfTI (.nii / .nii.gz). Research-tier model from{" "}
           <a
             href="https://github.com/patrisiyarum/hrd-radiogenomics"
             target="_blank"
@@ -552,8 +549,8 @@ function CtScanUploadCard({
             className="text-primary hover:underline"
           >
             hrd-radiogenomics
-          </a>{" "}
-          repo finishes training.
+          </a>
+          .
         </p>
         <input
           ref={inputRef}
