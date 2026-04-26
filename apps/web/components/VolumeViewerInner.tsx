@@ -35,16 +35,21 @@ export default function VolumeViewerInner({
 
     let cancelled = false;
 
-    // Niivue's constructor creates a WebGL2 context. Defaults render
-    // opinionated medical-imaging defaults (multiplanar); we flip to the
-    // volume-render mode and crank up the background contrast so the scan
-    // pops against the dark card.
+    // Niivue's constructor creates a WebGL2 context. Multi-planar slice
+    // view (axial + sagittal + coronal) is what radiologists actually use
+    // to read CTs; pure volumetric rendering of a synthetic scan hides the
+    // tumor inside an opaque body blob. Crosshair on so the three panels
+    // stay coordinated when the patient clicks to navigate.
     const nv = new Niivue({
       loadingText: "Loading CT volume",
       backColor: [0, 0, 0, 1],
-      show3Dcrosshair: false,
-      crosshairWidth: 0,
+      show3Dcrosshair: true,
+      crosshairWidth: 1,
+      crosshairColor: [1, 0.6, 0, 0.8],
       dragAndDropEnabled: false,
+      isColorbar: false,
+      isOrientCube: false,
+      isRadiologicalConvention: true,
     });
     nvRef.current = nv;
 
@@ -68,13 +73,11 @@ export default function VolumeViewerInner({
       ]);
       if (cancelled) return;
 
-      // Switch to the pure 3D render view. SLICE_TYPE.RENDER is niivue's
-      // volumetric mode (ray-marching) rather than the default multi-planar.
-      // Literal value 4 matches niivue's SLICE_TYPE.RENDER enum across
-      // versions where the enum import path has moved around.
-      nv.setSliceType(4);
-      // Slight zoom so the pelvis fills the view.
-      nv.setScale(1.4);
+      // SLICE_TYPE.MULTIPLANAR (value 3) = three orthogonal slice views + a
+      // 3D render corner panel. Far more legible than the pure volumetric
+      // mode for a small synthetic dataset: each slice plane slices THROUGH
+      // the body so the tumor blob is immediately visible in all three.
+      nv.setSliceType(3);
     }
 
     run().catch((e) => {
