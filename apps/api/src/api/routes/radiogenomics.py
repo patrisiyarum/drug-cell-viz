@@ -48,6 +48,12 @@ class RadiogenomicsResponse(BaseModel):
     # Signals the UI uses to decide whether to render the placeholder banner
     # or a real prediction card.
     model_available: bool
+    # URL of the resolved 3D NIfTI volume the backend assembled from the
+    # upload. Present whenever we successfully built a volume — the
+    # frontend's slideshow viewer (niivue) renders this URL so the user
+    # sees the same scan the model just scored, even if they uploaded a
+    # .tcia manifest or a DICOM zip (formats niivue can't read directly).
+    volume_url: str | None = None
 
 
 @router.post("/upload", response_model=RadiogenomicsResponse, status_code=201)
@@ -75,6 +81,17 @@ async def upload_ct_scan(file: UploadFile = File(...)) -> RadiogenomicsResponse:
         logger.exception("CT upload load_volume failed")
         raise HTTPException(status_code=500, detail=f"internal load error: {exc}") from exc
 
+    # Persist the resolved 3D volume as a NIfTI in blob storage so the
+    # frontend's niivue viewer can render the same scan the model
+    # consumed. Filename is the SHA-256 hash of the raw upload + first
+    # 8 chars truncated, so re-uploading the same file is cached and
+    # different uploads don't collide.
+    volume_url: str | None = None
+    try:
+        volume_url = _persist_volume_as_nifti(volume, metadata, raw)
+    except Exception:  # noqa: BLE001
+        logger.exception("could not persist resolved volume as NIfTI; viewer will fall back")
+
     try:
         preprocessed = radiogenomics.preprocess(volume, metadata)
     except Exception as exc:  # noqa: BLE001
@@ -96,4 +113,35 @@ async def upload_ct_scan(file: UploadFile = File(...)) -> RadiogenomicsResponse:
         confidence=prediction.confidence,
         caveats=prediction.caveats,
         model_available=prediction.label != "model_not_trained",
+        volume_url=volume_url,
     )
+
+
+def _persist_volume_as_nifti(
+    volume,  # np.ndarray (Z, Y, X)
+    metadata: "radiogenomics.VolumeMetadata",
+    raw: bytes,
+) -> str:
+    """Write the assembled 3D volume to /blobs/radiogenomics/<hash>.nii.gz
+    so the frontend slideshow viewer can render the same scan the model
+    just scored. Returns a public URL the frontend can fetch."""
+    import hashlib
+    import nibabel as nib
+    import numpy as np
+
+    from api.config import settings
+
+    # Hash-derived filename → idempotent across re-uploads.
+    digest = hashlib.sha256(raw).hexdigest()[:16]
+    out_dir = settings.local_storage_root / "radiogenomics"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / f"{digest}.nii.gz"
+
+    if not out_path.exists():
+        # Volume comes in (Z, Y, X); NIfTI canonical layout is (X, Y, Z).
+        vol_xyz = np.transpose(volume.astype(np.int16), (2, 1, 0))
+        sz, sy, sx = metadata.original_spacing_mm
+        affine = np.diag([sx, sy, sz, 1.0]).astype(np.float32)
+        nib.save(nib.Nifti1Image(vol_xyz, affine), str(out_path))
+
+    return f"{settings.public_base_url.rstrip('/')}/blobs/radiogenomics/{digest}.nii.gz"
