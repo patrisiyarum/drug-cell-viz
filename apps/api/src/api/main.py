@@ -129,7 +129,7 @@ async def _seed_demo_patients() -> None:
     from datetime import date
 
     from api.db import session_scope
-    from api.models.patient import Medication, Patient, Symptom
+    from api.models.patient import Medication, Patient, PatientUpload, Symptom
 
     seeds = [
         ("maya", "Maya", 41, "High-grade serous ovarian cancer, germline BRCA1+", "olaparib", "Olaparib (Lynparza)"),
@@ -174,6 +174,32 @@ async def _seed_demo_patients() -> None:
                 patient_id="maya", occurred_on=date(2025, 12, 22),
                 label="Nausea", severity=3,
                 notes="Manageable with anti-emetics.",
+            ))
+            await session.commit()
+
+        # Seed two demo uploads for Maya — one CT scan, one VCF — pointing
+        # at the static fixtures the web app already ships under /fixtures.
+        # Idempotent: only seeds if she has zero existing uploads.
+        from datetime import datetime, timezone
+        existing_uploads = (await session.execute(
+            select(PatientUpload).where(PatientUpload.patient_id == "maya")
+        )).first()
+        if existing_uploads is None:
+            session.add(PatientUpload(
+                patient_id="maya",
+                upload_kind="ct_scan",
+                filename="TCGA-09-1659_axial_ct.nii.gz",
+                asset_url="/fixtures/maya_ct_scan.nii.gz",
+                summary_json="HRD 95% (predicted hr deficient, high confidence)",
+                uploaded_at=datetime(2025, 11, 5, 14, 22, tzinfo=timezone.utc),
+            ))
+            session.add(PatientUpload(
+                patient_id="maya",
+                upload_kind="vcf",
+                filename="maya_germline_brca_panel.vcf",
+                asset_url=None,
+                summary_json="1 variant detected: BRCA1 p.Cys61Gly (pathogenic)",
+                uploaded_at=datetime(2025, 10, 28, 9, 41, tzinfo=timezone.utc),
             ))
             await session.commit()
 

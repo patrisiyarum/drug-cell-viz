@@ -86,11 +86,6 @@ function ProfileHeader({ patient }: { patient: PatientFullProfile["patient"] }) 
       <div className="text-sm text-muted-foreground space-y-0.5">
         <div>Age {patient.age}.</div>
         <div>{patient.indication}.</div>
-        {patient.drug_name ? (
-          <div>
-            Currently on <span className="text-foreground font-medium">{patient.drug_name}</span>.
-          </div>
-        ) : null}
       </div>
     </div>
   );
