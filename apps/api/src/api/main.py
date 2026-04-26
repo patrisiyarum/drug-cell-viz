@@ -25,6 +25,7 @@ from api.routes import (
     jobs_router,
     molecular_router,
     morphology_router,
+    patients_router,
     radiogenomics_router,
     screening_router,
     vcf_router,
@@ -38,6 +39,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings.local_storage_root.mkdir(parents=True, exist_ok=True)
     configure_telemetry(app)
     await init_db()
+
+    # Seed the demo patients (Maya, Diana, Priya) into the patient table on
+    # first run so /patient/<id> works out of the box. Idempotent — re-runs
+    # leave existing rows alone.
+    try:
+        await _seed_demo_patients()
+    except Exception:
+        logging.getLogger(__name__).exception("failed to seed demo patients")
 
     # Wire the radiogenomics model if a checkpoint was provisioned. If the
     # path is unset or missing, the upload endpoint stays on the stub path
@@ -98,6 +107,7 @@ app.include_router(vcf_router)
 app.include_router(screening_router)
 app.include_router(hrd_scars_router)
 app.include_router(radiogenomics_router)
+app.include_router(patients_router)
 
 # Serve local blob storage so the frontend can fetch PDBs and thumbnails by URL.
 if settings.storage_backend == "local":
@@ -107,6 +117,65 @@ if settings.storage_backend == "local":
         StaticFiles(directory=str(settings.local_storage_root)),
         name="blobs",
     )
+
+
+async def _seed_demo_patients() -> None:
+    """Insert Maya / Diana / Priya into the patient table if they're missing.
+
+    Mirrors the in-catalog DEMO_PATIENTS so /patient/<id> renders correctly
+    on the first visit without forcing the user to create profiles manually.
+    Maya gets some seed medications + symptoms so her profile isn't empty.
+    """
+    from datetime import date
+
+    from api.db import session_scope
+    from api.models.patient import Medication, Patient, Symptom
+
+    seeds = [
+        ("maya", "Maya", 41, "High-grade serous ovarian cancer, germline BRCA1+", "olaparib", "Olaparib (Lynparza)"),
+        ("diana", "Diana", 52, "Recurrent ER+ ovarian cancer (germline panel clean for HR genes)", "tamoxifen", "Tamoxifen"),
+        ("priya", "Priya", 58, "HER2-negative metastatic breast cancer, germline BRCA2+", "olaparib", "Olaparib (Lynparza)"),
+    ]
+    async with session_scope() as session:
+        for pid, name, age, indication, drug_id, drug_name in seeds:
+            existing = await session.get(Patient, pid)
+            if existing is not None:
+                continue
+            session.add(Patient(
+                id=pid, name=name, age=age, indication=indication,
+                drug_id=drug_id, drug_name=drug_name,
+            ))
+        await session.commit()
+
+        # Sample medications + symptoms for Maya only — gives the demo
+        # profile something concrete to render. Idempotent: only seeds if
+        # she has zero existing medications.
+        from sqlmodel import select
+        existing_meds = (await session.execute(
+            select(Medication).where(Medication.patient_id == "maya")
+        )).first()
+        if existing_meds is None:
+            session.add(Medication(
+                patient_id="maya", drug_name="Olaparib", dose="300 mg twice daily",
+                started_at=date(2025, 11, 12), notes="Maintenance after platinum response.",
+            ))
+            session.add(Medication(
+                patient_id="maya", drug_name="Carboplatin + Paclitaxel",
+                dose="6 cycles, every 3 weeks",
+                started_at=date(2025, 6, 4), ended_at=date(2025, 10, 22),
+                notes="First-line chemotherapy. Completed.",
+            ))
+            session.add(Symptom(
+                patient_id="maya", occurred_on=date(2025, 12, 18),
+                label="Mild fatigue", severity=4,
+                notes="Worse on day 5 of each cycle. Improves with rest.",
+            ))
+            session.add(Symptom(
+                patient_id="maya", occurred_on=date(2025, 12, 22),
+                label="Nausea", severity=3,
+                notes="Manageable with anti-emetics.",
+            ))
+            await session.commit()
 
 
 _redis: redis.Redis = redis.from_url(settings.redis_url, decode_responses=True)

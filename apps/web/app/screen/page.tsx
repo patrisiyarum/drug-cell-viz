@@ -165,16 +165,19 @@ export default function ScreenPage() {
             <div className="flex items-center gap-2 text-primary">
               <FlaskConical className="w-5 h-5" aria-hidden />
               <span className="text-xs font-semibold uppercase tracking-wide">
-                Virtual screening
+                Clinical drug screening
               </span>
             </div>
             <h1 className="text-3xl md:text-4xl font-semibold">
-              Rank compounds against an HR-panel target
+              Find candidate drugs against an HR-pathway target
             </h1>
-            <p className="text-muted-foreground leading-relaxed">
-              Pick a target, paste candidate SMILES. Each is ranked by 60%
-              pocket fit + 40% chemical similarity to known binders.
+            <p className="text-muted-foreground">
+              For oncology teams evaluating compounds for HRD-positive cancers.
+              Pick the target, paste candidate SMILES. Ranked by 60% pocket fit
+              + 40% similarity to known binders.
             </p>
+            {/* Kintsugi seam */}
+            <div className="h-px max-w-md bg-gradient-to-r from-amber-400/40 via-amber-500 to-amber-400/40 mt-4" />
           </div>
 
           <section className="bg-card border rounded-2xl p-5 md:p-6 space-y-4">

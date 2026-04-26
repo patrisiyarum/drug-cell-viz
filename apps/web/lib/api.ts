@@ -138,7 +138,112 @@ export const api = {
     }
     return res.blob();
   },
+
+  // ----- Patient profile -----
+
+  getPatientProfile: (patientId: string) =>
+    request<PatientFullProfile>(`/api/patients/${patientId}`),
+
+  addMedication: (patientId: string, body: MedicationCreate) =>
+    request<MedicationRead>(`/api/patients/${patientId}/medications`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  deleteMedication: async (patientId: string, medId: number) => {
+    const res = await fetch(
+      `${API_BASE}/api/patients/${patientId}/medications/${medId}`,
+      { method: "DELETE" },
+    );
+    if (!res.ok) throw new Error(`delete medication ${res.status}`);
+  },
+
+  addSymptom: (patientId: string, body: SymptomCreate) =>
+    request<SymptomRead>(`/api/patients/${patientId}/symptoms`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  deleteSymptom: async (patientId: string, sympId: number) => {
+    const res = await fetch(
+      `${API_BASE}/api/patients/${patientId}/symptoms/${sympId}`,
+      { method: "DELETE" },
+    );
+    if (!res.ok) throw new Error(`delete symptom ${res.status}`);
+  },
+
+  addPatientUpload: (patientId: string, body: PatientUploadCreate) =>
+    request<PatientUploadRead>(`/api/patients/${patientId}/uploads`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
 };
+
+// ----- Patient-profile types -----
+
+export interface PatientRead {
+  id: string;
+  name: string;
+  age: number;
+  indication: string;
+  drug_id: string | null;
+  drug_name: string | null;
+}
+
+export interface MedicationRead {
+  id: number;
+  drug_name: string;
+  dose: string | null;
+  started_at: string | null;
+  ended_at: string | null;
+  notes: string | null;
+}
+
+export interface MedicationCreate {
+  drug_name: string;
+  dose?: string | null;
+  started_at?: string | null;
+  ended_at?: string | null;
+  notes?: string | null;
+}
+
+export interface SymptomRead {
+  id: number;
+  occurred_on: string;
+  label: string;
+  severity: number;
+  notes: string | null;
+}
+
+export interface SymptomCreate {
+  occurred_on: string;
+  label: string;
+  severity: number;
+  notes?: string | null;
+}
+
+export interface PatientUploadRead {
+  id: number;
+  upload_kind: "ct_scan" | "vcf" | "23andme" | "report";
+  filename: string;
+  asset_url: string | null;
+  summary_json: string | null;
+  uploaded_at: string;
+}
+
+export interface PatientUploadCreate {
+  upload_kind: "ct_scan" | "vcf" | "23andme" | "report";
+  filename: string;
+  asset_url?: string | null;
+  summary_json?: string | null;
+}
+
+export interface PatientFullProfile {
+  patient: PatientRead;
+  medications: MedicationRead[];
+  symptoms: SymptomRead[];
+  uploads: PatientUploadRead[];
+}
 
 export interface VcfDetectionDTO {
   catalog_id: string;

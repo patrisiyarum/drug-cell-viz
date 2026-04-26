@@ -17,6 +17,21 @@ from api.models.analysis import (
 from api.models.job import Job, JobCreate, JobKind, JobRead, JobStatus
 from api.models.molecular import DockingPose, MolecularResult, MolecularResultRow
 from api.models.morphology import MorphologyMatch, MorphologyResult, MorphologyResultRow
+from api.models.patient import (
+    Medication,
+    MedicationCreate,
+    MedicationRead,
+    Patient,
+    PatientCreate,
+    PatientFullProfile,
+    PatientRead,
+    PatientUpload,
+    PatientUploadCreate,
+    PatientUploadRead,
+    Symptom,
+    SymptomCreate,
+    SymptomRead,
+)
 
 __all__ = [
     "AnalysisCreate",
