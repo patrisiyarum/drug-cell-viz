@@ -1123,8 +1123,8 @@ DEMO_PATIENTS: list[DemoPatient] = [
         "persona_name": "Maya",
         "age": 41,
         "scenario": "A targeted therapy match. Genetics that make a specific drug eligible.",
-        "indication": "Triple-negative breast cancer, germline BRCA1+",
-        "subtype": "TNBC",
+        "indication": "High-grade serous ovarian cancer, germline BRCA1+",
+        "subtype": "ovarian_HGSOC",
         "drug_id": "olaparib",
         "medication_display": "Olaparib (Lynparza)",
         "status": "expected",
@@ -1132,39 +1132,45 @@ DEMO_PATIENTS: list[DemoPatient] = [
         "genotype_summary": {
             "BRCA1": "c.181T>G (p.Cys61Gly) pathogenic",
             "BRCA2": "wild-type",
+            "PALB2": "wild-type",
             "CYP2D6": "*1/*1 (normal)",
-            "DPYD": "*1/*1 (normal)",
         },
         "variant_ids": ["BRCA1_C61G"],
         "zygosity_overrides": {"BRCA1_C61G": "heterozygous"},
-        "narrative": "Maya's tumor is HR-negative, HER2-negative, and she "
-        "carries a pathogenic BRCA1 variant. That makes her eligible for "
-        "olaparib, a targeted therapy that exploits the DNA-repair defect "
-        "BRCA1 causes in cancer cells.",
+        "narrative": "Maya has high-grade serous ovarian cancer and carries a "
+        "pathogenic BRCA1 variant. That makes her eligible for olaparib, a "
+        "targeted therapy that exploits the DNA-repair defect BRCA1 causes in "
+        "cancer cells. Her preoperative pelvic CT is shown alongside the "
+        "BRCA1 protein view; the radiogenomics model can score it directly.",
     },
     {
         "id": "diana",
         "name": "Diana's story",
         "persona_name": "Diana",
         "age": 52,
-        "scenario": "A common case. A genetic variant reducing a drug's effectiveness, and the alternatives.",
-        "indication": "ER+ / HER2- early breast cancer",
-        "subtype": "HR+/HER2-",
+        "scenario": "Germline panel clean, but imaging still flags HRD. The somatic-HRD pre-screen case.",
+        "indication": "Recurrent ER+ ovarian cancer (germline panel clean for HR genes)",
+        "subtype": "ovarian_HGSOC",
         "drug_id": "tamoxifen",
         "medication_display": "Tamoxifen",
         "status": "reduced",
         "status_color": "warning",
         "genotype_summary": {
-            "CYP2D6": "*4/*4 (poor metabolizer)",
             "BRCA1": "wild-type",
             "BRCA2": "wild-type",
-            "PIK3CA": "wild-type",
+            "PALB2": "wild-type",
+            "CYP2D6": "*4/*4 (poor metabolizer)",
         },
         "variant_ids": ["CYP2D6_star4"],
         "zygosity_overrides": {"CYP2D6_star4": "homozygous"},
-        "narrative": "Tamoxifen is a prodrug. CYP2D6 must convert it to its "
-        "active form, and Diana's CYP2D6 works slowly. Her oncologist may "
-        "consider an aromatase inhibitor instead.",
+        "narrative": "Diana has recurrent hormone-receptor-positive ovarian "
+        "cancer. Tamoxifen is sometimes added as a hormonal option in "
+        "platinum-resistant ER+ ovarian disease (NCCN), but Diana's CYP2D6 "
+        "*4/*4 status converts the prodrug to its active form slowly. Her "
+        "germline panel is clean for BRCA1/BRCA2/PALB2 — but the imaging-"
+        "based HRD predictor flags her tumor anyway, suggesting a somatic "
+        "mechanism (BRCA1 promoter methylation, somatic BRCA loss) that a "
+        "germline test cannot see. The right next step is tumor sequencing.",
     },
     {
         "id": "priya",
