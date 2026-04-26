@@ -159,35 +159,85 @@ def _load_tcia_manifest(raw: bytes) -> tuple[np.ndarray, VolumeMetadata]:
             "NBIA Data Retriever manifest."
         )
 
-    series_uid = series_uids[0]
     logger.info(
-        "loading .tcia manifest with %d series; fetching the first one (%s) "
-        "from TCIA", len(series_uids), series_uid,
+        "loading .tcia manifest with %d series; querying metadata to pick "
+        "the largest (skipping scouts/localizers)", len(series_uids),
     )
 
-    tcia_endpoint = (
+    tcia_meta = (
+        "https://services.cancerimagingarchive.net/nbia-api/services/v1/getSeriesMetaData"
+    )
+    tcia_image = (
         "https://services.cancerimagingarchive.net/nbia-api/services/v1/getImage"
     )
-    try:
-        resp = requests.get(
-            tcia_endpoint, params={"SeriesInstanceUID": series_uid},
-            stream=True, timeout=(15, 600),
-        )
-        resp.raise_for_status()
-        zip_bytes = resp.content
-    except Exception as exc:
-        raise RadiogenomicsError(
-            f"could not fetch series {series_uid} from TCIA: {exc}",
-        ) from exc
 
-    if len(zip_bytes) < 1024:
+    # First pass: ask TCIA's getSeriesMetaData for each series's description
+    # so we can drop scouts/topograms/localizers. The metadata endpoint is
+    # cheap (kilobytes) compared to downloading every series's DICOM zip.
+    SCOUT_HINTS = ("scout", "topogram", "localizer")
+    candidates: list[tuple[str, str]] = []  # (uid, description)
+    for uid in series_uids:
+        try:
+            r = requests.get(
+                tcia_meta, params={"SeriesInstanceUID": uid}, timeout=(15, 60),
+            )
+            r.raise_for_status()
+            data = r.json() or [{}]
+            desc = str(data[0].get("Series Description", ""))
+        except Exception:
+            desc = ""
+        candidates.append((uid, desc))
+
+    diagnostic = [
+        (uid, desc) for uid, desc in candidates
+        if not any(h in desc.lower() for h in SCOUT_HINTS)
+    ]
+    pool = diagnostic if diagnostic else candidates
+
+    # Download every remaining candidate and pick the one with the most
+    # DICOM files. Cheaper alternative — query getSeriesSize — gives us
+    # bytes; download-then-count is unambiguous and the typical manifest
+    # is 1-3 series so the bandwidth hit is small.
+    import zipfile
+
+    best_zip: bytes | None = None
+    best_slices = -1
+    best_uid = ""
+    for uid, desc in pool:
+        try:
+            r = requests.get(
+                tcia_image, params={"SeriesInstanceUID": uid},
+                stream=True, timeout=(15, 600),
+            )
+            r.raise_for_status()
+            zip_bytes = r.content
+        except Exception as exc:
+            logger.warning("skip %s (%s): %s", uid, desc, exc)
+            continue
+        try:
+            with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+                n = sum(1 for n in zf.namelist() if not n.endswith("/"))
+        except Exception as exc:
+            logger.warning("skip %s (zip parse failed): %s", uid, exc)
+            continue
+        logger.info("    %s — %r — %d slices", uid[-12:], desc, n)
+        if n > best_slices:
+            best_slices = n
+            best_zip = zip_bytes
+            best_uid = uid
+
+    if best_zip is None or best_slices < 5:
         raise RadiogenomicsError(
-            f"TCIA returned an unexpectedly small payload ({len(zip_bytes)} "
-            "bytes) for the series in this manifest. Try downloading the "
-            "DICOM .zip directly from TCIA's web UI."
+            "no usable diagnostic CT series in this manifest. The series "
+            "look like scout/localizer images (typically <5 slices). Try "
+            "downloading a different manifest or upload a DICOM zip of the "
+            "axial series directly."
         )
 
-    return _load_dicom_zip(zip_bytes)
+    logger.info(
+        "picked series %s (%d slices) for inference", best_uid, best_slices,
+    )
+    return _load_dicom_zip(best_zip)
 
 
 def _load_nifti(raw: bytes) -> tuple[np.ndarray, VolumeMetadata]:
