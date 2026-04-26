@@ -1178,10 +1178,10 @@ DEMO_PATIENTS: list[DemoPatient] = [
         "persona_name": "Priya",
         "age": 58,
         "scenario": "HR deficiency in a different cancer. Same biology, different tumor.",
-        "indication": "High-grade serous ovarian cancer, germline BRCA2+",
-        "subtype": "ovarian_HGSOC",
-        "drug_id": "niraparib",
-        "medication_display": "Niraparib (Zejula)",
+        "indication": "HER2-negative metastatic breast cancer, germline BRCA2+",
+        "subtype": "TNBC",
+        "drug_id": "olaparib",
+        "medication_display": "Olaparib (Lynparza)",
         "status": "expected",
         "status_color": "success",
         "genotype_summary": {
@@ -1192,12 +1192,13 @@ DEMO_PATIENTS: list[DemoPatient] = [
         },
         "variant_ids": ["BRCA2_6174delT"],
         "zygosity_overrides": {"BRCA2_6174delT": "heterozygous"},
-        "narrative": "Priya has advanced high-grade serous ovarian cancer and "
-        "a germline BRCA2 pathogenic variant. Her tumor is HR-deficient, "
-        "which is the same biology that makes Maya's tumor PARP-inhibitor "
-        "sensitive. In the ovarian setting, niraparib is FDA-approved as "
-        "first-line maintenance after platinum response, and olaparib is "
-        "approved for BRCA-mutated maintenance (SOLO-1).",
+        "narrative": "Priya has germline BRCA2-mutated HER2-negative "
+        "metastatic breast cancer. Her tumor is HR-deficient, which is the "
+        "same biology that makes Maya's ovarian tumor PARP-inhibitor "
+        "sensitive. Olaparib is FDA-approved for germline BRCA1/2-mutated "
+        "HER2-negative metastatic and high-risk early breast cancer "
+        "(OlympiAD, OlympiA), so she gets the same drug as Maya for the "
+        "same molecular reason in a different organ.",
     },
 ]
 

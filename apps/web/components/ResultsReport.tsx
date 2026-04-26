@@ -290,7 +290,7 @@ function CtScanSlide({ volumeUrl, label }: { volumeUrl: string; label: string })
           Real preoperative pelvic CT from a TCGA-OV patient.
         </p>
       </div>
-      <div className="relative bg-black flex-1 min-h-[440px]">
+      <div className="relative bg-black flex-1 min-h-0">
         <VolumeViewer volumeUrl={volumeUrl} />
       </div>
     </div>
@@ -344,7 +344,7 @@ function MolecularCard({
           Zoomed in on the drug binding site. Rotate with click and drag, zoom with the scroll wheel.
         </p>
       </div>
-      <div className="relative h-[440px]">
+      <div className="relative flex-1 min-h-0">
         <MolViewer pdbUrl={pdbUrl} highlights={highlights} />
         <div className="absolute top-2 left-2 bg-white/95 backdrop-blur-sm border rounded-md px-3 py-2 text-[11px] space-y-1 shadow-sm pointer-events-none">
           <div className="font-semibold text-muted-foreground uppercase tracking-wide text-[10px]">
@@ -420,7 +420,7 @@ function OffTargetStructureCard({
           {structure.unavailable_reason}
         </div>
       ) : (
-        <div className="relative h-[440px]">
+        <div className="relative flex-1 min-h-0">
           <MolViewer
             key={structure.protein_pdb_url}
             pdbUrl={structure.protein_pdb_url}

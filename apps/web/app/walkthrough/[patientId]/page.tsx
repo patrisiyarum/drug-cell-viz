@@ -146,11 +146,6 @@ export default function WalkthroughPage() {
                 </span>
               ) : null}
             </div>
-            {drug ? (
-              <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
-                {drug.mechanism}
-              </p>
-            ) : null}
           </StepCard>
 
           {/* ---- STEP 2: fixture file "uploaded" ---- */}
