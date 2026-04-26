@@ -74,40 +74,17 @@ export function HrdCard({
               <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
                 HR-deficiency status
               </div>
-              <div className="font-medium">Not assessed</div>
+              <div className="font-medium">Not detected from germline</div>
             </div>
             <span className="text-[11px] text-muted-foreground">Score 0 / 100</span>
           </div>
           <p className="text-xs text-muted-foreground leading-relaxed">
-            Your variants aren&apos;t in the HR-repair panel (BRCA1, BRCA2, PALB2,
-            ATM, RAD51C/D, BRIP1, BARD1, FANC). That doesn&apos;t mean your tumor
-            is HR-proficient. It just means this tool can&apos;t tell from what
-            you&apos;ve entered. A clinical hereditary-cancer panel (Myriad, Ambry,
-            Invitae) covers thousands more variants.
+            None of your variants hit the HR-repair panel (BRCA1, BRCA2, PALB2,
+            ATM, RAD51C/D, BRIP1, BARD1, FANC). About one in three HR-deficient
+            ovarian tumors are still HRD via somatic events a germline panel
+            can&apos;t see {ctScanUrl ? "— run the imaging model below to check from that angle." : "— a tumor sequencing test would be the next step."}
           </p>
         </div>
-
-        {ctScanUrl ? (
-          <div className="rounded-lg border-l-4 border-primary/60 bg-primary/5 p-3 md:p-4 space-y-2">
-            <div className="flex items-center gap-2 text-xs uppercase tracking-wide font-semibold text-primary">
-              <Info className="w-3.5 h-3.5" aria-hidden />
-              A clean germline panel doesn&apos;t rule out HRD
-            </div>
-            <p className="text-sm leading-relaxed">
-              Roughly one in three HR-deficient ovarian tumors have no inherited
-              BRCA-family mutation. The deficiency comes from somatic events
-              the germline panel can&apos;t see: BRCA1 promoter methylation, a
-              somatic BRCA1/2 hit acquired by the tumor, or loss of another HR
-              gene. Imaging-based HRD prediction is a non-invasive pre-screen
-              that can flag these patients so their oncologist knows to order
-              tumor sequencing.
-            </p>
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              Run the radiogenomics model below on {ctScanLabel ?? "this CT scan"}
-              {" "}to see what it predicts.
-            </p>
-          </div>
-        ) : null}
 
         {ctScanUrl ? (
           <RadiogenomicsCtPanel
@@ -585,41 +562,19 @@ function ParpInhibitorActionCallout({ currentDrugId }: { currentDrugId: string }
     <div className="rounded-lg border-l-4 border-primary/60 bg-primary/5 p-3 md:p-4 space-y-2 text-sm">
       <div className="flex items-center gap-2 text-xs uppercase tracking-wide font-semibold text-primary">
         <Info className="w-3.5 h-3.5" aria-hidden />
-        Worth asking your oncologist about
+        Ask your oncologist about
       </div>
-      {isTamoxifen ? (
-        <p className="leading-relaxed">
-          Two findings line up here. Your CYP2D6 *4/*4 status is reducing how
-          much active tamoxifen your body produces, AND the imaging-based HRD
-          predictor flagged your tumor as HR-deficient. Together that&apos;s a
-          strong case to discuss the next steps below at your next appointment.
-        </p>
-      ) : (
-        <p className="leading-relaxed">
-          The imaging-based HRD predictor flagged your tumor as HR-deficient
-          even though your germline variants don&apos;t explain it. That&apos;s
-          worth bringing up at your next appointment. Two next steps to discuss:
-        </p>
-      )}
       <ol className="list-decimal pl-5 space-y-1 leading-relaxed">
         <li>
-          <strong>Confirm with tumor sequencing.</strong> A Myriad myChoice or
-          FoundationOne CDx test scores HRD directly from the tumor and
-          catches somatic mechanisms (BRCA1 promoter methylation, somatic
-          BRCA loss) that a germline panel can&apos;t see.
+          A <strong>tumor-sequencing test</strong> (Myriad myChoice or
+          FoundationOne CDx) to confirm HRD from the tumor itself.
         </li>
         <li>
-          <strong>If HRD is confirmed, ask about PARP inhibitors.</strong>{" "}
-          Olaparib (Lynparza), niraparib (Zejula), and rucaparib (Rubraca)
-          are FDA-approved for HRD-positive ovarian cancer and may be a
-          better fit than {isTamoxifen ? "tamoxifen alone" : "your current treatment alone"}.
+          <strong>PARP-inhibitor eligibility</strong> if HRD is confirmed —
+          olaparib, niraparib, or rucaparib instead of{" "}
+          {isTamoxifen ? "tamoxifen alone" : "the current regimen alone"}.
         </li>
       </ol>
-      <p className="text-xs text-muted-foreground pt-1">
-        This is research-only software. Confirm any treatment change with
-        your oncologist; PARP-inhibitor eligibility requires a CLIA-certified
-        HRD test.
-      </p>
     </div>
   );
 }
