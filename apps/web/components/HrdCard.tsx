@@ -110,7 +110,7 @@ export function HrdCard({
       border: "border-success/40",
       pill: "bg-success/20 text-success",
       label: "HR-deficient",
-      oneLiner: "Your variants suggest the tumor can't repair DNA double-strand breaks well. PARP inhibitors may be an option.",
+      oneLiner: "Tumor likely can't repair DNA breaks. PARP inhibitors may be an option.",
     },
     hr_proficient: {
       bg: "bg-muted",
@@ -169,14 +169,11 @@ export function HrdCard({
             </div>
             <ul className="space-y-2">
               {filtered.map((e, i) => (
-                <li key={i} className="text-sm border rounded-lg p-3 bg-white/70">
-                  <div className="flex items-baseline gap-2 flex-wrap">
-                    <span className="font-semibold">{e.gene}</span>
-                    <span className="font-mono text-xs text-muted-foreground">
-                      {stripGenePrefix(e.variant_label, e.gene)}
-                    </span>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1">{e.detail}</p>
+                <li key={i} className="text-sm border rounded-lg px-3 py-2 bg-white/70 flex items-baseline gap-2 flex-wrap">
+                  <span className="font-semibold">{e.gene}</span>
+                  <span className="font-mono text-xs text-muted-foreground">
+                    {stripGenePrefix(e.variant_label, e.gene)}
+                  </span>
                 </li>
               ))}
             </ul>
@@ -278,11 +275,8 @@ function TumorScarPanel({
     return (
       <div className="rounded-lg border-2 border-dashed border-muted-foreground/30 p-3 flex items-center gap-3 flex-wrap">
         <Activity className="w-4 h-4 text-primary flex-shrink-0" aria-hidden />
-        <div className="flex-1 min-w-[180px] text-sm">
-          <div className="font-medium">Tumor scar HRD score</div>
-          <div className="text-xs text-muted-foreground mt-0.5">
-            myChoice / FoundationOne CDx report numbers
-          </div>
+        <div className="flex-1 min-w-[180px] text-sm font-medium">
+          Tumor scar HRD score
         </div>
         <button
           type="button"
@@ -486,12 +480,7 @@ function RadiogenomicsCtPanel({
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-2 min-w-[180px] flex-1">
           <Scan className="w-4 h-4 text-primary flex-shrink-0" aria-hidden />
-          <div className="text-sm">
-            <div className="font-medium">CT scan HRD prediction</div>
-            <div className="text-xs text-muted-foreground">
-              3D CNN trained on TCGA-OV
-            </div>
-          </div>
+          <div className="text-sm font-medium">CT scan HRD prediction</div>
         </div>
         <button
           type="button"
@@ -633,11 +622,8 @@ function Brca1PredictionNested({ hgvsList }: { hgvsList: string[] }) {
     return (
       <div className="rounded-lg border-2 border-dashed border-muted-foreground/30 p-3 flex items-center gap-3 flex-wrap">
         <FlaskConical className="w-4 h-4 text-primary flex-shrink-0" aria-hidden />
-        <div className="flex-1 min-w-[180px] text-sm">
-          <div className="font-medium">BRCA1 variant prediction</div>
-          <div className="text-xs text-muted-foreground font-mono truncate">
-            {hgvsList.join(", ")}
-          </div>
+        <div className="flex-1 min-w-[180px] text-sm font-medium">
+          BRCA1 variant prediction
         </div>
         <button
           type="button"
