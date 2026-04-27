@@ -56,9 +56,6 @@ export function DoctorVisitPdfButton({ result, patientLabel }: Props) {
         <div className="text-base font-semibold">
           Download your report
         </div>
-        <div className="text-xs text-muted-foreground mt-0.5">
-          Full results plus questions for your doctor, ready to print.
-        </div>
         {err ? <div className="text-xs text-red-600 mt-1">{err}</div> : null}
       </div>
       <button

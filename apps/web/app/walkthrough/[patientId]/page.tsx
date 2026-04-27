@@ -6,13 +6,34 @@ import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 
 import { ResultsReport } from "@/components/ResultsReport";
-import { api } from "@/lib/api";
+import { api, type PatientFullProfile } from "@/lib/api";
 import type {
   AnalysisResult,
   Catalog,
   DemoPatient,
   Demos,
 } from "@/lib/bc-types";
+
+/**
+ * Pull tumor-scar numbers (LOH / LST / NtAI) out of a patient's stored
+ * upload summaries so the HrdCard's scar panel can pre-fill + auto-run.
+ * Looks for the canonical "LOH N · LST N · NTAI N" string we seed.
+ */
+function findScarPrefill(
+  profile: PatientFullProfile | undefined,
+): { loh: number; lst: number; ntai: number } | null {
+  if (!profile) return null;
+  for (const u of profile.uploads) {
+    if (!u.summary_json) continue;
+    const m = u.summary_json.match(
+      /LOH\s+(\d+)[^\d]+LST\s+(\d+)[^\d]+NTAI\s+(\d+)/i,
+    );
+    if (m) {
+      return { loh: Number(m[1]), lst: Number(m[2]), ntai: Number(m[3]) };
+    }
+  }
+  return null;
+}
 
 /**
  * Clinical analysis page for a preset patient. Renders the full ResultsReport
@@ -54,6 +75,15 @@ export default function WalkthroughPage() {
         })),
       }),
   });
+
+  // Patient profile (for scar-report parsing). Same key as /patient/<id>
+  // so React Query shares the cache.
+  const profile = useQuery<PatientFullProfile>({
+    queryKey: ["patient", patientId],
+    queryFn: () => api.getPatientProfile(patientId!),
+    enabled: !!patientId,
+  });
+  const scarPrefill = findScarPrefill(profile.data);
 
   const reportRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -110,7 +140,11 @@ export default function WalkthroughPage() {
               {(analysis.error as Error).message}
             </p>
           ) : analysis.data ? (
-            <ResultsReport result={analysis.data} patient={patient} />
+            <ResultsReport
+              result={analysis.data}
+              patient={patient}
+              scarPrefill={scarPrefill}
+            />
           ) : null}
         </div>
       </main>

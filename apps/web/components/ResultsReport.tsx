@@ -36,6 +36,13 @@ interface Props {
    * instead of (or in addition to) the per-patient demo fixture.
    */
   uploadedCtScanUrl?: string | null;
+  /**
+   * Pre-parsed tumor-scar numbers from a patient's stored report file
+   * (LOH / LST / NtAI). Threaded down to HrdCard's scar panel so it
+   * auto-runs the score instead of waiting for the user to type the
+   * numbers in.
+   */
+  scarPrefill?: { loh: number; lst: number; ntai: number } | null;
 }
 
 export function ResultsReport({
@@ -43,6 +50,7 @@ export function ResultsReport({
   patient,
   onSwitchDrug,
   uploadedCtScanUrl,
+  scarPrefill,
 }: Props) {
   // Per-patient radiogenomics fixture wiring. Maya ships with a pelvic CT
   // that supports her HR-deficient germline call; Diana ships with one that
@@ -100,6 +108,7 @@ export function ResultsReport({
               drugId={result.drug_id}
               ctScanUrl={ctScanUrl}
               ctScanLabel={ctScanLabel}
+              scarPrefill={scarPrefill}
             />
           ) : null}
 
@@ -353,7 +362,7 @@ function MolecularCard({
           </div>
         </div>
         <p className="text-sm text-muted-foreground leading-relaxed">
-          Zoomed in on the drug binding site. Rotate with click and drag, zoom with the scroll wheel.
+          Drug bound to its target protein.
         </p>
       </div>
       <div className="relative flex-1 min-h-0">

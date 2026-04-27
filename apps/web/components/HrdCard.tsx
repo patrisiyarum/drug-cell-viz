@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { FlaskConical, Activity, Clock, Info, Scan } from "lucide-react";
 
 import { Brca1FunctionCard } from "./Brca1FunctionCard";
@@ -37,6 +37,13 @@ interface Props {
   ctScanUrl?: string | null;
   /** Display label for the CT fixture, e.g. "Maya's pelvic CT". */
   ctScanLabel?: string | null;
+  /**
+   * Pre-filled tumor-scar numbers from a patient's myChoice / FoundationOne
+   * CDx report (parsed upstream from the upload's summary text). When set,
+   * the scar panel auto-runs against these values instead of waiting for
+   * the user to type them in.
+   */
+  scarPrefill?: { loh: number; lst: number; ntai: number } | null;
 }
 
 /**
@@ -56,6 +63,7 @@ export function HrdCard({
   drugId = null,
   ctScanUrl = null,
   ctScanLabel = null,
+  scarPrefill = null,
 }: Props) {
   const showReversionCallout =
     hrd.label === "hr_deficient" &&
@@ -187,7 +195,7 @@ export function HrdCard({
         />
       ) : null}
 
-      <TumorScarPanel />
+      <TumorScarPanel prefill={scarPrefill} />
 
       <details className="text-xs text-muted-foreground">
         <summary className="cursor-pointer hover:text-foreground">
@@ -211,14 +219,42 @@ export function HrdCard({
  * this tumor-scar score tells you whether the tumor is *currently*
  * HR-deficient — the FDA biomarker question for PARP-inhibitor eligibility.
  */
-function TumorScarPanel() {
+function TumorScarPanel({
+  prefill,
+}: {
+  prefill?: { loh: number; lst: number; ntai: number } | null;
+}) {
   const [open, setOpen] = useState(false);
-  const [loh, setLoh] = useState("");
-  const [lst, setLst] = useState("");
-  const [ntai, setNtai] = useState("");
+  const [loh, setLoh] = useState(prefill ? String(prefill.loh) : "");
+  const [lst, setLst] = useState(prefill ? String(prefill.lst) : "");
+  const [ntai, setNtai] = useState(prefill ? String(prefill.ntai) : "");
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<HrdScarResponse | null>(null);
   const [err, setErr] = useState<string | null>(null);
+
+  // Auto-run when prefill is present so the patient sees their scar score
+  // without an extra click. Only runs once per prefill payload.
+  useEffect(() => {
+    if (!prefill) return;
+    setOpen(true);
+    setLoh(String(prefill.loh));
+    setLst(String(prefill.lst));
+    setNtai(String(prefill.ntai));
+    let cancelled = false;
+    (async () => {
+      setRunning(true);
+      try {
+        const resp = await api.scoreHrdScars(prefill);
+        if (!cancelled) setResult(resp);
+      } catch (e) {
+        if (!cancelled) setErr(e instanceof Error ? e.message : "scoring failed");
+      } finally {
+        if (!cancelled) setRunning(false);
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefill?.loh, prefill?.lst, prefill?.ntai]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
