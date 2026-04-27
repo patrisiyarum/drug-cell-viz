@@ -4,7 +4,16 @@ import Link from "next/link";
 import { useState } from "react";
 import { useParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Trash2 } from "lucide-react";
+import {
+  Activity,
+  FileText,
+  FlaskConical,
+  Pill,
+  Plus,
+  ScanLine,
+  Trash2,
+  X,
+} from "lucide-react";
 
 import {
   api,
@@ -13,17 +22,14 @@ import {
   type PatientUploadRead,
   type SymptomRead,
 } from "@/lib/api";
+import { VolumeViewer } from "@/components/VolumeViewer";
 
 /**
  * Patient profile.
  *
- * Kintsugi visual principles applied:
- *   - Restrained palette (paper white + ink black) with one accent: gold,
- *     used as the seam between sections.
- *   - Minimal copy. Headers are short noun phrases; helper text is a
- *     single short sentence at most.
- *   - The "cracks" (missing data, low-confidence calls, severity rows) are
- *     surfaced honestly — that's what makes the gold visible.
+ * Visual: paper white + ink black with one accent (gold). Each section has
+ * an icon, a count badge, and an inline + button at the right. The page
+ * reads as one continuous scroll punctuated by gold seams.
  */
 export default function PatientProfilePage() {
   const params = useParams<{ id: string }>();
@@ -36,11 +42,11 @@ export default function PatientProfilePage() {
   });
 
   if (profile.isLoading) return <Centered>Loading.</Centered>;
-  if (profile.isError)
-    return <Centered>Patient not found.</Centered>;
+  if (profile.isError) return <Centered>Patient not found.</Centered>;
   if (!profile.data) return null;
 
   const { patient, medications, symptoms, uploads } = profile.data;
+  const initial = patient.name.slice(0, 1).toUpperCase();
 
   return (
     <div className="bg-white min-h-screen">
@@ -62,123 +68,203 @@ export default function PatientProfilePage() {
       </header>
 
       <main className="max-w-3xl mx-auto px-6 py-10 space-y-10">
-        <ProfileHeader patient={patient} />
+        {/* Header — circular avatar + name + meta */}
+        <div className="flex items-center gap-5">
+          <div className="w-16 h-16 rounded-full bg-gradient-to-br from-amber-200 to-amber-500 flex items-center justify-center text-2xl font-semibold text-white shadow-sm">
+            {initial}
+          </div>
+          <div className="flex-1 min-w-0">
+            <h1 className="text-3xl md:text-4xl font-semibold tracking-tight">
+              {patient.name}
+            </h1>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              Age {patient.age} · {patient.indication}
+            </p>
+          </div>
+        </div>
 
-        <Section title="Medications" subtitle="What you're taking now and what you've been on.">
-          <MedicationsList patientId={patientId} medications={medications} />
+        {/* Quick-stats row */}
+        <div className="grid grid-cols-3 gap-3">
+          <Stat icon={<Pill className="w-4 h-4" />} count={medications.length} label="medications" />
+          <Stat icon={<Activity className="w-4 h-4" />} count={symptoms.length} label="symptoms" />
+          <Stat icon={<FileText className="w-4 h-4" />} count={uploads.length} label="records" />
+        </div>
+
+        <Section
+          icon={<Pill className="w-4 h-4" />}
+          title="Medications"
+          count={medications.length}
+          add={(open) => (
+            <AddInline open={open} render={(close) => <AddMedicationForm patientId={patientId} onDone={close} />} />
+          )}
+        >
+          {medications.length === 0 ? (
+            <Empty>No medications yet.</Empty>
+          ) : (
+            medications.map((m) => (
+              <MedicationRow key={m.id} patientId={patientId} med={m} />
+            ))
+          )}
         </Section>
 
-        <Section title="Symptoms" subtitle="Track what you're feeling between appointments.">
-          <SymptomsList patientId={patientId} symptoms={symptoms} />
+        <Section
+          icon={<Activity className="w-4 h-4" />}
+          title="Symptoms"
+          count={symptoms.length}
+          add={(open) => (
+            <AddInline open={open} render={(close) => <AddSymptomForm patientId={patientId} onDone={close} />} />
+          )}
+        >
+          {symptoms.length === 0 ? (
+            <Empty>No symptoms logged.</Empty>
+          ) : (
+            symptoms.map((s) => (
+              <SymptomRow key={s.id} patientId={patientId} sym={s} />
+            ))
+          )}
         </Section>
 
-        <Section title="Records" subtitle="Files you've uploaded — scans, lab reports, sequencing.">
-          <UploadsList uploads={uploads} />
+        <Section
+          icon={<FileText className="w-4 h-4" />}
+          title="Records"
+          count={uploads.length}
+          add={null}
+        >
+          {uploads.length === 0 ? (
+            <Empty>
+              Upload from{" "}
+              <Link href="/build" className="text-primary hover:underline">
+                /build
+              </Link>{" "}
+              and they appear here.
+            </Empty>
+          ) : (
+            uploads.map((u) => <UploadRow key={u.id} upload={u} />)
+          )}
         </Section>
       </main>
     </div>
   );
 }
 
-function ProfileHeader({ patient }: { patient: PatientFullProfile["patient"] }) {
+// ---------- Section primitives ----------
+
+function Stat({
+  icon,
+  count,
+  label,
+}: {
+  icon: React.ReactNode;
+  count: number;
+  label: string;
+}) {
   return (
-    <div className="space-y-2">
-      <h1 className="text-3xl md:text-4xl font-semibold tracking-tight">
-        {patient.name}
-      </h1>
-      <div className="text-sm text-muted-foreground space-y-0.5">
-        <div>Age {patient.age}.</div>
-        <div>{patient.indication}.</div>
+    <div className="border rounded-xl p-4 bg-card">
+      <div className="flex items-center gap-2 text-muted-foreground">
+        {icon}
+        <span className="text-xs uppercase tracking-wide">{label}</span>
       </div>
+      <div className="mt-1 text-2xl font-semibold">{count}</div>
     </div>
   );
 }
 
-/**
- * Section card with a kintsugi seam — a thin gold divider on top, then the
- * heading + content. Replaces every section's bordered box on the page so
- * the page reads like one continuous scroll punctuated by gold.
- */
 function Section({
+  icon,
   title,
-  subtitle,
+  count,
+  add,
   children,
 }: {
+  icon: React.ReactNode;
   title: string;
-  subtitle?: string;
+  count: number;
+  add: ((open: boolean) => React.ReactNode) | null;
   children: React.ReactNode;
 }) {
+  const [adding, setAdding] = useState(false);
   return (
-    <section className="space-y-4">
+    <section className="space-y-3">
       <div className="h-px bg-gradient-to-r from-amber-400/40 via-amber-500 to-amber-400/40" />
-      <div>
-        <h2 className="text-xl font-semibold">{title}</h2>
-        {subtitle ? (
-          <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="text-muted-foreground">{icon}</span>
+          <h2 className="text-lg font-semibold">{title}</h2>
+          {count > 0 ? (
+            <span className="text-xs text-muted-foreground">· {count}</span>
+          ) : null}
+        </div>
+        {add ? (
+          <button
+            type="button"
+            onClick={() => setAdding((v) => !v)}
+            className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
+            aria-label={adding ? "Cancel" : "Add"}
+          >
+            {adding ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+            {adding ? "Cancel" : "Add"}
+          </button>
         ) : null}
       </div>
-      {children}
+      {add ? add(adding) : null}
+      <div className="space-y-2">{children}</div>
     </section>
   );
 }
 
-// ---------- Medications ----------
+function AddInline({
+  open,
+  render,
+}: {
+  open: boolean;
+  render: (close: () => void) => React.ReactNode;
+}) {
+  // Render is gated outside; this just wraps to capture the close callback.
+  if (!open) return null;
+  return render(() => undefined);
+}
 
-function MedicationsList({
+// ---------- Medication ----------
+
+function MedicationRow({
   patientId,
-  medications,
+  med,
 }: {
   patientId: string;
-  medications: MedicationRead[];
+  med: MedicationRead;
 }) {
-  const [adding, setAdding] = useState(false);
   const qc = useQueryClient();
-
   const remove = useMutation({
-    mutationFn: (medId: number) => api.deleteMedication(patientId, medId),
+    mutationFn: () => api.deleteMedication(patientId, med.id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["patient", patientId] }),
   });
-
+  const active = !med.ended_at;
   return (
-    <div className="space-y-2">
-      {medications.length === 0 ? (
-        <Empty>No medications recorded.</Empty>
-      ) : (
-        medications.map((m) => (
-          <Row key={m.id}>
-            <div className="flex-1 min-w-0">
-              <div className="font-medium">
-                {m.drug_name}
-                {m.dose ? (
-                  <span className="text-muted-foreground font-normal"> · {m.dose}</span>
-                ) : null}
-              </div>
-              <div className="text-xs text-muted-foreground">
-                {m.started_at ? `Started ${m.started_at}` : "Started date unknown"}
-                {m.ended_at ? ` → ${m.ended_at}` : null}
-                {m.notes ? ` · ${m.notes}` : null}
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => remove.mutate(m.id)}
-              className="text-muted-foreground hover:text-red-600 transition-colors p-1"
-              aria-label="Remove medication"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
-          </Row>
-        ))
-      )}
-      {adding ? (
-        <AddMedicationForm
-          patientId={patientId}
-          onDone={() => setAdding(false)}
-        />
-      ) : (
-        <AddButton onClick={() => setAdding(true)}>Add medication</AddButton>
-      )}
-    </div>
+    <Row>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-baseline gap-2 flex-wrap">
+          <span className="font-medium">{med.drug_name}</span>
+          {med.dose ? (
+            <span className="text-xs text-muted-foreground">{med.dose}</span>
+          ) : null}
+          {active ? (
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-medium uppercase tracking-wide">
+              Active
+            </span>
+          ) : (
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-medium uppercase tracking-wide">
+              Past
+            </span>
+          )}
+        </div>
+        <div className="text-xs text-muted-foreground mt-0.5">
+          {med.started_at ?? "Started date unknown"}
+          {med.ended_at ? ` → ${med.ended_at}` : null}
+          {med.notes ? ` · ${med.notes}` : null}
+        </div>
+      </div>
+      <DeleteButton onClick={() => remove.mutate()} label="Remove medication" />
+    </Row>
   );
 }
 
@@ -194,7 +280,6 @@ function AddMedicationForm({
   const [startedAt, setStartedAt] = useState("");
   const [notes, setNotes] = useState("");
   const qc = useQueryClient();
-
   const add = useMutation({
     mutationFn: () =>
       api.addMedication(patientId, {
@@ -208,81 +293,53 @@ function AddMedicationForm({
       onDone();
     },
   });
-
   return (
     <form
       onSubmit={(e) => {
         e.preventDefault();
         if (drugName.trim()) add.mutate();
       }}
-      className="border rounded-xl p-3 bg-card space-y-2"
+      className="border rounded-xl p-3 bg-amber-50/30 space-y-2"
     >
       <Input value={drugName} onChange={setDrugName} placeholder="Drug name *" autoFocus />
       <div className="grid grid-cols-2 gap-2">
         <Input value={dose} onChange={setDose} placeholder="Dose (e.g. 300 mg twice daily)" />
-        <Input
-          value={startedAt}
-          onChange={setStartedAt}
-          placeholder="YYYY-MM-DD"
-          type="date"
-        />
+        <Input value={startedAt} onChange={setStartedAt} type="date" />
       </div>
-      <Input value={notes} onChange={setNotes} placeholder="Notes (optional)" />
-      <FormActions onCancel={onDone} disabled={!drugName.trim() || add.isPending} />
+      <Input value={notes} onChange={setNotes} placeholder="Notes" />
+      <SaveBar disabled={!drugName.trim() || add.isPending} />
     </form>
   );
 }
 
-// ---------- Symptoms ----------
+// ---------- Symptom ----------
 
-function SymptomsList({
+function SymptomRow({
   patientId,
-  symptoms,
+  sym,
 }: {
   patientId: string;
-  symptoms: SymptomRead[];
+  sym: SymptomRead;
 }) {
-  const [adding, setAdding] = useState(false);
   const qc = useQueryClient();
   const remove = useMutation({
-    mutationFn: (id: number) => api.deleteSymptom(patientId, id),
+    mutationFn: () => api.deleteSymptom(patientId, sym.id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["patient", patientId] }),
   });
-
   return (
-    <div className="space-y-2">
-      {symptoms.length === 0 ? (
-        <Empty>No symptoms recorded yet.</Empty>
-      ) : (
-        symptoms.map((s) => (
-          <Row key={s.id}>
-            <div className="flex-1 min-w-0">
-              <div className="font-medium flex items-center gap-2">
-                {s.label}
-                <SeverityPill severity={s.severity} />
-              </div>
-              <div className="text-xs text-muted-foreground">
-                {s.occurred_on}
-                {s.notes ? ` · ${s.notes}` : null}
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => remove.mutate(s.id)}
-              className="text-muted-foreground hover:text-red-600 transition-colors p-1"
-              aria-label="Remove symptom"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
-          </Row>
-        ))
-      )}
-      {adding ? (
-        <AddSymptomForm patientId={patientId} onDone={() => setAdding(false)} />
-      ) : (
-        <AddButton onClick={() => setAdding(true)}>Log symptom</AddButton>
-      )}
-    </div>
+    <Row>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-baseline gap-2 flex-wrap">
+          <span className="font-medium">{sym.label}</span>
+          <SeverityPill severity={sym.severity} />
+        </div>
+        <div className="text-xs text-muted-foreground mt-0.5">
+          {sym.occurred_on}
+          {sym.notes ? ` · ${sym.notes}` : null}
+        </div>
+      </div>
+      <DeleteButton onClick={() => remove.mutate()} label="Remove symptom" />
+    </Row>
   );
 }
 
@@ -298,7 +355,6 @@ function AddSymptomForm({
   const [severity, setSeverity] = useState(5);
   const [notes, setNotes] = useState("");
   const qc = useQueryClient();
-
   const add = useMutation({
     mutationFn: () =>
       api.addSymptom(patientId, {
@@ -312,20 +368,19 @@ function AddSymptomForm({
       onDone();
     },
   });
-
   return (
     <form
       onSubmit={(e) => {
         e.preventDefault();
         if (label.trim()) add.mutate();
       }}
-      className="border rounded-xl p-3 bg-card space-y-2"
+      className="border rounded-xl p-3 bg-amber-50/30 space-y-2"
     >
       <Input value={label} onChange={setLabel} placeholder="What happened? *" autoFocus />
       <div className="grid grid-cols-2 gap-2">
         <Input value={date} onChange={setDate} type="date" />
-        <label className="flex items-center gap-2 text-sm">
-          <span className="text-xs text-muted-foreground">Severity</span>
+        <label className="flex items-center gap-2 text-xs">
+          <span className="text-muted-foreground uppercase tracking-wide">Severity</span>
           <input
             type="range"
             min={1}
@@ -334,11 +389,11 @@ function AddSymptomForm({
             onChange={(e) => setSeverity(Number(e.target.value))}
             className="flex-1"
           />
-          <span className="font-mono text-xs w-6 text-right">{severity}</span>
+          <span className="font-mono w-6 text-right">{severity}</span>
         </label>
       </div>
-      <Input value={notes} onChange={setNotes} placeholder="Notes (optional)" />
-      <FormActions onCancel={onDone} disabled={!label.trim() || add.isPending} />
+      <Input value={notes} onChange={setNotes} placeholder="Notes" />
+      <SaveBar disabled={!label.trim() || add.isPending} />
     </form>
   );
 }
@@ -357,43 +412,44 @@ function SeverityPill({ severity }: { severity: number }) {
   );
 }
 
-// ---------- Uploads ----------
+// ---------- Upload ----------
 
-function UploadsList({ uploads }: { uploads: PatientUploadRead[] }) {
-  if (uploads.length === 0) {
-    return (
-      <Empty>
-        Upload a CT scan, VCF, or 23andMe file from{" "}
-        <Link href="/build" className="text-primary hover:underline">
-          /build
-        </Link>{" "}
-        — once analysed, it&apos;ll appear here.
-      </Empty>
-    );
-  }
+function UploadRow({ upload }: { upload: PatientUploadRead }) {
+  const kindIcons: Record<PatientUploadRead["upload_kind"], React.ReactNode> = {
+    ct_scan: <ScanLine className="w-4 h-4 text-primary" />,
+    vcf: <FlaskConical className="w-4 h-4 text-primary" />,
+    "23andme": <FlaskConical className="w-4 h-4 text-primary" />,
+    report: <FileText className="w-4 h-4 text-primary" />,
+  };
+  const kindLabels: Record<PatientUploadRead["upload_kind"], string> = {
+    ct_scan: "CT scan",
+    vcf: "Genetic data (VCF)",
+    "23andme": "23andMe",
+    report: "Report",
+  };
+  const isViewableCt =
+    upload.upload_kind === "ct_scan" && !!upload.asset_url;
+
   return (
-    <div className="space-y-2">
-      {uploads.map((u) => (
-        <Row key={u.id}>
-          <div className="flex-1 min-w-0">
-            <div className="font-medium truncate">{u.filename}</div>
-            <div className="text-xs text-muted-foreground">
-              {u.upload_kind.replace("_", " ")} · {new Date(u.uploaded_at).toLocaleDateString()}
-              {u.summary_json ? ` · ${u.summary_json}` : null}
-            </div>
+    <div className="border rounded-xl bg-card overflow-hidden hover:border-amber-200 transition-colors">
+      <div className="flex items-start gap-3 p-3">
+        <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+          {kindIcons[upload.upload_kind]}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="font-medium truncate">{upload.filename}</div>
+          <div className="text-xs text-muted-foreground mt-0.5">
+            {kindLabels[upload.upload_kind]} ·{" "}
+            {new Date(upload.uploaded_at).toLocaleDateString()}
+            {upload.summary_json ? ` · ${upload.summary_json}` : null}
           </div>
-          {u.asset_url ? (
-            <a
-              href={u.asset_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs text-primary hover:underline whitespace-nowrap"
-            >
-              View
-            </a>
-          ) : null}
-        </Row>
-      ))}
+        </div>
+      </div>
+      {isViewableCt ? (
+        <div className="bg-black h-[320px] border-t">
+          <VolumeViewer volumeUrl={upload.asset_url!} />
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -402,7 +458,7 @@ function UploadsList({ uploads }: { uploads: PatientUploadRead[] }) {
 
 function Row({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex items-start gap-3 border rounded-xl p-3 bg-card">
+    <div className="flex items-start gap-3 border rounded-xl p-3 bg-card hover:border-amber-200 transition-colors">
       {children}
     </div>
   );
@@ -410,24 +466,27 @@ function Row({ children }: { children: React.ReactNode }) {
 
 function Empty({ children }: { children: React.ReactNode }) {
   return (
-    <div className="text-sm text-muted-foreground italic px-1">{children}</div>
+    <div className="text-sm text-muted-foreground italic px-3 py-2">
+      {children}
+    </div>
   );
 }
 
-function AddButton({
-  children,
+function DeleteButton({
   onClick,
+  label,
 }: {
-  children: React.ReactNode;
   onClick: () => void;
+  label: string;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
+      className="text-muted-foreground hover:text-red-600 transition-colors p-1 flex-shrink-0"
+      aria-label={label}
     >
-      <Plus className="w-3.5 h-3.5" /> {children}
+      <Trash2 className="w-4 h-4" />
     </button>
   );
 }
@@ -450,28 +509,15 @@ function Input({
   );
 }
 
-function FormActions({
-  onCancel,
-  disabled,
-}: {
-  onCancel: () => void;
-  disabled?: boolean;
-}) {
+function SaveBar({ disabled }: { disabled?: boolean }) {
   return (
-    <div className="flex items-center gap-2 pt-1">
+    <div className="flex items-center justify-end pt-1">
       <button
         type="submit"
         disabled={disabled}
-        className="bg-primary text-primary-foreground rounded-md px-3 py-1.5 text-sm hover:opacity-90 disabled:opacity-50"
+        className="bg-primary text-primary-foreground rounded-md px-4 py-1.5 text-sm hover:opacity-90 disabled:opacity-50"
       >
         Save
-      </button>
-      <button
-        type="button"
-        onClick={onCancel}
-        className="text-sm text-muted-foreground hover:text-foreground"
-      >
-        Cancel
       </button>
     </div>
   );

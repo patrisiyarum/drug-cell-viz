@@ -203,6 +203,69 @@ async def _seed_demo_patients() -> None:
             ))
             await session.commit()
 
+        # ----- Seed Diana ---------------------------------------------------
+        existing_diana_meds = (await session.execute(
+            select(Medication).where(Medication.patient_id == "diana")
+        )).first()
+        if existing_diana_meds is None:
+            session.add(Medication(
+                patient_id="diana", drug_name="Tamoxifen", dose="20 mg daily",
+                started_at=date(2025, 9, 18),
+                notes="Hormonal therapy for ER+ disease. CYP2D6 *4/*4 reduces conversion to active form.",
+            ))
+            session.add(Medication(
+                patient_id="diana", drug_name="Carboplatin",
+                dose="AUC 5, every 3 weeks",
+                started_at=date(2024, 11, 5), ended_at=date(2025, 4, 12),
+                notes="Platinum chemotherapy. Completed; partial response.",
+            ))
+            session.add(Symptom(
+                patient_id="diana", occurred_on=date(2025, 12, 14),
+                label="Hot flashes", severity=6,
+                notes="Frequent, especially evenings. Likely tamoxifen-related.",
+            ))
+            session.add(Symptom(
+                patient_id="diana", occurred_on=date(2025, 12, 19),
+                label="Joint stiffness", severity=4,
+                notes="Mostly mornings. Loosens with activity.",
+            ))
+            session.add(Symptom(
+                patient_id="diana", occurred_on=date(2025, 12, 23),
+                label="Low energy", severity=5,
+                notes="Persistent for ~2 weeks.",
+            ))
+            await session.commit()
+
+        existing_diana_uploads = (await session.execute(
+            select(PatientUpload).where(PatientUpload.patient_id == "diana")
+        )).first()
+        if existing_diana_uploads is None:
+            session.add(PatientUpload(
+                patient_id="diana",
+                upload_kind="ct_scan",
+                filename="TCGA-13-1411_abd_pel_ct.nii.gz",
+                asset_url="/fixtures/diana_ct_scan.nii.gz",
+                summary_json="HRD 76% (predicted hr deficient, high confidence) — somatic-HRD signal despite clean germline.",
+                uploaded_at=datetime(2025, 11, 14, 10, 5, tzinfo=timezone.utc),
+            ))
+            session.add(PatientUpload(
+                patient_id="diana",
+                upload_kind="vcf",
+                filename="diana_germline_panel.vcf",
+                asset_url=None,
+                summary_json="1 variant: CYP2D6 *4/*4 (poor metabolizer). HR-repair panel clean.",
+                uploaded_at=datetime(2025, 10, 30, 14, 18, tzinfo=timezone.utc),
+            ))
+            session.add(PatientUpload(
+                patient_id="diana",
+                upload_kind="report",
+                filename="myChoice_HRD_summary.pdf",
+                asset_url=None,
+                summary_json="Tumor scar test ordered after radiogenomics flag. Awaiting result.",
+                uploaded_at=datetime(2025, 11, 20, 9, 30, tzinfo=timezone.utc),
+            ))
+            await session.commit()
+
 
 _redis: redis.Redis = redis.from_url(settings.redis_url, decode_responses=True)
 
