@@ -122,10 +122,27 @@ export default function WalkthroughPage() {
       </header>
 
       <main className="flex-1 px-6 md:px-8 py-8">
-        {/* The clinical analysis report. Drug + variants + scan are already
-            visible on the patient profile, so we skip the "step walkthrough"
-            framing and go straight to the report — that's what the user
-            clicked "See clinical analysis" to see. */}
+        {/* Patient header strip — avatar + name + age + diagnosis so the
+            reader knows whose clinical analysis they're looking at without
+            needing to navigate back to the profile. */}
+        <div className="max-w-[1600px] mx-auto mb-6 flex items-center gap-4">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={`https://api.dicebear.com/7.x/lorelei/svg?seed=${patient.id}&backgroundColor=fde68a,fcd34d,fbbf24&backgroundType=gradientLinear&hair=variant20,variant21,variant22,variant23,variant24,variant25,variant26,variant27,variant28,variant29,variant30,variant31,variant32,variant33,variant34,variant35,variant36,variant37,variant38,variant39,variant40,variant41,variant42,variant43,variant44,variant45,variant46,variant47&earringsProbability=60`}
+            alt={`${patient.persona_name} avatar`}
+            className="w-14 h-14 rounded-full border-2 border-white shadow-sm bg-amber-50"
+          />
+          <div>
+            <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">
+              {patient.persona_name}
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              Age {patient.age} · {patient.indication}
+            </p>
+          </div>
+        </div>
+
+        {/* The clinical analysis report. */}
         <div
           ref={reportRef}
           className="max-w-[1600px] mx-auto scroll-mt-6"
