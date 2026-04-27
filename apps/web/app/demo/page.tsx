@@ -8,10 +8,18 @@ import { api } from "@/lib/api";
 import type { DemoPatient, Demos } from "@/lib/bc-types";
 
 function avatarFor(patientId: string): string {
+  // Maya, Diana, Priya are all women — pin hair to the feminine-presenting
+  // long-hair variants (20+) so the seed-based generator doesn't pick
+  // masculine outputs. Seed still drives face shape + accessories.
+  const femHair = Array.from({ length: 28 }, (_, i) =>
+    `variant${String(i + 20).padStart(2, "0")}`,
+  ).join(",");
   const params = new URLSearchParams({
     seed: patientId,
     backgroundColor: "fde68a,fcd34d,fbbf24",
     backgroundType: "gradientLinear",
+    hair: femHair,
+    earringsProbability: "60",
   });
   return `https://api.dicebear.com/7.x/lorelei/svg?${params.toString()}`;
 }

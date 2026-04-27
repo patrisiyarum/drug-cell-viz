@@ -83,23 +83,26 @@ export default function PatientProfilePage() {
               className="relative w-24 h-24 rounded-full border-4 border-white shadow-md bg-white"
             />
           </div>
-          <div className="flex-1 min-w-0 space-y-3">
+          <div className="flex-1 min-w-0 space-y-4">
             <div>
               <h1 className="text-3xl md:text-4xl font-semibold tracking-tight">
                 {patient.name}
               </h1>
               <p className="text-sm text-muted-foreground mt-0.5">
-                Patient ID:{" "}
-                <span className="font-mono">{patient.id}</span>
+                Patient ID: <span className="font-mono">{patient.id}</span>
               </p>
             </div>
-            <div className="flex flex-wrap gap-2">
-              <Chip label="Age" value={String(patient.age)} />
-              <Chip label="Diagnosis" value={patient.indication} />
+            <dl className="space-y-2 text-sm">
+              <Field label="Age">{patient.age}</Field>
+              <Field label="Diagnosis">{patient.indication}</Field>
               {activeMed ? (
-                <Chip label="On" value={activeMed.drug_name} tone="active" />
+                <Field label="Current medication">
+                  <span className="text-emerald-700 font-medium">
+                    {activeMed.drug_name}
+                  </span>
+                </Field>
               ) : null}
-            </div>
+            </dl>
           </div>
         </div>
 
@@ -552,39 +555,38 @@ function Centered({ children }: { children: React.ReactNode }) {
 }
 
 /**
- * Build a DiceBear avatar URL for a given patient id. DiceBear is a free
- * public avatar API that generates deterministic illustrations from a seed
- * — same patient id always returns the same face. We use the "lorelei"
- * style (soft, illustrated, neutral) and pin a kintsugi-tinted background.
+ * DiceBear avatar URL for a patient id. Maya, Diana, Priya are all women,
+ * so we pin the hair option to long/styled feminine-presenting variants
+ * (lorelei variant 20+) and bias eyebrows + mouth to softer ones. The
+ * seed still picks face shape + accessories so each patient is distinct.
  */
 function avatarFor(patientId: string): string {
+  const femHair = Array.from({ length: 28 }, (_, i) =>
+    `variant${String(i + 20).padStart(2, "0")}`,
+  ).join(",");
   const params = new URLSearchParams({
     seed: patientId,
     backgroundColor: "fde68a,fcd34d,fbbf24",
     backgroundType: "gradientLinear",
+    hair: femHair,
+    earringsProbability: "60",
   });
   return `https://api.dicebear.com/7.x/lorelei/svg?${params.toString()}`;
 }
 
-function Chip({
+function Field({
   label,
-  value,
-  tone = "default",
+  children,
 }: {
   label: string;
-  value: string;
-  tone?: "default" | "active";
+  children: React.ReactNode;
 }) {
-  const styles =
-    tone === "active"
-      ? "border-emerald-300 bg-emerald-50 text-emerald-900"
-      : "border-border bg-muted/40 text-foreground";
   return (
-    <div className={`inline-flex items-baseline gap-1.5 border rounded-full px-3 py-1 text-xs ${styles}`}>
-      <span className="text-muted-foreground uppercase tracking-wide text-[10px]">
+    <div>
+      <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
         {label}
-      </span>
-      <span className="font-medium">{value}</span>
+      </dt>
+      <dd className="mt-0.5">{children}</dd>
     </div>
   );
 }
