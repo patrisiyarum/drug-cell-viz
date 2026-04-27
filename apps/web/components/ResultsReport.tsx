@@ -224,12 +224,14 @@ function StructureSlideshow({
     return s.label;
   };
 
-  // Square aspect with a max-height cap so the slideshow card doesn't
-  // dominate the screen on a wide monitor. overflow-hidden absorbs any
-  // inner viewer/header height variance so cycling slides never reflows
-  // the page.
+  // Capped-width square. max-h alone produced a wider-than-tall rectangle
+  // on big screens because the column width could exceed the height cap
+  // (aspect-square then snapped to that wider width). Capping max-w
+  // instead keeps the card a true square at any viewport. overflow-hidden
+  // absorbs inner viewer/header height variance so cycling slides never
+  // reflows the page.
   return (
-    <div className="bg-card rounded-2xl overflow-hidden border flex flex-col aspect-square max-h-[560px] mx-auto w-full">
+    <div className="bg-card rounded-2xl overflow-hidden border flex flex-col aspect-square max-w-[480px] mx-auto w-full">
       {total > 1 ? (
         <div className="flex items-center gap-2 px-3 py-2 border-b bg-muted/40">
           <button
