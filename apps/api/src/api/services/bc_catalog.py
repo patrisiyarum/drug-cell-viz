@@ -1177,8 +1177,8 @@ DEMO_PATIENTS: list[DemoPatient] = [
         "name": "Priya's story",
         "persona_name": "Priya",
         "age": 58,
-        "scenario": "HR deficiency in a different cancer. Same biology, different tumor.",
-        "indication": "HER2-negative metastatic breast cancer, germline BRCA2+",
+        "scenario": "HR deficiency confirmed by tumor scar score. Same biology as Maya, different organ.",
+        "indication": "HER2-negative metastatic breast cancer, germline BRCA2+ (HRD-positive)",
         "subtype": "TNBC",
         "drug_id": "olaparib",
         "medication_display": "Olaparib (Lynparza)",
@@ -1193,12 +1193,12 @@ DEMO_PATIENTS: list[DemoPatient] = [
         "variant_ids": ["BRCA2_6174delT"],
         "zygosity_overrides": {"BRCA2_6174delT": "heterozygous"},
         "narrative": "Priya has germline BRCA2-mutated HER2-negative "
-        "metastatic breast cancer. Her tumor is HR-deficient, which is the "
-        "same biology that makes Maya's ovarian tumor PARP-inhibitor "
-        "sensitive. Olaparib is FDA-approved for germline BRCA1/2-mutated "
-        "HER2-negative metastatic and high-risk early breast cancer "
-        "(OlympiAD, OlympiA), so she gets the same drug as Maya for the "
-        "same molecular reason in a different organ.",
+        "metastatic breast cancer. Her tumor's myChoice CDx scar report "
+        "puts the HRD-sum well above the Myriad cutoff of 42, confirming "
+        "HR-deficiency. Olaparib is FDA-approved for germline BRCA1/2-"
+        "mutated HER2-negative metastatic and high-risk early breast "
+        "cancer (OlympiAD, OlympiA), so she gets the same drug as Maya "
+        "for the same molecular reason in a different organ.",
     },
 ]
 

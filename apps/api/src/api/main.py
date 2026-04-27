@@ -134,7 +134,7 @@ async def _seed_demo_patients() -> None:
     seeds = [
         ("maya", "Maya", 41, "High-grade serous ovarian cancer, germline BRCA1+", "olaparib", "Olaparib (Lynparza)"),
         ("diana", "Diana", 52, "Recurrent ER+ ovarian cancer (germline panel clean for HR genes)", "tamoxifen", "Tamoxifen"),
-        ("priya", "Priya", 58, "HER2-negative metastatic breast cancer, germline BRCA2+", "olaparib", "Olaparib (Lynparza)"),
+        ("priya", "Priya", 58, "HER2-negative metastatic breast cancer, germline BRCA2+ (HRD-positive)", "olaparib", "Olaparib (Lynparza)"),
     ]
     async with session_scope() as session:
         for pid, name, age, indication, drug_id, drug_name in seeds:
@@ -203,6 +203,27 @@ async def _seed_demo_patients() -> None:
             ))
             await session.commit()
 
+        # Maya's myChoice / FoundationOne CDx-style scar report — a third
+        # independent line of evidence (germline BRCA1 + radiogenomics CT +
+        # scar score all agree). Seeded with its own existence check so it
+        # backfills on existing DBs that already had Maya's CT + VCF.
+        scar_existing = (await session.execute(
+            select(PatientUpload).where(
+                PatientUpload.patient_id == "maya",
+                PatientUpload.filename == "maya_myChoice_HRD_scars.pdf",
+            )
+        )).first()
+        if scar_existing is None:
+            session.add(PatientUpload(
+                patient_id="maya",
+                upload_kind="report",
+                filename="maya_myChoice_HRD_scars.pdf",
+                asset_url=None,
+                summary_json="LOH 14 · LST 18 · NTAI 12 → HRD-sum 44 (HR-deficient, scar burden above Myriad cutoff of 42).",
+                uploaded_at=datetime(2025, 11, 18, 11, 14, tzinfo=timezone.utc),
+            ))
+            await session.commit()
+
         # ----- Seed Diana ---------------------------------------------------
         existing_diana_meds = (await session.execute(
             select(Medication).where(Medication.patient_id == "diana")
@@ -233,6 +254,59 @@ async def _seed_demo_patients() -> None:
                 patient_id="diana", occurred_on=date(2025, 12, 23),
                 label="Low energy", severity=5,
                 notes="Persistent for ~2 weeks.",
+            ))
+            await session.commit()
+
+        # ----- Seed Priya ---------------------------------------------------
+        existing_priya_meds = (await session.execute(
+            select(Medication).where(Medication.patient_id == "priya")
+        )).first()
+        if existing_priya_meds is None:
+            session.add(Medication(
+                patient_id="priya", drug_name="Olaparib", dose="300 mg twice daily",
+                started_at=date(2025, 8, 22),
+                notes="OlympiAD-indication. germline BRCA2 + scar-confirmed HRD.",
+            ))
+            session.add(Medication(
+                patient_id="priya", drug_name="Capecitabine",
+                dose="1000 mg/m² twice daily, days 1-14 / 21",
+                started_at=date(2024, 9, 10), ended_at=date(2025, 6, 5),
+                notes="Prior chemotherapy. Switched to olaparib after BRCA2 + HRD confirmation.",
+            ))
+            session.add(Symptom(
+                patient_id="priya", occurred_on=date(2025, 12, 17),
+                label="Anaemia (mild)", severity=4,
+                notes="Known olaparib side effect. Hgb 11.2 last draw.",
+            ))
+            session.add(Symptom(
+                patient_id="priya", occurred_on=date(2025, 12, 21),
+                label="Fatigue", severity=5,
+                notes="Improving since dose-tolerance period started.",
+            ))
+            await session.commit()
+
+        existing_priya_uploads = (await session.execute(
+            select(PatientUpload).where(PatientUpload.patient_id == "priya")
+        )).first()
+        if existing_priya_uploads is None:
+            session.add(PatientUpload(
+                patient_id="priya",
+                upload_kind="vcf",
+                filename="priya_germline_brca_panel.vcf",
+                asset_url=None,
+                summary_json="1 variant: BRCA2 c.5946delT (pathogenic). HRD pathway hit.",
+                uploaded_at=datetime(2025, 7, 15, 10, 22, tzinfo=timezone.utc),
+            ))
+            # Tumor scar HRD report — Priya's headline HRD evidence since
+            # breast cancer doesn't use CT-based radiogenomics. LOH 18 +
+            # LST 22 + NTAI 16 = HRD-sum 56, well above the Myriad cutoff.
+            session.add(PatientUpload(
+                patient_id="priya",
+                upload_kind="report",
+                filename="priya_myChoice_HRD_scars.pdf",
+                asset_url=None,
+                summary_json="LOH 18 · LST 22 · NTAI 16 → HRD-sum 56 (HR-deficient, well above Myriad cutoff of 42).",
+                uploaded_at=datetime(2025, 7, 28, 14, 5, tzinfo=timezone.utc),
             ))
             await session.commit()
 

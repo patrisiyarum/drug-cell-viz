@@ -2,10 +2,19 @@
 
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, User } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 
 import { api } from "@/lib/api";
 import type { DemoPatient, Demos } from "@/lib/bc-types";
+
+function avatarFor(patientId: string): string {
+  const params = new URLSearchParams({
+    seed: patientId,
+    backgroundColor: "fde68a,fcd34d,fbbf24",
+    backgroundType: "gradientLinear",
+  });
+  return `https://api.dicebear.com/7.x/lorelei/svg?${params.toString()}`;
+}
 
 export default function PatientsListPage() {
   const { data, isLoading } = useQuery<Demos>({
@@ -57,12 +66,15 @@ function ProfileCard({ patient }: { patient: DemoPatient }) {
   return (
     <Link
       href={`/patient/${patient.id}`}
-      className="group bg-card border rounded-2xl p-5 md:p-6 hover:border-primary/50 hover:shadow-sm transition-all"
+      className="group bg-card border rounded-2xl p-5 hover:border-amber-300 hover:shadow-sm transition-all"
     >
       <div className="flex items-center gap-4">
-        <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
-          <User className="w-5 h-5 text-muted-foreground" />
-        </div>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={avatarFor(patient.id)}
+          alt={`${patient.persona_name} avatar`}
+          className="w-14 h-14 rounded-full border-2 border-white shadow-sm bg-amber-50 flex-shrink-0"
+        />
         <div className="flex-1 min-w-0">
           <h2 className="text-lg font-semibold group-hover:text-primary transition-colors">
             {patient.persona_name}

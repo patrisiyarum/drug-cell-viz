@@ -4,12 +4,6 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef } from "react";
 import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import {
-  CheckCircle2,
-  FileCheck2,
-  Pill,
-  Sparkles,
-} from "lucide-react";
 
 import { ResultsReport } from "@/components/ResultsReport";
 import { api } from "@/lib/api";
@@ -21,11 +15,10 @@ import type {
 } from "@/lib/bc-types";
 
 /**
- * Guided walkthrough for preset demo patients. Pre-fills every step of the
- * /build flow so the user sees what the app does at each stage — the drug
- * picker pre-selects the case's drug, the upload card shows a fake
- * "uploaded" fixture VCF with parsed detections, the variant picker shows
- * the catalog entries highlighted, and the final report renders below.
+ * Clinical analysis page for a preset patient. Renders the full ResultsReport
+ * (3D molecular view, HRD card, drug-match assessment, PDF download) for the
+ * patient referenced by the URL. Header just lets the user back-navigate to
+ * the patient's profile.
  *
  * This page doesn't do any real file upload — everything the patient needs
  * is already in the preset. The goal is to *demonstrate* the flow, not
@@ -85,18 +78,6 @@ export default function WalkthroughPage() {
     );
   }
 
-  const drug = catalog.drugs.find((d) => d.id === patient.drug_id);
-  const variants = patient.variant_ids
-    .map((vid) => catalog.variants.find((v) => v.id === vid))
-    .filter((v): v is NonNullable<typeof v> => !!v);
-
-  // Map a catalog variant id to the fixture VCF path we ship in the repo,
-  // where possible. The fixture is what the walkthrough's Step 2 shows as
-  // "uploaded"; if there's no matching fixture we fall back to a short
-  // "catalog-only" explanation in that step.
-  const fixtureFor = FIXTURES[patientId ?? ""];
-  const ctFixtureFor = CT_FIXTURES[patientId ?? ""];
-
   return (
     <div className="flex flex-col bg-white min-h-screen">
       <header className="border-b bg-card no-print">
@@ -107,216 +88,17 @@ export default function WalkthroughPage() {
           >
             ← Back to {patient.persona_name}&apos;s profile
           </Link>
-          <div className="text-right text-sm">
-            <span className="text-muted-foreground">
-              Walking through {patient.persona_name}
-              &apos;s story
-            </span>
-          </div>
         </div>
       </header>
 
-      <main className="flex-1 px-6 md:px-8 py-10">
-        <div className="max-w-3xl mx-auto space-y-6">
-          <div className="space-y-3">
-            <h1 className="text-3xl md:text-4xl font-semibold">
-              {patient.persona_name}&apos;s walkthrough
-            </h1>
-            <div className="h-px max-w-md bg-gradient-to-r from-amber-400/40 via-amber-500 to-amber-400/40" />
-            <div className="rounded-xl border bg-card p-4 md:p-5 grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
-              <div>
-                <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-0.5">
-                  Patient
-                </div>
-                <div>
-                  {patient.persona_name}, {patient.age}
-                </div>
-              </div>
-              <div>
-                <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-0.5">
-                  Diagnosis
-                </div>
-                <div>{patient.indication}</div>
-              </div>
-              <div>
-                <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-0.5">
-                  Current medication
-                </div>
-                <div>{patient.medication_display}</div>
-              </div>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Every step below is pre-filled with this patient&apos;s data so you
-              can see what the app would output.
-            </p>
-          </div>
-
-          {/* ---- STEP 1: drug pre-filled ---- */}
-          <StepCard
-            n={1}
-            title="Pick a medication"
-            subtitle="Pre-filled for this case."
-            icon={<Pill className="w-4 h-4" aria-hidden />}
-          >
-            <div className="flex items-baseline gap-2 flex-wrap text-sm">
-              <span className="text-muted-foreground">Selected:</span>
-              <span className="font-semibold text-base">
-                {drug?.name ?? patient.drug_id}
-              </span>
-              {drug ? (
-                <span className="text-xs text-muted-foreground">
-                  ({drug.category.replace(/_/g, " ")})
-                </span>
-              ) : null}
-            </div>
-          </StepCard>
-
-          {/* ---- STEP 2: fixture file "uploaded" ---- */}
-          <StepCard
-            n={2}
-            title="Upload your data"
-            subtitle={
-              fixtureFor || ctFixtureFor
-                ? "Fixtures loaded for this walkthrough."
-                : `Variants for ${patient.persona_name} were selected directly from the curated catalog (no file upload needed).`
-            }
-            icon={<FileCheck2 className="w-4 h-4" aria-hidden />}
-          >
-            {fixtureFor || ctFixtureFor ? (
-              <div className="space-y-3">
-                {fixtureFor ? (
-                  <div className="space-y-2">
-                    <div className="flex items-start gap-2 text-sm">
-                      <CheckCircle2
-                        className="w-4 h-4 text-success flex-shrink-0 mt-0.5"
-                        aria-hidden
-                      />
-                      <div className="flex-1">
-                        <span className="font-medium">VCF read.</span>{" "}
-                        <span className="text-muted-foreground">
-                          {fixtureFor.records} record
-                          {fixtureFor.records === 1 ? "" : "s"} scanned; matched{" "}
-                          {variants.length} catalog variant
-                          {variants.length === 1 ? "" : "s"}.
-                        </span>
-                      </div>
-                    </div>
-                    <ul className="space-y-1">
-                      {variants.map((v) => (
-                        <li
-                          key={v.id}
-                          className="text-xs border rounded-lg p-2 bg-white"
-                        >
-                          <span className="font-mono">{v.name}</span>{" "}
-                          <span className="text-muted-foreground">
-                            · {v.gene_symbol} ·{" "}
-                            {(patient.zygosity_overrides[v.id] ?? "heterozygous") ===
-                            "homozygous"
-                              ? "both copies"
-                              : "one copy"}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
-
-                {ctFixtureFor ? (
-                  <div className="space-y-2">
-                    <div className="flex items-start gap-2 text-sm">
-                      <CheckCircle2
-                        className="w-4 h-4 text-success flex-shrink-0 mt-0.5"
-                        aria-hidden
-                      />
-                      <div className="flex-1">
-                        <span className="font-medium">CT scan uploaded.</span>{" "}
-                        <span className="text-muted-foreground">
-                          {ctFixtureFor.slices}-slice {ctFixtureFor.description},
-                          ready for the radiogenomics model below.
-                        </span>
-                      </div>
-                    </div>
-                    <div className="text-xs border rounded-lg p-2 bg-white">
-                      <span className="font-mono">
-                        {ctFixtureFor.tciaPatient}
-                      </span>{" "}
-                      <span className="text-muted-foreground">
-                        · TCGA-OV (TCIA) · NIfTI volume
-                      </span>
-                    </div>
-                  </div>
-                ) : null}
-
-                <p className="text-xs text-muted-foreground">
-                  You can also upload your own clinical VCF or DICOM CT on{" "}
-                  <Link href="/build" className="text-primary hover:underline">
-                    /build
-                  </Link>
-                  .
-                </p>
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                For this case the variants come directly from the curated
-                catalog. Real users would either upload a clinical VCF on{" "}
-                <Link href="/build" className="text-primary hover:underline">
-                  /build
-                </Link>{" "}
-                or pick variants manually in step 3.
-              </p>
-            )}
-          </StepCard>
-
-          {/* ---- STEP 3: variants pre-selected ---- */}
-          <StepCard
-            n={3}
-            title="Select your variants"
-            subtitle={`${variants.length} variant${variants.length === 1 ? "" : "s"} selected for ${patient.persona_name}.`}
-            icon={<Sparkles className="w-4 h-4" aria-hidden />}
-          >
-            <ul className="space-y-2">
-              {variants.map((v) => (
-                <li
-                  key={v.id}
-                  className="rounded-lg border p-3 bg-white space-y-1"
-                >
-                  <div className="flex items-baseline gap-2 flex-wrap text-sm">
-                    <span className="font-mono">{v.name}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {v.gene_symbol}
-                    </span>
-                    <span
-                      className={`text-[10px] px-1.5 py-0.5 rounded ${
-                        v.clinical_significance === "pathogenic" ||
-                        v.clinical_significance === "likely_pathogenic"
-                          ? "bg-red-100 text-red-800"
-                          : v.clinical_significance === "drug_response"
-                            ? "bg-amber-100 text-amber-800"
-                            : "bg-slate-100 text-slate-700"
-                      }`}
-                    >
-                      {v.clinical_significance.replace(/_/g, " ")}
-                    </span>
-                    <span className="text-xs text-muted-foreground ml-auto">
-                      {(patient.zygosity_overrides[v.id] ?? "heterozygous") ===
-                      "homozygous"
-                        ? "2 copies"
-                        : "1 copy"}
-                    </span>
-                  </div>
-                  <p className="text-xs text-muted-foreground leading-relaxed">
-                    {v.plain_summary}
-                  </p>
-                </li>
-              ))}
-            </ul>
-          </StepCard>
-        </div>
-
-        {/* Full report — no step header; the report cards speak for themselves. */}
+      <main className="flex-1 px-6 md:px-8 py-8">
+        {/* The clinical analysis report. Drug + variants + scan are already
+            visible on the patient profile, so we skip the "step walkthrough"
+            framing and go straight to the report — that's what the user
+            clicked "See clinical analysis" to see. */}
         <div
           ref={reportRef}
-          className="max-w-[1600px] mx-auto mt-10 scroll-mt-6"
+          className="max-w-[1600px] mx-auto scroll-mt-6"
         >
           {analysis.isLoading ? (
             <p className="text-sm text-muted-foreground max-w-3xl mx-auto">
@@ -333,82 +115,6 @@ export default function WalkthroughPage() {
         </div>
       </main>
     </div>
-  );
-}
-
-// Map demo patient id → the fixture VCF we ship in fixtures/patients/.
-// Maya + Diana's catalog variants have matching coordinates in the VCF
-// ingestor's _COORDS table, so a fixture VCF can round-trip through
-// /api/vcf/analyze and land the expected detection. Priya's BRCA2 variant
-// is a frameshift indel that _COORDS doesn't cover (yet — see
-// docs/research-roadmap.md for the follow-up), so her walkthrough uses
-// the "catalog-only" branch below and skips Step 2's file demo.
-const FIXTURES: Record<string, { path: string; records: number }> = {
-  maya: { path: "fixtures/patients/patient_maya_brca1.vcf", records: 1 },
-  diana: { path: "fixtures/patients/patient_diana_cyp2d6.vcf", records: 1 },
-};
-
-// CT fixtures shipped with the demo. Maya is TCGA-09-1659 (69-slice axial),
-// Diana is TCGA-13-1411 (103-slice contrast-enhanced abdominopelvic). Priya
-// doesn't have a paired CT in this demo. When set, Step 2 renders an
-// extra "CT scan also uploaded" row alongside the VCF.
-const CT_FIXTURES: Record<
-  string,
-  { label: string; tciaPatient: string; slices: number; description: string }
-> = {
-  maya: {
-    label: "fixtures/patients/maya_ct_scan.nii.gz",
-    tciaPatient: "TCGA-09-1659",
-    slices: 69,
-    description: "axial pelvic CT",
-  },
-  diana: {
-    label: "fixtures/patients/diana_ct_scan.nii.gz",
-    tciaPatient: "TCGA-13-1411",
-    slices: 103,
-    description: "contrast-enhanced abdominopelvic CT",
-  },
-};
-
-function StepCard({
-  n,
-  title,
-  subtitle,
-  icon,
-  children,
-}: {
-  n: number;
-  title: string;
-  subtitle?: string;
-  icon?: React.ReactNode;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="bg-card border rounded-2xl p-5 md:p-6 space-y-4">
-      <div className="flex items-start gap-3">
-        <StepNumber n={n} />
-        <div className="flex-1">
-          <div className="flex items-center gap-2">
-            <h2 className="text-lg md:text-xl font-semibold">{title}</h2>
-            {icon ? (
-              <span className="text-muted-foreground">{icon}</span>
-            ) : null}
-          </div>
-          {subtitle ? (
-            <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>
-          ) : null}
-        </div>
-      </div>
-      <div>{children}</div>
-    </section>
-  );
-}
-
-function StepNumber({ n }: { n: number }) {
-  return (
-    <span className="w-7 h-7 flex-shrink-0 rounded-full bg-primary text-primary-foreground text-sm font-semibold flex items-center justify-center">
-      {n}
-    </span>
   );
 }
 

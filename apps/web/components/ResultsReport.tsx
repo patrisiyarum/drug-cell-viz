@@ -224,13 +224,12 @@ function StructureSlideshow({
     return s.label;
   };
 
-  // Square aspect on the slideshow frame so the card matches the column's
-  // width. overflow-hidden absorbs any inner header/viewer height variance
-  // so cycling slides never reflows the page. The aspect-square pin
-  // replaces the previous fixed h-[680px] — the latter was guess-sized for
-  // a specific viewport and got too tall when the column got narrower.
+  // Square aspect with a max-height cap so the slideshow card doesn't
+  // dominate the screen on a wide monitor. overflow-hidden absorbs any
+  // inner viewer/header height variance so cycling slides never reflows
+  // the page.
   return (
-    <div className="bg-card rounded-2xl overflow-hidden border flex flex-col aspect-square">
+    <div className="bg-card rounded-2xl overflow-hidden border flex flex-col aspect-square max-h-[560px] mx-auto w-full">
       {total > 1 ? (
         <div className="flex items-center gap-2 px-3 py-2 border-b bg-muted/40">
           <button

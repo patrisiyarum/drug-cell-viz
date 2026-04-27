@@ -46,7 +46,8 @@ export default function PatientProfilePage() {
   if (!profile.data) return null;
 
   const { patient, medications, symptoms, uploads } = profile.data;
-  const initial = patient.name.slice(0, 1).toUpperCase();
+  const avatarUrl = avatarFor(patient.id);
+  const activeMed = medications.find((m) => !m.ended_at);
 
   return (
     <div className="bg-white min-h-screen">
@@ -68,18 +69,37 @@ export default function PatientProfilePage() {
       </header>
 
       <main className="max-w-3xl mx-auto px-6 py-10 space-y-10">
-        {/* Header — circular avatar + name + meta */}
-        <div className="flex items-center gap-5">
-          <div className="w-16 h-16 rounded-full bg-gradient-to-br from-amber-200 to-amber-500 flex items-center justify-center text-2xl font-semibold text-white shadow-sm">
-            {initial}
+        {/* Profile header — DiceBear-generated illustrated avatar wrapped in
+            a soft amber ring. Below the name, a chip strip carries the
+            structured metadata so the page looks like a clinical patient
+            header, not a paragraph of prose. */}
+        <div className="flex flex-col sm:flex-row gap-6 items-start sm:items-center">
+          <div className="relative flex-shrink-0">
+            <div className="absolute inset-0 rounded-full bg-gradient-to-br from-amber-200 to-amber-500 blur-md opacity-60" aria-hidden />
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={avatarUrl}
+              alt={`${patient.name} avatar`}
+              className="relative w-24 h-24 rounded-full border-4 border-white shadow-md bg-white"
+            />
           </div>
-          <div className="flex-1 min-w-0">
-            <h1 className="text-3xl md:text-4xl font-semibold tracking-tight">
-              {patient.name}
-            </h1>
-            <p className="text-sm text-muted-foreground mt-0.5">
-              Age {patient.age} · {patient.indication}
-            </p>
+          <div className="flex-1 min-w-0 space-y-3">
+            <div>
+              <h1 className="text-3xl md:text-4xl font-semibold tracking-tight">
+                {patient.name}
+              </h1>
+              <p className="text-sm text-muted-foreground mt-0.5">
+                Patient ID:{" "}
+                <span className="font-mono">{patient.id}</span>
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Chip label="Age" value={String(patient.age)} />
+              <Chip label="Diagnosis" value={patient.indication} />
+              {activeMed ? (
+                <Chip label="On" value={activeMed.drug_name} tone="active" />
+              ) : null}
+            </div>
           </div>
         </div>
 
@@ -527,6 +547,44 @@ function Centered({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-[60vh] flex items-center justify-center text-muted-foreground">
       {children}
+    </div>
+  );
+}
+
+/**
+ * Build a DiceBear avatar URL for a given patient id. DiceBear is a free
+ * public avatar API that generates deterministic illustrations from a seed
+ * — same patient id always returns the same face. We use the "lorelei"
+ * style (soft, illustrated, neutral) and pin a kintsugi-tinted background.
+ */
+function avatarFor(patientId: string): string {
+  const params = new URLSearchParams({
+    seed: patientId,
+    backgroundColor: "fde68a,fcd34d,fbbf24",
+    backgroundType: "gradientLinear",
+  });
+  return `https://api.dicebear.com/7.x/lorelei/svg?${params.toString()}`;
+}
+
+function Chip({
+  label,
+  value,
+  tone = "default",
+}: {
+  label: string;
+  value: string;
+  tone?: "default" | "active";
+}) {
+  const styles =
+    tone === "active"
+      ? "border-emerald-300 bg-emerald-50 text-emerald-900"
+      : "border-border bg-muted/40 text-foreground";
+  return (
+    <div className={`inline-flex items-baseline gap-1.5 border rounded-full px-3 py-1 text-xs ${styles}`}>
+      <span className="text-muted-foreground uppercase tracking-wide text-[10px]">
+        {label}
+      </span>
+      <span className="font-medium">{value}</span>
     </div>
   );
 }
