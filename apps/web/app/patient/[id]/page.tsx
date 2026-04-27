@@ -47,7 +47,6 @@ export default function PatientProfilePage() {
 
   const { patient, medications, symptoms, uploads } = profile.data;
   const avatarUrl = avatarFor(patient.id);
-  const activeMed = medications.find((m) => !m.ended_at);
 
   return (
     <div className="bg-white min-h-screen">
@@ -83,21 +82,13 @@ export default function PatientProfilePage() {
               className="relative w-24 h-24 rounded-full border-4 border-white shadow-md bg-white"
             />
           </div>
-          <div className="flex-1 min-w-0 space-y-4">
+          <div className="flex-1 min-w-0 space-y-2">
             <h1 className="text-3xl md:text-4xl font-semibold tracking-tight">
               {patient.name}
             </h1>
-            <dl className="space-y-2 text-sm">
-              <Field label="Age">{patient.age}</Field>
-              <Field label="Diagnosis">{patient.indication}</Field>
-              {activeMed ? (
-                <Field label="Current medication">
-                  <span className="text-emerald-700 font-medium">
-                    {activeMed.drug_name}
-                  </span>
-                </Field>
-              ) : null}
-            </dl>
+            <h2 className="text-base md:text-lg text-muted-foreground leading-snug">
+              Age {patient.age} · {patient.indication}
+            </h2>
           </div>
         </div>
 

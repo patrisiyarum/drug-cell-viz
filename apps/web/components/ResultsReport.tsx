@@ -78,9 +78,10 @@ export function ResultsReport({
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 md:gap-8">
         {/* Left column: slideshow only — just the visuals (drug on target,
-            patient variant, CT volume render). Everything text-y is on
-            the right. Now wider so the 3D / CT viewer gets more room. */}
-        <div className="lg:col-span-3 no-print">
+            patient variant, CT volume render). Narrower (2/5) so the
+            slideshow square stays compact and the right-column report
+            gets the bulk of the page. */}
+        <div className="lg:col-span-2 no-print">
           <StructureSlideshow
             result={result}
             ctScanVolumeUrl={ctScanUrl}
@@ -90,9 +91,8 @@ export function ResultsReport({
 
         {/* Right column: HRD result first, then the drug-match verdict
             ("Olaparib is explicitly endorsed for your variants"), then
-            the doctor-visit PDF as the closing action. Narrower so the
-            text cards don't dominate the page. */}
-        <div className="lg:col-span-2 space-y-6 md:space-y-8">
+            the doctor-visit PDF as the closing action. */}
+        <div className="lg:col-span-3 space-y-6 md:space-y-8">
           {result.hrd ? (
             <HrdCard
               hrd={result.hrd}
@@ -224,14 +224,12 @@ function StructureSlideshow({
     return s.label;
   };
 
-  // Capped-width square. max-h alone produced a wider-than-tall rectangle
-  // on big screens because the column width could exceed the height cap
-  // (aspect-square then snapped to that wider width). Capping max-w
-  // instead keeps the card a true square at any viewport. overflow-hidden
-  // absorbs inner viewer/header height variance so cycling slides never
-  // reflows the page.
+  // Square aspect. Width = column width (the column is now the narrower
+  // 2/5 of the page) so the card stays compact without an explicit
+  // max-w cap; aspect-square enforces a true square. overflow-hidden
+  // absorbs inner viewer/header variance so cycling slides never reflows.
   return (
-    <div className="bg-card rounded-2xl overflow-hidden border flex flex-col aspect-square max-w-[480px] mx-auto w-full">
+    <div className="bg-card rounded-2xl overflow-hidden border flex flex-col aspect-square w-full">
       {total > 1 ? (
         <div className="flex items-center gap-2 px-3 py-2 border-b bg-muted/40">
           <button
