@@ -84,14 +84,9 @@ export default function PatientProfilePage() {
             />
           </div>
           <div className="flex-1 min-w-0 space-y-4">
-            <div>
-              <h1 className="text-3xl md:text-4xl font-semibold tracking-tight">
-                {patient.name}
-              </h1>
-              <p className="text-sm text-muted-foreground mt-0.5">
-                Patient ID: <span className="font-mono">{patient.id}</span>
-              </p>
-            </div>
+            <h1 className="text-3xl md:text-4xl font-semibold tracking-tight">
+              {patient.name}
+            </h1>
             <dl className="space-y-2 text-sm">
               <Field label="Age">{patient.age}</Field>
               <Field label="Diagnosis">{patient.indication}</Field>
