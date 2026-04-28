@@ -156,7 +156,11 @@ export function HrdCard({
           />
         ) : null}
 
-        {tab === "result" || indeterminateTiles.length === 0 ? (
+        <div
+          className={
+            tab === "result" || indeterminateTiles.length === 0 ? "" : "hidden"
+          }
+        >
           <section className="rounded-2xl border border-border bg-muted/40 p-5 text-sm space-y-2">
             <div className="flex items-baseline justify-between gap-3 flex-wrap">
               <div>
@@ -178,13 +182,15 @@ export function HrdCard({
                 : " — a tumor sequencing test would be the next step."}
             </p>
           </section>
-        ) : null}
+        </div>
 
-        {tab === "lab" && indeterminateTiles.length > 0 ? (
-          <LabSection
-            tagline="Even with a clean germline panel, imaging can pick up HR-deficiency from somatic events."
-            tiles={indeterminateTiles}
-          />
+        {indeterminateTiles.length > 0 ? (
+          <div className={tab === "lab" ? "" : "hidden"}>
+            <LabSection
+              tagline="Even with a clean germline panel, imaging can pick up HR-deficiency from somatic events."
+              tiles={indeterminateTiles}
+            />
+          </div>
         ) : null}
       </div>
     );
@@ -282,7 +288,13 @@ export function HrdCard({
         patientLabel={patientLabel}
       />
 
-      {tab === "result" ? (
+      {/* Both tabs stay mounted — we toggle visibility via `hidden` rather
+          than conditionally rendering — so the lab tiles' state (CT model
+          result, scar score result, BRCA1 classifier output) survives
+          tab switches instead of re-running the experiments on every flip
+          back. React Query handles the BRCA1 case automatically; the CT
+          and scar panels need this trick because their state is local. */}
+      <div className={tab === "result" ? "" : "hidden"}>
         <div className="space-y-3">
           {/* 1. Verdict — wrapped in a SectionCard so it shares the same
               gold-seam + rounded-2xl border treatment as the rest of the
@@ -339,13 +351,15 @@ export function HrdCard({
             </SectionCard>
           ) : null}
         </div>
-      ) : null}
+      </div>
 
-      {tab === "lab" && tiles.length > 0 ? (
-        <LabSection
-          tagline={`${tiles.length === 1 ? "One experiment" : `${tiles.length} independent experiments`} testing whether your tumor is HR-deficient. Each runs on a different record from your profile.`}
-          tiles={tiles}
-        />
+      {tiles.length > 0 ? (
+        <div className={tab === "lab" ? "" : "hidden"}>
+          <LabSection
+            tagline={`${tiles.length === 1 ? "One experiment" : `${tiles.length} independent experiments`} testing whether your tumor is HR-deficient. Each runs on a different record from your profile.`}
+            tiles={tiles}
+          />
+        </div>
       ) : null}
     </div>
   );
