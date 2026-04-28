@@ -175,14 +175,22 @@ export default function WalkthroughPage() {
           className="max-w-[1600px] mx-auto scroll-mt-6"
         >
           {analysis.isLoading ? (
-            <p className="text-sm text-muted-foreground max-w-3xl mx-auto">
-              Running the analysis.
-            </p>
+            <div className="min-h-[60vh] flex items-center justify-center">
+              <div className="flex flex-col items-center gap-3 text-muted-foreground">
+                <span
+                  className="inline-block w-6 h-6 rounded-full border-2 border-amber-300 border-t-amber-500 animate-spin"
+                  aria-hidden
+                />
+                <p className="text-sm">Running the analysis…</p>
+              </div>
+            </div>
           ) : analysis.isError ? (
-            <p className="text-sm text-red-600 max-w-3xl mx-auto">
-              Couldn&apos;t run the analysis:{" "}
-              {(analysis.error as Error).message}
-            </p>
+            <div className="min-h-[60vh] flex items-center justify-center">
+              <p className="text-sm text-red-600 max-w-md text-center">
+                Couldn&apos;t run the analysis:{" "}
+                {(analysis.error as Error).message}
+              </p>
+            </div>
           ) : analysis.data ? (
             <ResultsReport
               result={analysis.data}
