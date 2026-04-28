@@ -9,9 +9,7 @@ import {
   HelpCircle,
 } from "lucide-react";
 
-import { CurrentDrugAssessmentCard } from "./CurrentDrugAssessmentCard";
-import { DoctorVisitPdfButton } from "./DoctorVisitPdfButton";
-import { HrdCard } from "./HrdCard";
+import { HrdCard, type RecordRefs } from "./HrdCard";
 import { MolViewer } from "./MolViewer";
 import { VolumeViewer } from "./VolumeViewer";
 import type {
@@ -43,6 +41,11 @@ interface Props {
    * numbers in.
    */
   scarPrefill?: { loh: number; lst: number; ntai: number } | null;
+  /**
+   * Filenames of the patient's uploaded records, surfaced inside each
+   * lab-tile so the patient can trace which file drives which model.
+   */
+  recordRefs?: RecordRefs;
 }
 
 export function ResultsReport({
@@ -51,6 +54,7 @@ export function ResultsReport({
   onSwitchDrug,
   uploadedCtScanUrl,
   scarPrefill,
+  recordRefs,
 }: Props) {
   // Per-patient radiogenomics fixture wiring. Maya ships with a pelvic CT
   // that supports her HR-deficient germline call; Diana ships with one that
@@ -109,22 +113,11 @@ export function ResultsReport({
               ctScanUrl={ctScanUrl}
               ctScanLabel={ctScanLabel}
               scarPrefill={scarPrefill}
-            />
-          ) : null}
-
-          {result.current_drug_assessment ? (
-            <CurrentDrugAssessmentCard
-              assessment={result.current_drug_assessment}
-              onSwitchDrug={onSwitchDrug}
-            />
-          ) : null}
-
-          <div className="no-print">
-            <DoctorVisitPdfButton
-              result={result}
+              recordRefs={recordRefs}
+              analysisResult={result}
               patientLabel={patient?.persona_name ?? null}
             />
-          </div>
+          ) : null}
         </div>
       </div>
     </div>

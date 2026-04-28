@@ -36,6 +36,32 @@ function findScarPrefill(
 }
 
 /**
+ * Pick the first upload of each kind so the lab tiles can show which
+ * actual file in the patient's profile is driving each experiment.
+ * Falls back to undefined when the patient has no upload of that kind.
+ */
+function recordRefsFor(profile: PatientFullProfile | undefined): {
+  vcfFilename?: string | null;
+  ctScanFilename?: string | null;
+  reportFilename?: string | null;
+} {
+  if (!profile) return {};
+  const vcf =
+    profile.uploads.find(
+      (u) => u.upload_kind === "vcf" || u.upload_kind === "23andme",
+    )?.filename ?? null;
+  const ct =
+    profile.uploads.find((u) => u.upload_kind === "ct_scan")?.filename ?? null;
+  const report =
+    profile.uploads.find((u) => u.upload_kind === "report")?.filename ?? null;
+  return {
+    vcfFilename: vcf,
+    ctScanFilename: ct,
+    reportFilename: report,
+  };
+}
+
+/**
  * Clinical analysis page for a preset patient. Renders the full ResultsReport
  * (3D molecular view, HRD card, drug-match assessment, PDF download) for the
  * patient referenced by the URL. Header just lets the user back-navigate to
@@ -84,6 +110,7 @@ export default function WalkthroughPage() {
     enabled: !!patientId,
   });
   const scarPrefill = findScarPrefill(profile.data);
+  const recordRefs = recordRefsFor(profile.data);
 
   const reportRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -161,6 +188,7 @@ export default function WalkthroughPage() {
               result={analysis.data}
               patient={patient}
               scarPrefill={scarPrefill}
+              recordRefs={recordRefs}
             />
           ) : null}
         </div>

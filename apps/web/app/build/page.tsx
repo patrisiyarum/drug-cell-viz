@@ -138,24 +138,6 @@ export default function BuildPage() {
           <Link href="/" className="text-muted-foreground hover:text-foreground text-sm">
             ← Back
           </Link>
-          <div className="flex items-center gap-3 text-sm">
-            <label className="text-muted-foreground">Save to profile:</label>
-            <select
-              value={patientId}
-              onChange={(e) => setPatientId(e.target.value)}
-              className="border rounded-md px-2 py-1 bg-white"
-            >
-              <option value="maya">Maya</option>
-              <option value="diana">Diana</option>
-              <option value="priya">Priya</option>
-            </select>
-            <Link
-              href={`/patient/${patientId}`}
-              className="text-primary hover:underline"
-            >
-              Open profile
-            </Link>
-          </div>
         </div>
       </header>
 

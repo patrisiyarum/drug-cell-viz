@@ -1,11 +1,20 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { FlaskConical, Activity, Clock, Info, Scan } from "lucide-react";
+import {
+  FlaskConical,
+  Activity,
+  Clock,
+  Info,
+  Scan,
+  Microscope,
+  ArrowRight,
+  FileText,
+} from "lucide-react";
 
 import { Brca1FunctionCard } from "./Brca1FunctionCard";
 import { api, type CtScanResponse, type HrdScarResponse } from "@/lib/api";
-import type { HrdResult } from "@/lib/bc-types";
+import type { AnalysisResult, HrdResult } from "@/lib/bc-types";
 
 // Drugs in the PARP-inhibitor class. When the patient's current drug is one
 // of these AND they have HR-deficient evidence, we surface a reversion-
@@ -14,7 +23,24 @@ import type { HrdResult } from "@/lib/bc-types";
 // tumors develop reversion mutations that restore HR repair under drug
 // pressure (Silverman & Schonhoft, Clin Cancer Res 2025). The Myriad scar
 // cutoff of 42 doesn't see that reversion.
-const PARP_INHIBITOR_DRUG_IDS = new Set(["olaparib", "niraparib", "rucaparib", "talazoparib"]);
+const PARP_INHIBITOR_DRUG_IDS = new Set([
+  "olaparib",
+  "niraparib",
+  "rucaparib",
+  "talazoparib",
+]);
+
+/**
+ * Filenames of the patient's uploaded records that each lab experiment
+ * reads from. Surfaced inside each LabTile so the patient can see which
+ * file in their profile drives which experiment ("Reading: maya_brca1.vcf").
+ * When a field is missing we fall back to a generic label.
+ */
+export interface RecordRefs {
+  vcfFilename?: string | null;
+  ctScanFilename?: string | null;
+  reportFilename?: string | null;
+}
 
 interface Props {
   hrd: HrdResult;
@@ -44,18 +70,37 @@ interface Props {
    * the user to type them in.
    */
   scarPrefill?: { loh: number; lst: number; ntai: number } | null;
+  /** See RecordRefs above. */
+  recordRefs?: RecordRefs;
+  /**
+   * Full analysis result. When provided, the tab strip renders a small
+   * PDF-download button on the right side so the patient can grab the
+   * doctor-visit report from the same surface as the tabs.
+   */
+  analysisResult?: AnalysisResult | null;
+  /** Patient name for the PDF filename / header. */
+  patientLabel?: string | null;
 }
 
 /**
- * HR-deficiency composite card. Tells the patient (and their oncologist)
- * whether their variants make the tumor PARP-inhibitor-eligible under
- * current FDA biomarker logic.
+ * HR-deficiency result, framed as a small science lab.
  *
- * When HRD is indeterminate AND there's no HR-relevant evidence, we render
- * a compact "not applicable" note instead of the full card. The big amber
- * "Indeterminate" block was confusing patients whose actual finding was
- * elsewhere (e.g. Diana has a CYP2D6 metabolism variant, not an HR variant
- * — her HRD status genuinely isn't the story).
+ * Layout (refactored):
+ *  1. Verdict hero — slim card with the label, score, one-liner, reversion
+ *     callout (if applicable), and a single clear next-step CTA. No nested
+ *     panels here — keeps it from feeling like a wall of text.
+ *  2. "Your sample" — the patient's variants rendered as the input data the
+ *     experiments below are reading. Visually distinct from the experiments
+ *     so the patient can tell what's input vs. output.
+ *  3. "The Lab" — up to three sibling tiles framed as independent
+ *     experiments all answering the same question: is the tumor HR-deficient?
+ *     The patient can see at a glance that these three lines of evidence
+ *     converge (or diverge) on the same answer.
+ *  4. Caveats expander — collapsed by default.
+ *
+ * The compact "indeterminate + no evidence" branch is kept for patients
+ * whose finding actually isn't HR-deficiency (e.g. Diana's CYP2D6 case),
+ * so we don't show three irrelevant lab tiles.
  */
 export function HrdCard({
   hrd,
@@ -64,43 +109,84 @@ export function HrdCard({
   ctScanUrl = null,
   ctScanLabel = null,
   scarPrefill = null,
+  recordRefs = {},
+  analysisResult = null,
+  patientLabel = null,
 }: Props) {
+  const [tab, setTab] = useState<"result" | "lab">("result");
   const showReversionCallout =
     hrd.label === "hr_deficient" &&
     !!drugId &&
     PARP_INHIBITOR_DRUG_IDS.has(drugId);
+
   // Compact "not applicable" rendering for patients without HR-panel variants.
-  // When a CT fixture is provided we still render the radiogenomics panel so
+  // When a CT fixture is provided we still render the radiogenomics tile so
   // the patient sees that even a germline-clean result doesn't rule out an
   // HR-deficient tumor (somatic BRCA loss, BRCA1 promoter methylation, etc.).
   if (hrd.label === "indeterminate" && hrd.evidence.length === 0) {
-    return (
-      <section className="rounded-2xl border border-border bg-muted/40 p-4 md:p-5 text-sm space-y-4">
-        <div className="space-y-2">
-          <div className="flex items-baseline justify-between gap-3 flex-wrap">
-            <div>
-              <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                HR-deficiency status
-              </div>
-              <div className="font-medium">Not detected from germline</div>
-            </div>
-            <span className="text-[11px] text-muted-foreground">Score 0 / 100</span>
-          </div>
-          <p className="text-xs text-muted-foreground leading-relaxed">
-            None of your variants hit the HR-repair panel. About one in three
-            HR-deficient ovarian tumors are still HRD via somatic events a
-            germline panel can&apos;t see{ctScanUrl ? " — run the imaging model below to check from that angle." : " — a tumor sequencing test would be the next step."}
-          </p>
-        </div>
-
-        {ctScanUrl ? (
-          <RadiogenomicsCtPanel
+    const indeterminateTiles: React.ReactNode[] = [];
+    if (ctScanUrl) {
+      indeterminateTiles.push(
+        <LabTile
+          key="ct"
+          title="CT imaging model"
+          tests="Predicts HR-deficiency from tumor texture in your scan."
+          icon={<Scan className="w-4 h-4" aria-hidden />}
+          recordLabel={
+            recordRefs.ctScanFilename ?? ctScanLabel ?? "your CT scan"
+          }
+        >
+          <RadiogenomicsCtPanelBody
             ctScanUrl={ctScanUrl}
-            ctScanLabel={ctScanLabel ?? "this CT scan"}
             currentDrugId={drugId}
           />
+        </LabTile>,
+      );
+    }
+
+    return (
+      <div className="space-y-4">
+        {indeterminateTiles.length > 0 ? (
+          <TabBar
+            tab={tab}
+            setTab={setTab}
+            labTileCount={indeterminateTiles.length}
+            analysisResult={analysisResult}
+            patientLabel={patientLabel}
+          />
         ) : null}
-      </section>
+
+        {tab === "result" || indeterminateTiles.length === 0 ? (
+          <section className="rounded-2xl border border-border bg-muted/40 p-5 text-sm space-y-2">
+            <div className="flex items-baseline justify-between gap-3 flex-wrap">
+              <div>
+                <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                  HR-deficiency status
+                </div>
+                <div className="font-medium">Not detected from germline</div>
+              </div>
+              <span className="text-[11px] text-muted-foreground">
+                Score 0 / 100
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              None of your variants hit the HR-repair panel. About one in three
+              HR-deficient ovarian tumors are still HRD via somatic events a
+              germline panel can&apos;t see
+              {ctScanUrl
+                ? " — open the lab tab to run the imaging experiment from that angle."
+                : " — a tumor sequencing test would be the next step."}
+            </p>
+          </section>
+        ) : null}
+
+        {tab === "lab" && indeterminateTiles.length > 0 ? (
+          <LabSection
+            tagline="Even with a clean germline panel, imaging can pick up HR-deficiency from somatic events."
+            tiles={indeterminateTiles}
+          />
+        ) : null}
+      </div>
     );
   }
 
@@ -110,118 +196,440 @@ export function HrdCard({
       border: "border-success/40",
       pill: "bg-success/20 text-success",
       label: "HR-deficient",
-      oneLiner: "Tumor likely can't repair DNA breaks. PARP inhibitors may be an option.",
+      oneLiner:
+        "Tumor likely can't repair DNA breaks. PARP inhibitors may be an option.",
     },
     hr_proficient: {
       bg: "bg-muted",
       border: "border-border",
       pill: "bg-muted text-foreground",
       label: "HR-proficient",
-      oneLiner: "Your HR-repair genes look intact. PARP inhibitors are unlikely to be prioritized unless tumor testing says otherwise.",
+      oneLiner:
+        "Your HR-repair genes look intact. PARP inhibitors are unlikely to be prioritized unless tumor testing says otherwise.",
     },
     indeterminate: {
       bg: "bg-warning/10",
       border: "border-warning/40",
       pill: "bg-warning/20 text-warning",
       label: "Mixed signals",
-      oneLiner: "Some HR-panel variants are present, but not enough to make a confident call. Worth discussing with your oncologist.",
+      oneLiner:
+        "Some HR-panel variants are present, but not enough to make a confident call. Worth discussing with your oncologist.",
     },
   }[hrd.label];
 
-  return (
-    <section
-      className={`rounded-2xl border p-5 md:p-6 space-y-4 ${style.bg} ${style.border}`}
-    >
-      <header className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <div className="text-xs uppercase tracking-wide text-muted-foreground mb-1">
-            HR-deficiency result
-          </div>
-          <h3 className="text-lg md:text-xl font-semibold">{style.label}</h3>
-        </div>
-        <div className={`px-3 py-1.5 rounded-full text-sm font-semibold ${style.pill}`}>
-          Score {hrd.score} / 100
-        </div>
-      </header>
+  const hideMl = classifiableBrca1Variants.length > 0;
+  const variantEvidence = hideMl
+    ? hrd.evidence.filter((e) => e.source !== "ml_prediction")
+    : hrd.evidence;
 
-      <p className="text-sm leading-relaxed">{style.oneLiner}</p>
-
-      {showReversionCallout ? (
-        <div>
-          <ReversionAwarenessInfo />
-        </div>
-      ) : null}
-
-      {(() => {
-        // When the inline BRCA1 classifier card is being offered, drop the
-        // `ml_prediction` rows from the evidence list — the nested card is
-        // the canonical UI for the ML output. Otherwise the same variant
-        // shows up twice ("What drove this result" row + the model card).
-        const hideMl = classifiableBrca1Variants.length > 0;
-        const filtered = hideMl
-          ? hrd.evidence.filter((e) => e.source !== "ml_prediction")
-          : hrd.evidence;
-        if (filtered.length === 0) return null;
-        return (
-          <div>
-            <div className="text-xs font-medium uppercase text-muted-foreground mb-2">
-              What drove this result ({filtered.length})
-            </div>
-            <ul className="space-y-2">
-              {filtered.map((e, i) => (
-                <li key={i} className="text-sm border rounded-lg px-3 py-2 bg-white/70 flex items-baseline gap-2 flex-wrap">
-                  <span className="font-semibold">{e.gene}</span>
-                  <span className="font-mono text-xs text-muted-foreground">
-                    {stripGenePrefix(e.variant_label, e.gene)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        );
-      })()}
-
-      {classifiableBrca1Variants.length > 0 ? (
-        <Brca1PredictionNested hgvsList={classifiableBrca1Variants} />
-      ) : null}
-
-      {ctScanUrl ? (
-        <RadiogenomicsCtPanel
+  // Build the lab tiles dynamically so we only render experiments that
+  // actually apply to this patient.
+  const tiles: React.ReactNode[] = [];
+  if (classifiableBrca1Variants.length > 0) {
+    tiles.push(
+      <LabTile
+        key="ml"
+        title="DNA-repair classifier"
+        tests="Tests whether your variant breaks BRCA1's repair function."
+        icon={<FlaskConical className="w-4 h-4" aria-hidden />}
+        recordLabel={recordRefs.vcfFilename ?? "your VCF (genetic data)"}
+      >
+        <Brca1ClassifierBody hgvsList={classifiableBrca1Variants} />
+      </LabTile>,
+    );
+  }
+  if (ctScanUrl) {
+    tiles.push(
+      <LabTile
+        key="ct"
+        title="CT imaging model"
+        tests="Predicts HR-deficiency from tumor texture in your scan."
+        icon={<Scan className="w-4 h-4" aria-hidden />}
+        recordLabel={
+          recordRefs.ctScanFilename ?? ctScanLabel ?? "your CT scan"
+        }
+      >
+        <RadiogenomicsCtPanelBody
           ctScanUrl={ctScanUrl}
-          ctScanLabel={ctScanLabel ?? "this CT scan"}
+          currentDrugId={drugId}
+        />
+      </LabTile>,
+    );
+  }
+  if (hrd.label !== "hr_proficient") {
+    tiles.push(
+      <LabTile
+        key="scar"
+        title="Tumor scar score"
+        tests="Counts permanent DNA scars left by past failed repair."
+        icon={<Activity className="w-4 h-4" aria-hidden />}
+        recordLabel={
+          recordRefs.reportFilename ?? "your tumor scar report"
+        }
+      >
+        <TumorScarBody prefill={scarPrefill} />
+      </LabTile>,
+    );
+  }
+
+  return (
+    <div className="space-y-5">
+      <TabBar
+        tab={tab}
+        setTab={setTab}
+        labTileCount={tiles.length}
+        analysisResult={analysisResult}
+        patientLabel={patientLabel}
+      />
+
+      {tab === "result" ? (
+        <div className="space-y-3">
+          {/* 1. Verdict — wrapped in a SectionCard so it shares the same
+              gold-seam + rounded-2xl border treatment as the rest of the
+              Result-tab sections. The label-specific tint is now a slim
+              top-of-card accent strip instead of a full background. */}
+          <SectionCard label="HR-deficiency result">
+            <div className="flex items-start justify-between gap-4 flex-wrap">
+              <h3 className="text-xl md:text-2xl font-semibold">
+                {style.label}
+              </h3>
+              <div
+                className={`px-3 py-1.5 rounded-full text-sm font-semibold ${style.pill}`}
+              >
+                Score {hrd.score} / 100
+              </div>
+            </div>
+            <p className="text-sm leading-relaxed">{style.oneLiner}</p>
+            {showReversionCallout ? <ReversionAwarenessInfo /> : null}
+            {hrd.label === "hr_deficient" ? (
+              <NextStepBanner drugId={drugId} />
+            ) : null}
+          </SectionCard>
+
+          {/* 2. Your sample — same SectionCard shell. */}
+          {variantEvidence.length > 0 ? (
+            <SectionCard label="Your sample">
+              <p className="text-xs text-muted-foreground">
+                What the lab is reading.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {variantEvidence.map((e, i) => (
+                  <div
+                    key={i}
+                    className="inline-flex items-baseline gap-2 rounded-lg border bg-white px-3 py-1.5 text-sm"
+                  >
+                    <span className="font-semibold">{e.gene}</span>
+                    <span className="font-mono text-xs text-muted-foreground">
+                      {stripGenePrefix(e.variant_label, e.gene)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </SectionCard>
+          ) : null}
+
+          {/* 3. Caveats — same SectionCard, content is the bullet list. */}
+          {hrd.caveats.length > 0 ? (
+            <SectionCard label="Caveats">
+              <ul className="space-y-1 list-disc pl-5 text-xs text-muted-foreground leading-relaxed">
+                {hrd.caveats.map((c, i) => (
+                  <li key={i}>{c}</li>
+                ))}
+              </ul>
+            </SectionCard>
+          ) : null}
+        </div>
+      ) : null}
+
+      {tab === "lab" && tiles.length > 0 ? (
+        <LabSection
+          tagline={`${tiles.length === 1 ? "One experiment" : `${tiles.length} independent experiments`} testing whether your tumor is HR-deficient. Each runs on a different record from your profile.`}
+          tiles={tiles}
         />
       ) : null}
+    </div>
+  );
+}
 
-      <TumorScarPanel prefill={scarPrefill} />
+// ============================================================================
+// Lab framing primitives
+// ============================================================================
 
-      <details className="text-xs text-muted-foreground">
-        <summary className="cursor-pointer hover:text-foreground">
-          Caveats
-        </summary>
-        <ul className="mt-2 space-y-1 list-disc pl-5">
-          {hrd.caveats.map((c, i) => (
-            <li key={i}>{c}</li>
-          ))}
-        </ul>
-      </details>
+/**
+ * Shared section shell for the Result tab. Same chrome as a LabTile —
+ * gold seam at the top, rounded-2xl border, consistent inner padding —
+ * so the verdict, "Your sample", and "Caveats" sections share visual
+ * rhythm with each other and with the Lab tab.
+ */
+function SectionCard({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-2xl border bg-card overflow-hidden">
+      <div className="h-px bg-gradient-to-r from-amber-400/40 via-amber-500 to-amber-400/40" />
+      <div className="p-4 md:p-5 space-y-3">
+        <div className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold">
+          {label}
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Tab strip at the top of HrdCard — splits the verdict ("Result") from
+ * the simulated experiments ("Lab"). Counter on the Lab tab tells the
+ * patient how many experiments are queued up for them to run.
+ */
+function TabBar({
+  tab,
+  setTab,
+  labTileCount,
+  analysisResult,
+  patientLabel,
+}: {
+  tab: "result" | "lab";
+  setTab: (t: "result" | "lab") => void;
+  labTileCount: number;
+  analysisResult?: AnalysisResult | null;
+  patientLabel?: string | null;
+}) {
+  const base =
+    "px-4 py-2 text-sm font-medium border-b-2 transition-colors -mb-px";
+  return (
+    <div className="border-b flex items-center gap-1">
+      <button
+        type="button"
+        onClick={() => setTab("result")}
+        className={`${base} ${
+          tab === "result"
+            ? "border-amber-500 text-foreground"
+            : "border-transparent text-muted-foreground hover:text-foreground"
+        }`}
+      >
+        Result
+      </button>
+      <button
+        type="button"
+        onClick={() => setTab("lab")}
+        className={`${base} inline-flex items-center gap-2 ${
+          tab === "lab"
+            ? "border-amber-500 text-foreground"
+            : "border-transparent text-muted-foreground hover:text-foreground"
+        }`}
+      >
+        <Microscope className="w-3.5 h-3.5" aria-hidden />
+        Lab
+        {labTileCount > 0 ? (
+          <span className="text-[11px] rounded-full bg-amber-100 text-amber-800 px-1.5 py-0.5 font-mono">
+            {labTileCount}
+          </span>
+        ) : null}
+      </button>
+      {analysisResult ? (
+        <div className="ml-auto pb-1 no-print">
+          <PdfDownloadInline
+            result={analysisResult}
+            patientLabel={patientLabel ?? null}
+          />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * Small "Download PDF" button shown on the right side of the TabBar so
+ * the patient can grab the doctor-visit report without scrolling. Same
+ * blob → object-URL flow as the old DoctorVisitPdfButton card.
+ */
+function PdfDownloadInline({
+  result,
+  patientLabel,
+}: {
+  result: AnalysisResult;
+  patientLabel: string | null;
+}) {
+  const [downloading, setDownloading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function onClick() {
+    setDownloading(true);
+    setErr(null);
+    try {
+      const blob = await api.downloadReportPdf(result, patientLabel);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `pharmacogenomic-report-${result.drug_id}-${result.id.slice(0, 8)}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Could not generate PDF");
+    } finally {
+      setDownloading(false);
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      {err ? <span className="text-[11px] text-red-600">{err}</span> : null}
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={downloading}
+        className="inline-flex items-center gap-1.5 rounded-lg border bg-white px-3 py-1.5 text-xs font-medium hover:bg-amber-50 hover:border-amber-300 disabled:opacity-60 transition-colors"
+        title="Download the doctor-visit report"
+      >
+        <FileText className="w-3.5 h-3.5" aria-hidden />
+        {downloading ? "Generating…" : "Download PDF"}
+      </button>
+    </div>
+  );
+}
+
+/**
+ * Section wrapper for "The Lab" — the row of independent experiments. Has
+ * its own header so the patient knows these tiles are siblings answering
+ * the same question, not stacked findings.
+ */
+function LabSection({
+  tagline,
+  tiles,
+}: {
+  tagline: string;
+  tiles: React.ReactNode[];
+}) {
+  return (
+    <section className="space-y-3">
+      <div className="space-y-1">
+        <h4 className="text-base font-semibold flex items-center gap-2">
+          <Microscope
+            className="w-4 h-4 text-amber-500 flex-shrink-0"
+            aria-hidden
+          />
+          Let&apos;s run your results in our simulated lab
+        </h4>
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          {tagline}
+        </p>
+      </div>
+      <div
+        className={`grid gap-3 ${
+          tiles.length >= 3
+            ? "md:grid-cols-3"
+            : tiles.length === 2
+              ? "md:grid-cols-2"
+              : "md:grid-cols-1"
+        }`}
+      >
+        {tiles}
+      </div>
     </section>
   );
 }
 
 /**
- * Compact form for users who have a Myriad myChoice / FoundationOne CDx
- * report and want to run the three feature counts through our scar
- * scorer. This complements the germline-variant HRD call above: the
- * germline score tells you whether the patient is an HR-repair carrier,
- * this tumor-scar score tells you whether the tumor is *currently*
- * HR-deficient — the FDA biomarker question for PARP-inhibitor eligibility.
+ * One experiment tile. Visually consistent across the three experiments so
+ * they read as siblings: small icon + title, one-line "what this tests",
+ * then the experiment-specific body (Run button + result).
+ *
+ * Subtle gold seam at the top is the Kintsugi visual hook — the lab is
+ * where the cracks (variants) get repaired into something useful.
  */
-function TumorScarPanel({
+function LabTile({
+  title,
+  tests,
+  icon,
+  recordLabel,
+  children,
+}: {
+  title: string;
+  tests: string;
+  icon: React.ReactNode;
+  /**
+   * Filename (or descriptive label) of the patient record this experiment
+   * reads from. Surfaces inside the tile so the patient can trace which
+   * file in their profile drives which model output.
+   */
+  recordLabel?: string | null;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-2xl border bg-card overflow-hidden flex flex-col">
+      <div className="h-px bg-gradient-to-r from-amber-400/40 via-amber-500 to-amber-400/40" />
+      <div className="p-4 space-y-3 flex-1 flex flex-col">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2 text-sm font-semibold">
+            <span className="text-primary flex-shrink-0">{icon}</span>
+            {title}
+          </div>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            {tests}
+          </p>
+        </div>
+        {recordLabel ? (
+          <div className="rounded-md border border-dashed border-amber-300/70 bg-amber-50/40 px-2.5 py-1.5">
+            <div className="text-[10px] uppercase tracking-wide text-amber-700/80 font-semibold">
+              Reading record
+            </div>
+            <div
+              className="text-xs font-mono text-foreground truncate"
+              title={recordLabel}
+            >
+              {recordLabel}
+            </div>
+          </div>
+        ) : null}
+        <div className="flex-1 flex flex-col">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The "what to do with this result" CTA for HR-deficient patients.
+ * If they're already on a PARP inhibitor, we point at reversion monitoring;
+ * otherwise we point at the PARPi conversation.
+ */
+function NextStepBanner({ drugId }: { drugId: string | null }) {
+  const onParpi = !!drugId && PARP_INHIBITOR_DRUG_IDS.has(drugId);
+  return (
+    <div className="rounded-xl border border-amber-300 bg-amber-50/70 p-3 flex items-start gap-3">
+      <ArrowRight
+        className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5"
+        aria-hidden
+      />
+      <div className="text-sm leading-relaxed">
+        <span className="font-semibold">Next step:</span>{" "}
+        {onParpi
+          ? "Ask your oncologist about serial ctDNA monitoring to catch reversion mutations early."
+          : "Bring this report to your oncologist and ask whether a PARP inhibitor (olaparib, niraparib, or rucaparib) is right for you."}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// Experiment bodies
+// ============================================================================
+
+/**
+ * Tumor-scar score body — bare content (no outer card), so it slots inside
+ * a LabTile cleanly. Same logic as before: auto-runs when prefill is set.
+ */
+function TumorScarBody({
   prefill,
 }: {
   prefill?: { loh: number; lst: number; ntai: number } | null;
 }) {
-  const [open, setOpen] = useState(false);
   const [loh, setLoh] = useState(prefill ? String(prefill.loh) : "");
   const [lst, setLst] = useState(prefill ? String(prefill.lst) : "");
   const [ntai, setNtai] = useState(prefill ? String(prefill.ntai) : "");
@@ -229,11 +637,8 @@ function TumorScarPanel({
   const [result, setResult] = useState<HrdScarResponse | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
-  // Auto-run when prefill is present so the patient sees their scar score
-  // without an extra click. Only runs once per prefill payload.
   useEffect(() => {
     if (!prefill) return;
-    setOpen(true);
     setLoh(String(prefill.loh));
     setLst(String(prefill.lst));
     setNtai(String(prefill.ntai));
@@ -244,12 +649,15 @@ function TumorScarPanel({
         const resp = await api.scoreHrdScars(prefill);
         if (!cancelled) setResult(resp);
       } catch (e) {
-        if (!cancelled) setErr(e instanceof Error ? e.message : "scoring failed");
+        if (!cancelled)
+          setErr(e instanceof Error ? e.message : "scoring failed");
       } finally {
         if (!cancelled) setRunning(false);
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefill?.loh, prefill?.lst, prefill?.ntai]);
 
@@ -271,24 +679,6 @@ function TumorScarPanel({
     }
   }
 
-  if (!open) {
-    return (
-      <div className="rounded-lg border-2 border-dashed border-muted-foreground/30 p-3 flex items-center gap-3 flex-wrap">
-        <Activity className="w-4 h-4 text-primary flex-shrink-0" aria-hidden />
-        <div className="flex-1 min-w-[180px] text-sm font-medium">
-          Tumor scar HRD score
-        </div>
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          className="inline-flex items-center justify-center rounded-lg bg-primary text-primary-foreground px-3 py-1.5 text-xs font-medium hover:opacity-90 transition-opacity min-w-[5rem]"
-        >
-          Run
-        </button>
-      </div>
-    );
-  }
-
   const labelStyles: Record<HrdScarResponse["label"], string> = {
     hr_deficient_scar: "text-success bg-success/10 border-success/40",
     borderline_scar: "text-warning bg-warning/10 border-warning/40",
@@ -296,50 +686,61 @@ function TumorScarPanel({
     insufficient: "text-muted-foreground bg-muted border-border",
   };
   const labelText: Record<HrdScarResponse["label"], string> = {
-    hr_deficient_scar: "HR-deficient (tumor scar signal)",
-    borderline_scar: "Borderline scar burden",
-    hr_proficient_scar: "HR-proficient (low scar burden)",
+    hr_deficient_scar: "HR-deficient",
+    borderline_scar: "Borderline",
+    hr_proficient_scar: "HR-proficient",
     insufficient: "Insufficient data",
   };
 
   return (
-    <div className="rounded-lg border bg-white/60 p-3 md:p-4 space-y-3">
-      <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted-foreground font-semibold">
-        <Activity className="w-3.5 h-3.5 text-primary" aria-hidden />
-        Tumor HRD scar score
-      </div>
-
-      <form onSubmit={onSubmit} className="flex flex-wrap gap-2 items-end">
-        <LabeledNumber label="HRD-LOH" value={loh} onChange={setLoh} />
-        <LabeledNumber label="LST" value={lst} onChange={setLst} />
-        <LabeledNumber label="NTAI" value={ntai} onChange={setNtai} />
-        <button
-          type="submit"
-          disabled={running || !loh || !lst || !ntai}
-          className="inline-flex items-center justify-center rounded-lg bg-primary text-primary-foreground px-3 py-1.5 text-xs font-medium hover:opacity-90 disabled:opacity-50 transition-opacity"
-        >
-          {running ? "Scoring…" : "Score"}
-        </button>
-      </form>
-      {err ? <p className="text-xs text-red-600">{err}</p> : null}
-
-      {result ? (
-        <div className={`rounded-lg border p-3 space-y-2 text-sm ${labelStyles[result.label]}`}>
-          <div className="flex items-baseline justify-between gap-2 flex-wrap">
-            <span className="font-semibold">{labelText[result.label]}</span>
-            <span className="text-xs">HRD-sum {result.hrd_sum} / 100</span>
-          </div>
-          <p className="text-xs leading-relaxed">{result.summary}</p>
-          <p className="text-xs leading-relaxed">{result.interpretation}</p>
+    <div className="space-y-3 flex-1 flex flex-col">
+      <form onSubmit={onSubmit} className="space-y-2">
+        <div className="flex flex-wrap gap-2">
+          <LabeledNumber label="HRD-LOH" value={loh} onChange={setLoh} />
+          <LabeledNumber label="LST" value={lst} onChange={setLst} />
+          <LabeledNumber label="NTAI" value={ntai} onChange={setNtai} />
         </div>
-      ) : null}
-
-      <p className="text-[11px] text-muted-foreground leading-relaxed">
-        Scar scoring needs paired tumor/normal sequencing from a genome-graph
-        SV pipeline (<code>vg call</code> or <code>minigraph</code>) or a
-        clinical assay produces these three counts. See the README for the
-        end-to-end Snakemake pipeline.
-      </p>
+        {/* When the scar numbers came from a stored report (Maya / Priya),
+            the experiment auto-runs on mount — no need for a Run button.
+            For /build users typing numbers manually, we keep the button
+            so they can submit. Press Enter inside any input also works. */}
+        {!prefill ? (
+          <div className="flex justify-end">
+            <button
+              type="submit"
+              disabled={running || !loh || !lst || !ntai}
+              className="inline-flex items-center justify-center rounded-lg bg-primary text-primary-foreground px-3 py-1.5 text-xs font-medium hover:opacity-90 disabled:opacity-50 transition-opacity"
+            >
+              {running ? "Scoring…" : "Run"}
+            </button>
+          </div>
+        ) : null}
+      </form>
+      <div className="flex-1 min-h-[5rem] flex flex-col justify-end">
+        {err ? <p className="text-xs text-red-600">{err}</p> : null}
+        {running && !result ? (
+          <p className="text-xs text-muted-foreground italic">Scoring…</p>
+        ) : null}
+        {result ? (
+          <div
+            className={`rounded-lg border p-3 text-sm ${labelStyles[result.label]}`}
+          >
+            <div className="flex items-baseline justify-between gap-2 flex-wrap">
+              <span className="font-semibold">{labelText[result.label]}</span>
+              <span className="text-xs">
+                HRD-sum {result.hrd_sum} / 100
+              </span>
+            </div>
+            <details className="mt-2 text-xs">
+              <summary className="cursor-pointer opacity-80 hover:opacity-100">
+                Details
+              </summary>
+              <p className="mt-1 leading-relaxed">{result.summary}</p>
+              <p className="mt-1 leading-relaxed">{result.interpretation}</p>
+            </details>
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -364,7 +765,7 @@ function LabeledNumber({
         inputMode="numeric"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-20 border rounded px-2 py-1 bg-white text-sm"
+        className="w-16 border rounded px-2 py-1 bg-white text-sm"
         placeholder="0"
       />
     </label>
@@ -373,16 +774,7 @@ function LabeledNumber({
 
 /**
  * Collapsible info button that surfaces the reversion-awareness caveat for
- * PARPi patients. Click the ⓘ icon next to the HR-deficient pill and a
- * popover shows why a scar-based HRD call is *historical* — ~20-30% of
- * PARPi-responding BRCA tumors develop reversion mutations under drug
- * pressure that restore HR repair, which scar scores can't see.
- *
- * Based on Silverman & Schonhoft, Clin Cancer Res 2025 (Repare TRESR/ATTACC
- * trials, 44% reversions in BRCA-associated post-PARPi tumors) and the
- * PRIMA / PAOLA-1 observation that ~30% of Myriad-HRD-positive patients fail
- * PARPi. The right follow-up is serial ctDNA monitoring for in-frame
- * restoring indels near the pathogenic locus.
+ * PARPi patients.
  */
 function ReversionAwarenessInfo() {
   const [open, setOpen] = useState(false);
@@ -417,12 +809,8 @@ function ReversionAwarenessInfo() {
           </p>
           <p className="text-muted-foreground">
             If you&apos;ve been on a PARP inhibitor for six months or more, ask
-            your oncologist about <strong>serial ctDNA testing</strong> to catch
-            reversion mutations early.
-          </p>
-          <p className="text-xs text-muted-foreground pt-2 border-t border-warning/20">
-            Source: Silverman &amp; Schonhoft, Clinical Cancer Research, 2025
-            (Repare TRESR / ATTACC trials).
+            your oncologist about <strong>serial ctDNA testing</strong> to
+            catch reversion mutations early.
           </p>
         </div>
       ) : null}
@@ -431,68 +819,52 @@ function ReversionAwarenessInfo() {
 }
 
 /**
- * Nested "run the radiogenomics CT model" panel.
- *
- * For demo patients who ship with a fixture CT (currently just Maya's
- * synthetic ovarian-pelvis scan), this panel pulls the NIfTI, uploads it
- * to /api/radiogenomics/upload, and renders the model's HR-deficiency
- * probability + caveats inline. The scan itself is shown in the left-column
- * 3D slideshow; this panel is the "run the model" action, paired with
- * the other HR-deficiency evidence.
+ * Radiogenomics CT body — bare content for a LabTile.
  */
-function RadiogenomicsCtPanel({
+function RadiogenomicsCtPanelBody({
   ctScanUrl,
-  ctScanLabel,
   currentDrugId = null,
 }: {
   ctScanUrl: string;
-  ctScanLabel: string;
   currentDrugId?: string | null;
 }) {
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<CtScanResponse | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
-  async function onRun() {
-    setErr(null);
-    setRunning(true);
-    try {
-      const resp = await fetch(ctScanUrl);
-      if (!resp.ok) throw new Error(`could not fetch ${ctScanUrl}`);
-      const blob = await resp.blob();
-      const name = ctScanUrl.split("/").pop() ?? "ct_scan.nii.gz";
-      const file = new File([blob], name, { type: "application/gzip" });
-      const out = await api.uploadCtScan(file);
-      setResult(out);
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "CT upload failed");
-    } finally {
-      setRunning(false);
-    }
-  }
+  // Auto-run on mount so the CT tile reaches the same "result-shown" state
+  // as the BRCA1 + scar tiles without an extra click. Same fetch + upload
+  // flow as before — just triggered eagerly instead of on button press.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setRunning(true);
+      try {
+        const resp = await fetch(ctScanUrl);
+        if (!resp.ok) throw new Error(`could not fetch ${ctScanUrl}`);
+        const blob = await resp.blob();
+        const name = ctScanUrl.split("/").pop() ?? "ct_scan.nii.gz";
+        const file = new File([blob], name, { type: "application/gzip" });
+        const out = await api.uploadCtScan(file);
+        if (!cancelled) setResult(out);
+      } catch (e) {
+        if (!cancelled)
+          setErr(e instanceof Error ? e.message : "CT upload failed");
+      } finally {
+        if (!cancelled) setRunning(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [ctScanUrl]);
 
-  // One-click panel. The teaser + "Show run panel" intermediate step used to
-  // collapse the action behind two clicks; now the card always shows a
-  // single "Run radiogenomics model" button and the result renders inline
-  // below it on success.
   return (
-    <div className="rounded-lg border bg-white/60 p-3 md:p-4 space-y-3">
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div className="flex items-center gap-2 min-w-[180px] flex-1">
-          <Scan className="w-4 h-4 text-primary flex-shrink-0" aria-hidden />
-          <div className="text-sm font-medium">CT scan HRD prediction</div>
-        </div>
-        <button
-          type="button"
-          onClick={onRun}
-          disabled={running}
-          className="inline-flex items-center justify-center rounded-lg bg-primary text-primary-foreground px-3 py-1.5 text-xs font-medium hover:opacity-90 disabled:opacity-50 transition-opacity flex-shrink-0 min-w-[5rem]"
-        >
-          {running ? "Running…" : result ? "Re-run" : "Run"}
-        </button>
-      </div>
-
+    <div className="flex-1 flex flex-col justify-end min-h-[5rem]">
       {err ? <p className="text-xs text-red-600">{err}</p> : null}
+      {running && !result ? (
+        <p className="text-xs text-muted-foreground italic">Running model…</p>
+      ) : null}
       {result ? (
         <CtPredictionResult result={result} currentDrugId={currentDrugId} />
       ) : null}
@@ -520,31 +892,27 @@ function CtPredictionResult({
     model_not_trained: "text-muted-foreground bg-muted border-border",
   };
 
-  // Action callout: surface a tumor-sequencing + PARP-inhibitor conversation
-  // ONLY when (a) the model called HR-deficient and (b) the patient isn't
-  // already on a PARP inhibitor. For Maya (already on olaparib) the prompt
-  // would be redundant; for Diana (on tamoxifen with a CYP2D6 PGx issue
-  // that already reduces tamoxifen activity) it's the actually-useful next
-  // clinical step.
   const showParpCallout =
     result.label === "predicted_hr_deficient" &&
     !!currentDrugId &&
     !PARP_INHIBITOR_DRUG_IDS.has(currentDrugId);
 
+  const pct = Math.round(result.hrd_probability * 100);
+
   return (
     <div className="space-y-3">
-      <div className={`rounded-lg border p-3 space-y-2 text-sm ${labelStyles[result.label]}`}>
+      <div
+        className={`rounded-lg border p-3 text-sm ${labelStyles[result.label]}`}
+      >
         <div className="flex items-baseline justify-between gap-2 flex-wrap">
           <span className="font-semibold">{labelText[result.label]}</span>
-          <span className="text-xs">
-            p(HRD) = {result.hrd_probability.toFixed(2)} · {result.confidence} confidence
-          </span>
+          <span className="text-xs">{pct}% p(HRD)</span>
         </div>
-        <details className="text-xs">
-          <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
-            Model caveats ({result.caveats.length})
+        <details className="mt-2 text-xs">
+          <summary className="cursor-pointer opacity-80 hover:opacity-100">
+            Details
           </summary>
-          <ul className="mt-2 space-y-1 list-disc pl-5 text-muted-foreground">
+          <ul className="mt-1 space-y-1 list-disc pl-5 opacity-90">
             {result.caveats.map((c, i) => (
               <li key={i}>{c}</li>
             ))}
@@ -559,36 +927,22 @@ function CtPredictionResult({
   );
 }
 
-/**
- * Action callout that ties an HR-deficient imaging prediction to the next
- * clinical step. The radiogenomics model isn't a diagnostic on its own —
- * it's a pre-screen — so the recommendation chain is:
- *
- *   imaging-flagged HRD  ->  tumor sequencing to confirm  ->  if confirmed,
- *   discuss PARP-inhibitor eligibility (olaparib / niraparib / rucaparib)
- *   instead of (or in addition to) the current non-PARP regimen.
- *
- * For tamoxifen-on-poor-CYP2D6 specifically (Diana's scenario) the
- * conversation is doubly motivated: the current drug isn't being activated
- * efficiently AND a new line of HRD-targeted therapy is potentially open.
- * We surface the tamoxifen-specific framing when we can detect it.
- */
-function ParpInhibitorActionCallout({ currentDrugId }: { currentDrugId: string }) {
+function ParpInhibitorActionCallout({
+  currentDrugId,
+}: {
+  currentDrugId: string;
+}) {
   const isTamoxifen = currentDrugId === "tamoxifen";
   return (
-    <div className="rounded-lg border-l-4 border-primary/60 bg-primary/5 p-3 md:p-4 space-y-2 text-sm">
-      <div className="flex items-center gap-2 text-xs uppercase tracking-wide font-semibold text-primary">
-        <Info className="w-3.5 h-3.5" aria-hidden />
+    <div className="rounded-lg border-l-4 border-primary/60 bg-primary/5 p-3 space-y-1.5 text-xs leading-relaxed">
+      <div className="flex items-center gap-2 uppercase tracking-wide font-semibold text-primary text-[10px]">
+        <Info className="w-3 h-3" aria-hidden />
         Ask your oncologist about
       </div>
-      <ol className="list-decimal pl-5 space-y-1 leading-relaxed">
+      <ol className="list-decimal pl-4 space-y-0.5">
+        <li>A tumor-sequencing test (Myriad myChoice or FoundationOne CDx).</li>
         <li>
-          A <strong>tumor-sequencing test</strong> (Myriad myChoice or
-          FoundationOne CDx) to confirm HRD from the tumor itself.
-        </li>
-        <li>
-          <strong>PARP-inhibitor eligibility</strong> if HRD is confirmed —
-          olaparib, niraparib, or rucaparib instead of{" "}
+          PARP-inhibitor eligibility instead of{" "}
           {isTamoxifen ? "tamoxifen alone" : "the current regimen alone"}.
         </li>
       </ol>
@@ -596,55 +950,24 @@ function ParpInhibitorActionCallout({ currentDrugId }: { currentDrugId: string }
   );
 }
 
-/**
- * Drop a leading "{gene} " prefix from a variant label when the gene is
- * already rendered next to it in the same row, so we don't print
- * "BRCA1 BRCA1 p.Cys61Gly".
- */
 function stripGenePrefix(label: string, gene: string): string {
   const prefix = `${gene} `;
   return label.startsWith(prefix) ? label.slice(prefix.length) : label;
 }
 
 /**
- * Nested BRCA1 variant-effect prediction subsection.
- *
- * The prediction takes a couple seconds and some patients won't care for the
- * ML layer at all, so it's opt-in: a compact button by default, the full
- * Brca1FunctionCard content once clicked. Lives inside HrdCard so patients
- * see it as "extra evidence for the HR-deficiency call," not as an
- * unrelated separate card further down the page.
+ * BRCA1 classifier body for a LabTile. Renders the existing
+ * Brca1FunctionCard (which already has its own internal layout) without
+ * any extra wrapping — the LabTile is the wrapper now.
  */
-function Brca1PredictionNested({ hgvsList }: { hgvsList: string[] }) {
-  const [open, setOpen] = useState(false);
-
-  if (!open) {
-    return (
-      <div className="rounded-lg border-2 border-dashed border-muted-foreground/30 p-3 flex items-center gap-3 flex-wrap">
-        <FlaskConical className="w-4 h-4 text-primary flex-shrink-0" aria-hidden />
-        <div className="flex-1 min-w-[180px] text-sm font-medium">
-          BRCA1 variant prediction
-        </div>
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          className="inline-flex items-center justify-center rounded-lg bg-primary text-primary-foreground px-3 py-1.5 text-xs font-medium hover:opacity-90 transition-opacity min-w-[5rem]"
-        >
-          Run
-        </button>
-      </div>
-    );
-  }
-
+function Brca1ClassifierBody({ hgvsList }: { hgvsList: string[] }) {
   return (
-    <div className="rounded-lg border bg-white/60 p-3 md:p-4 space-y-3">
-      <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted-foreground font-semibold">
-        <FlaskConical className="w-3.5 h-3.5 text-primary" aria-hidden />
-        ML prediction · experimental
+    <div className="flex-1 flex flex-col justify-end min-h-[5rem]">
+      <div className="space-y-3">
+        {hgvsList.map((hgvs) => (
+          <Brca1FunctionCard key={hgvs} hgvsProtein={hgvs} />
+        ))}
       </div>
-      {hgvsList.map((hgvs) => (
-        <Brca1FunctionCard key={hgvs} hgvsProtein={hgvs} />
-      ))}
     </div>
   );
 }

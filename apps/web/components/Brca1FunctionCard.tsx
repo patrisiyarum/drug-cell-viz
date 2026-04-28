@@ -61,49 +61,40 @@ export function Brca1FunctionCard({ hgvsProtein }: Props) {
   const cfg = labelStyle(data.label);
   const pct = Math.round(data.probability_loss_of_function * 100);
 
+  // Compact result format that matches the Tumor-scar tile in HrdCard:
+  // colored headline row with the score on the right, and one "Details"
+  // expander hiding the variant, plain-English explanation, expert-panel
+  // line, conformal box, ensemble breakdown, model provenance, caveats.
   return (
-    <div className="space-y-3">
-      {exchange.data ? (
-        <ExpertClassificationLine
-          record={exchange.data}
-          hgvsProtein={hgvsProtein}
-        />
-      ) : null}
-
-      {/* Plain-English headline. */}
-      <div className={`rounded-xl p-4 space-y-2 ${cfg.bg}`}>
-        <div className="flex items-start gap-3">
-          <cfg.Icon className={`w-5 h-5 ${cfg.color} flex-shrink-0 mt-0.5`} aria-hidden />
-          <div className="flex-1 space-y-1">
-            <div className="flex items-baseline gap-2 flex-wrap">
-              <span className="font-semibold">{cfg.title}:</span>
-              <span className="font-mono text-sm">{data.hgvs_protein}</span>
-            </div>
-            <p className="text-sm leading-relaxed">{cfg.plain}</p>
-            <p className="text-xs text-muted-foreground">
-              Model confidence: <strong>{data.confidence}</strong> ({pct}%
-              probability the variant breaks BRCA1).
+    <div className={`rounded-lg border p-3 text-sm ${cfg.resultBox}`}>
+      <div className="flex items-baseline justify-between gap-2 flex-wrap">
+        <span className="font-semibold">{cfg.title}</span>
+        <span className="text-xs">{pct}% p(LoF)</span>
+      </div>
+      <details className="mt-2 text-xs">
+        <summary className="cursor-pointer opacity-80 hover:opacity-100">
+          Details
+        </summary>
+        <div className="mt-2 space-y-3">
+          <div>
+            <span className="font-mono text-xs">{data.hgvs_protein}</span>
+            <p className="mt-1 leading-relaxed">{cfg.plain}</p>
+            <p className="mt-1 opacity-80">
+              <strong>{data.confidence}</strong> confidence
               {!data.in_assayed_region ? (
-                <>
+                <span className="text-warning">
                   {" "}
-                  <span className="text-warning">
-                    This residue sits outside the region the training assay
-                    covered, so the prediction is extrapolation.
-                  </span>
-                </>
+                  · outside training region
+                </span>
               ) : null}
             </p>
           </div>
-        </div>
-      </div>
-
-      {/* Everything technical folds behind one expander so the default view
-          stays one takeaway + one caveat. */}
-      <details className="text-xs">
-        <summary className="cursor-pointer text-muted-foreground hover:text-foreground inline-flex items-center gap-1">
-          Show model details
-        </summary>
-        <div className="mt-3 space-y-3">
+          {exchange.data ? (
+            <ExpertClassificationLine
+              record={exchange.data}
+              hgvsProtein={hgvsProtein}
+            />
+          ) : null}
           <DomainLine data={data} />
           <ConformalBox data={data} />
           <EnsembleBreakdown data={data} />
@@ -358,34 +349,41 @@ function labelStyle(label: Brca1Label): {
   Icon: typeof CheckCircle2;
   color: string;
   bg: string;
+  // Tailwind classes for the result box. Same shape as the scar-tile
+  // label styles in HrdCard so the three lab tiles share visual rhythm
+  // (text-foo bg-foo-10 border-foo-40).
+  resultBox: string;
 } {
   switch (label) {
     case "likely_loss_of_function":
       return {
         title: "Likely breaks BRCA1",
         plain:
-          "The ML model predicts this variant stops BRCA1 from doing its DNA-repair job. Tumors with a broken BRCA1 can't fix DNA double-strand breaks properly, which is exactly what makes them sensitive to PARP inhibitors like olaparib.",
+          "Predicted to disable BRCA1's DNA-repair role — the signal PARP inhibitors target.",
         Icon: AlertCircle,
         color: "text-red-700",
         bg: "bg-red-50",
+        resultBox: "text-success bg-success/10 border-success/40",
       };
     case "likely_functional":
       return {
         title: "Likely keeps BRCA1 working",
         plain:
-          "The ML model predicts this variant preserves BRCA1 function. A working BRCA1 means the tumor can still repair DNA double-strand breaks, so PARP inhibitors are unlikely to exploit a synthetic-lethal weakness here.",
+          "Predicted to preserve BRCA1 function. PARP inhibitors unlikely to help here.",
         Icon: CheckCircle2,
         color: "text-success",
         bg: "bg-green-50",
+        resultBox: "text-muted-foreground bg-muted border-border",
       };
     case "uncertain":
       return {
         title: "Can't call it yet",
         plain:
-          "The model's confidence is low: this variant sits between clear working and clear broken patterns it saw during training. Clinically this is a Variant of Uncertain Significance (VUS). A clinical-grade functional test or expert curation (ENIGMA) is the next step.",
+          "Model confidence too low to call. Variant of Uncertain Significance (VUS).",
         Icon: HelpCircle,
         color: "text-amber-700",
         bg: "bg-amber-50",
+        resultBox: "text-warning bg-warning/10 border-warning/40",
       };
   }
 }

@@ -148,7 +148,12 @@ export default function PatientProfilePage() {
               and they appear here.
             </Empty>
           ) : (
-            uploads.map((u) => <UploadRow key={u.id} upload={u} />)
+            [...uploads]
+              .sort(
+                (a, b) =>
+                  uploadOrder(a.upload_kind) - uploadOrder(b.upload_kind),
+              )
+              .map((u) => <UploadRow key={u.id} upload={u} />)
           )}
         </Section>
       </main>
@@ -546,6 +551,25 @@ function Centered({ children }: { children: React.ReactNode }) {
  * (lorelei variant 20+) and bias eyebrows + mouth to softer ones. The
  * seed still picks face shape + accessories so each patient is distinct.
  */
+/**
+ * Sort uploads so genetic data (VCF / 23andMe) appears first, then reports,
+ * and CT scans last. CT scans render an embedded volume viewer that takes
+ * a lot of vertical space — putting them above the smaller upload rows
+ * makes the section feel front-loaded with a giant black box.
+ */
+function uploadOrder(kind: PatientUploadRead["upload_kind"]): number {
+  switch (kind) {
+    case "vcf":
+      return 0;
+    case "23andme":
+      return 1;
+    case "report":
+      return 2;
+    case "ct_scan":
+      return 3;
+  }
+}
+
 function avatarFor(patientId: string): string {
   const femHair = Array.from({ length: 28 }, (_, i) =>
     `variant${String(i + 20).padStart(2, "0")}`,
