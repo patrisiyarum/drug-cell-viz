@@ -35,7 +35,11 @@ services:
     rootDir: apps/api
     dockerfilePath: ./Dockerfile
     dockerContext: .
-    plan: starter
+    # Standard plan = 2 GB RAM. Required because the radiogenomics extra
+    # ships torch + monai (~700 MB resident) and loading the Med3D ResNet-50
+    # fold0 checkpoint allocates another ~700 MB. The previous Starter plan
+    # (512 MB) OOMed during model load.
+    plan: standard
     healthCheckPath: /healthz
     autoDeploy: true
     disk:
