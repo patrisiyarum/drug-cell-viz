@@ -188,9 +188,15 @@ async def _seed_demo_patients() -> None:
             session.add(PatientUpload(
                 patient_id="maya",
                 upload_kind="ct_scan",
-                filename="TCGA-09-1659_axial_ct.nii.gz",
+                # Swapped from TCGA-09-1659 (a non-HRD patient — CNN was
+                # correctly predicting HR-proficient, breaking the demo) to
+                # TCGA-24-0975, a ground-truth HRD-positive TCGA-OV patient
+                # that the v1 5-fold CNN ensemble scores at p(HRD)=0.97 with
+                # the API's preprocessing pipeline. Both germline + imaging
+                # now point at HR-deficient.
+                filename="TCGA-24-0975_axial_ct.nii.gz",
                 asset_url="/fixtures/maya_ct_scan.nii.gz",
-                summary_json="HRD 95% (predicted hr deficient, high confidence)",
+                summary_json="HRD 97% (predicted hr deficient, high confidence)",
                 uploaded_at=datetime(2025, 11, 5, 14, 22, tzinfo=timezone.utc),
             ))
             session.add(PatientUpload(
