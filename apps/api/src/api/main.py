@@ -287,21 +287,21 @@ async def _seed_demo_patients() -> dict:
                     upload_kind="ct_scan",
                     asset_url="/fixtures/maya_ct_scan.nii.gz",
                     summary_json="HRD 97% (predicted hr deficient, high confidence)",
-                    uploaded_at=datetime(2025, 11, 5, 14, 22, tzinfo=timezone.utc),
+                    uploaded_at=datetime(2025, 11, 5, 14, 22),
                 ),
                 dict(
                     filename="maya_germline_brca_panel.vcf",
                     upload_kind="vcf",
                     asset_url=None,
                     summary_json="1 variant detected: BRCA1 p.Cys61Gly (pathogenic)",
-                    uploaded_at=datetime(2025, 10, 28, 9, 41, tzinfo=timezone.utc),
+                    uploaded_at=datetime(2025, 10, 28, 9, 41),
                 ),
                 dict(
                     filename="maya_myChoice_HRD_scars.pdf",
                     upload_kind="report",
                     asset_url=None,
                     summary_json="LOH 14 · LST 18 · NTAI 12 → HRD-sum 44 (HR-deficient, scar burden above Myriad cutoff of 42).",
-                    uploaded_at=datetime(2025, 11, 18, 11, 14, tzinfo=timezone.utc),
+                    uploaded_at=datetime(2025, 11, 18, 11, 14),
                 ),
             ]:
                 if await _ensure_upload("maya", **spec):
@@ -357,21 +357,21 @@ async def _seed_demo_patients() -> dict:
                     upload_kind="ct_scan",
                     asset_url="/fixtures/diana_ct_scan.nii.gz",
                     summary_json="HRD 76% (predicted hr deficient, high confidence) — somatic-HRD signal despite clean germline.",
-                    uploaded_at=datetime(2025, 11, 14, 10, 5, tzinfo=timezone.utc),
+                    uploaded_at=datetime(2025, 11, 14, 10, 5),
                 ),
                 dict(
                     filename="diana_germline_panel.vcf",
                     upload_kind="vcf",
                     asset_url=None,
                     summary_json="1 variant: CYP2D6 *4/*4 (poor metabolizer). HR-repair panel clean.",
-                    uploaded_at=datetime(2025, 10, 30, 14, 18, tzinfo=timezone.utc),
+                    uploaded_at=datetime(2025, 10, 30, 14, 18),
                 ),
                 dict(
                     filename="myChoice_HRD_summary.pdf",
                     upload_kind="report",
                     asset_url=None,
                     summary_json="Tumor scar test ordered after radiogenomics flag. Awaiting result.",
-                    uploaded_at=datetime(2025, 11, 20, 9, 30, tzinfo=timezone.utc),
+                    uploaded_at=datetime(2025, 11, 20, 9, 30),
                 ),
             ]:
                 if await _ensure_upload("diana", **spec):
@@ -422,14 +422,14 @@ async def _seed_demo_patients() -> dict:
                     upload_kind="vcf",
                     asset_url=None,
                     summary_json="1 variant: BRCA2 c.5946delT (pathogenic). HRD pathway hit.",
-                    uploaded_at=datetime(2025, 7, 15, 10, 22, tzinfo=timezone.utc),
+                    uploaded_at=datetime(2025, 7, 15, 10, 22),
                 ),
                 dict(
                     filename="priya_myChoice_HRD_scars.pdf",
                     upload_kind="report",
                     asset_url=None,
                     summary_json="LOH 18 · LST 22 · NTAI 16 → HRD-sum 56 (HR-deficient, well above Myriad cutoff of 42).",
-                    uploaded_at=datetime(2025, 7, 28, 14, 5, tzinfo=timezone.utc),
+                    uploaded_at=datetime(2025, 7, 28, 14, 5),
                 ),
             ]:
                 if await _ensure_upload("priya", **spec):
