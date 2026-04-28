@@ -188,229 +188,259 @@ if settings.storage_backend == "local":
     )
 
 
-async def _seed_demo_patients() -> None:
+async def _seed_demo_patients() -> dict:
     """Insert Maya / Diana / Priya into the patient table if they're missing.
 
-    Mirrors the in-catalog DEMO_PATIENTS so /patient/<id> renders correctly
-    on the first visit without forcing the user to create profiles manually.
-    Maya gets some seed medications + symptoms so her profile isn't empty.
+    Returns a report dict {patient_id: {meds_seeded, symptoms_seeded,
+    uploads_seeded, errors}} so callers can see exactly what happened.
+
+    Each patient block is wrapped in its own try/except so a failure on
+    one (e.g. a transient DB issue, a constraint mismatch) doesn't poison
+    the others. Each upload checks its own filename existence so partial
+    state self-heals on subsequent runs.
     """
-    from datetime import date
+    from datetime import date, datetime, timezone
+
+    from sqlmodel import select
 
     from api.db import session_scope
     from api.models.patient import Medication, Patient, PatientUpload, Symptom
+
+    log = logging.getLogger(__name__)
+    report: dict = {"maya": {}, "diana": {}, "priya": {}, "errors": []}
 
     seeds = [
         ("maya", "Maya", 41, "High-grade serous ovarian cancer, germline BRCA1+", "olaparib", "Olaparib (Lynparza)"),
         ("diana", "Diana", 52, "Recurrent ER+ ovarian cancer (germline panel clean for HR genes)", "tamoxifen", "Tamoxifen"),
         ("priya", "Priya", 58, "HER2-negative metastatic breast cancer, germline BRCA2+ (HRD-positive)", "olaparib", "Olaparib (Lynparza)"),
     ]
+
     async with session_scope() as session:
-        for pid, name, age, indication, drug_id, drug_name in seeds:
-            existing = await session.get(Patient, pid)
-            if existing is not None:
-                continue
-            session.add(Patient(
-                id=pid, name=name, age=age, indication=indication,
-                drug_id=drug_id, drug_name=drug_name,
-            ))
-        await session.commit()
-
-        # Sample medications + symptoms for Maya only — gives the demo
-        # profile something concrete to render. Idempotent: only seeds if
-        # she has zero existing medications.
-        from sqlmodel import select
-        existing_meds = (await session.execute(
-            select(Medication).where(Medication.patient_id == "maya")
-        )).first()
-        if existing_meds is None:
-            session.add(Medication(
-                patient_id="maya", drug_name="Olaparib", dose="300 mg twice daily",
-                started_at=date(2025, 11, 12), notes="Maintenance after platinum response.",
-            ))
-            session.add(Medication(
-                patient_id="maya", drug_name="Carboplatin + Paclitaxel",
-                dose="6 cycles, every 3 weeks",
-                started_at=date(2025, 6, 4), ended_at=date(2025, 10, 22),
-                notes="First-line chemotherapy. Completed.",
-            ))
-            session.add(Symptom(
-                patient_id="maya", occurred_on=date(2025, 12, 18),
-                label="Mild fatigue", severity=4,
-                notes="Worse on day 5 of each cycle. Improves with rest.",
-            ))
-            session.add(Symptom(
-                patient_id="maya", occurred_on=date(2025, 12, 22),
-                label="Nausea", severity=3,
-                notes="Manageable with anti-emetics.",
-            ))
+        # Patient rows — these must succeed for any uploads to attach.
+        try:
+            for pid, name, age, indication, drug_id, drug_name in seeds:
+                existing = await session.get(Patient, pid)
+                if existing is None:
+                    session.add(Patient(
+                        id=pid, name=name, age=age, indication=indication,
+                        drug_id=drug_id, drug_name=drug_name,
+                    ))
             await session.commit()
+        except Exception as exc:  # noqa: BLE001
+            log.exception("seed: patient row insert failed")
+            report["errors"].append(f"patient rows: {exc}")
+            await session.rollback()
 
-        # Seed three demo uploads for Maya — CT scan + VCF + scar report.
-        # Each one checks its own filename existence so a partial seed (e.g.
-        # if a previous boot crashed mid-upload-block) self-heals on the next
-        # boot. Don't gate the entire block on "Maya has zero uploads" — that
-        # left Render in a state where the patient + meds were seeded but
-        # the upload block had silently failed and never retried.
-        from datetime import datetime, timezone
-
-        async def _ensure_upload(filename: str, **fields: object) -> None:
+        async def _ensure_upload(patient_id: str, filename: str, **fields) -> bool:
+            """Insert one upload if (patient_id, filename) doesn't exist.
+            Returns True if a new row was added, False if already present.
+            """
             existing = (await session.execute(
                 select(PatientUpload).where(
-                    PatientUpload.patient_id == "maya",
+                    PatientUpload.patient_id == patient_id,
                     PatientUpload.filename == filename,
                 )
             )).first()
-            if existing is None:
-                session.add(PatientUpload(
-                    patient_id="maya", filename=filename, **fields,  # type: ignore[arg-type]
+            if existing is not None:
+                return False
+            session.add(PatientUpload(
+                patient_id=patient_id, filename=filename, **fields,
+            ))
+            return True
+
+        # ===== Maya =========================================================
+        try:
+            r = report["maya"]
+            r["meds_seeded"] = 0
+            existing_meds = (await session.execute(
+                select(Medication).where(Medication.patient_id == "maya")
+            )).first()
+            if existing_meds is None:
+                session.add(Medication(
+                    patient_id="maya", drug_name="Olaparib", dose="300 mg twice daily",
+                    started_at=date(2025, 11, 12), notes="Maintenance after platinum response.",
                 ))
+                session.add(Medication(
+                    patient_id="maya", drug_name="Carboplatin + Paclitaxel",
+                    dose="6 cycles, every 3 weeks",
+                    started_at=date(2025, 6, 4), ended_at=date(2025, 10, 22),
+                    notes="First-line chemotherapy. Completed.",
+                ))
+                session.add(Symptom(
+                    patient_id="maya", occurred_on=date(2025, 12, 18),
+                    label="Mild fatigue", severity=4,
+                    notes="Worse on day 5 of each cycle. Improves with rest.",
+                ))
+                session.add(Symptom(
+                    patient_id="maya", occurred_on=date(2025, 12, 22),
+                    label="Nausea", severity=3,
+                    notes="Manageable with anti-emetics.",
+                ))
+                await session.commit()
+                r["meds_seeded"] = 2
+                r["symptoms_seeded"] = 2
 
-        # CT scan — TCGA-24-0975 (ground-truth HRD-positive TCGA-OV patient
-        # the v1 CNN ensemble scores at p(HRD)=0.97). Replaced the original
-        # TCGA-09-1659 fixture which was a non-HRD patient and thus
-        # correctly predicted HR-proficient by the model.
-        await _ensure_upload(
-            filename="TCGA-24-0975_axial_ct.nii.gz",
-            upload_kind="ct_scan",
-            asset_url="/fixtures/maya_ct_scan.nii.gz",
-            summary_json="HRD 97% (predicted hr deficient, high confidence)",
-            uploaded_at=datetime(2025, 11, 5, 14, 22, tzinfo=timezone.utc),
-        )
-        await _ensure_upload(
-            filename="maya_germline_brca_panel.vcf",
-            upload_kind="vcf",
-            asset_url=None,
-            summary_json="1 variant detected: BRCA1 p.Cys61Gly (pathogenic)",
-            uploaded_at=datetime(2025, 10, 28, 9, 41, tzinfo=timezone.utc),
-        )
-        # Maya's myChoice / FoundationOne CDx-style scar report — third
-        # independent line of evidence (germline BRCA1 + radiogenomics CT +
-        # scar score all converge on HR-deficient).
-        await _ensure_upload(
-            filename="maya_myChoice_HRD_scars.pdf",
-            upload_kind="report",
-            asset_url=None,
-            summary_json="LOH 14 · LST 18 · NTAI 12 → HRD-sum 44 (HR-deficient, scar burden above Myriad cutoff of 42).",
-            uploaded_at=datetime(2025, 11, 18, 11, 14, tzinfo=timezone.utc),
-        )
-        await session.commit()
-
-        # ----- Seed Diana ---------------------------------------------------
-        existing_diana_meds = (await session.execute(
-            select(Medication).where(Medication.patient_id == "diana")
-        )).first()
-        if existing_diana_meds is None:
-            session.add(Medication(
-                patient_id="diana", drug_name="Tamoxifen", dose="20 mg daily",
-                started_at=date(2025, 9, 18),
-                notes="Hormonal therapy for ER+ disease. CYP2D6 *4/*4 reduces conversion to active form.",
-            ))
-            session.add(Medication(
-                patient_id="diana", drug_name="Carboplatin",
-                dose="AUC 5, every 3 weeks",
-                started_at=date(2024, 11, 5), ended_at=date(2025, 4, 12),
-                notes="Platinum chemotherapy. Completed; partial response.",
-            ))
-            session.add(Symptom(
-                patient_id="diana", occurred_on=date(2025, 12, 14),
-                label="Hot flashes", severity=6,
-                notes="Frequent, especially evenings. Likely tamoxifen-related.",
-            ))
-            session.add(Symptom(
-                patient_id="diana", occurred_on=date(2025, 12, 19),
-                label="Joint stiffness", severity=4,
-                notes="Mostly mornings. Loosens with activity.",
-            ))
-            session.add(Symptom(
-                patient_id="diana", occurred_on=date(2025, 12, 23),
-                label="Low energy", severity=5,
-                notes="Persistent for ~2 weeks.",
-            ))
+            r["uploads_added"] = 0
+            for spec in [
+                dict(
+                    filename="TCGA-24-0975_axial_ct.nii.gz",
+                    upload_kind="ct_scan",
+                    asset_url="/fixtures/maya_ct_scan.nii.gz",
+                    summary_json="HRD 97% (predicted hr deficient, high confidence)",
+                    uploaded_at=datetime(2025, 11, 5, 14, 22, tzinfo=timezone.utc),
+                ),
+                dict(
+                    filename="maya_germline_brca_panel.vcf",
+                    upload_kind="vcf",
+                    asset_url=None,
+                    summary_json="1 variant detected: BRCA1 p.Cys61Gly (pathogenic)",
+                    uploaded_at=datetime(2025, 10, 28, 9, 41, tzinfo=timezone.utc),
+                ),
+                dict(
+                    filename="maya_myChoice_HRD_scars.pdf",
+                    upload_kind="report",
+                    asset_url=None,
+                    summary_json="LOH 14 · LST 18 · NTAI 12 → HRD-sum 44 (HR-deficient, scar burden above Myriad cutoff of 42).",
+                    uploaded_at=datetime(2025, 11, 18, 11, 14, tzinfo=timezone.utc),
+                ),
+            ]:
+                if await _ensure_upload("maya", **spec):
+                    r["uploads_added"] += 1
             await session.commit()
+        except Exception as exc:  # noqa: BLE001
+            log.exception("seed: Maya block failed")
+            report["errors"].append(f"maya: {exc}")
+            await session.rollback()
 
-        # ----- Seed Priya ---------------------------------------------------
-        existing_priya_meds = (await session.execute(
-            select(Medication).where(Medication.patient_id == "priya")
-        )).first()
-        if existing_priya_meds is None:
-            session.add(Medication(
-                patient_id="priya", drug_name="Olaparib", dose="300 mg twice daily",
-                started_at=date(2025, 8, 22),
-                notes="OlympiAD-indication. germline BRCA2 + scar-confirmed HRD.",
-            ))
-            session.add(Medication(
-                patient_id="priya", drug_name="Capecitabine",
-                dose="1000 mg/m² twice daily, days 1-14 / 21",
-                started_at=date(2024, 9, 10), ended_at=date(2025, 6, 5),
-                notes="Prior chemotherapy. Switched to olaparib after BRCA2 + HRD confirmation.",
-            ))
-            session.add(Symptom(
-                patient_id="priya", occurred_on=date(2025, 12, 17),
-                label="Anaemia (mild)", severity=4,
-                notes="Known olaparib side effect. Hgb 11.2 last draw.",
-            ))
-            session.add(Symptom(
-                patient_id="priya", occurred_on=date(2025, 12, 21),
-                label="Fatigue", severity=5,
-                notes="Improving since dose-tolerance period started.",
-            ))
-            await session.commit()
+        # ===== Diana ========================================================
+        try:
+            r = report["diana"]
+            r["meds_seeded"] = 0
+            existing_diana_meds = (await session.execute(
+                select(Medication).where(Medication.patient_id == "diana")
+            )).first()
+            if existing_diana_meds is None:
+                session.add(Medication(
+                    patient_id="diana", drug_name="Tamoxifen", dose="20 mg daily",
+                    started_at=date(2025, 9, 18),
+                    notes="Hormonal therapy for ER+ disease. CYP2D6 *4/*4 reduces conversion to active form.",
+                ))
+                session.add(Medication(
+                    patient_id="diana", drug_name="Carboplatin",
+                    dose="AUC 5, every 3 weeks",
+                    started_at=date(2024, 11, 5), ended_at=date(2025, 4, 12),
+                    notes="Platinum chemotherapy. Completed; partial response.",
+                ))
+                session.add(Symptom(
+                    patient_id="diana", occurred_on=date(2025, 12, 14),
+                    label="Hot flashes", severity=6,
+                    notes="Frequent, especially evenings. Likely tamoxifen-related.",
+                ))
+                session.add(Symptom(
+                    patient_id="diana", occurred_on=date(2025, 12, 19),
+                    label="Joint stiffness", severity=4,
+                    notes="Mostly mornings. Loosens with activity.",
+                ))
+                session.add(Symptom(
+                    patient_id="diana", occurred_on=date(2025, 12, 23),
+                    label="Low energy", severity=5,
+                    notes="Persistent for ~2 weeks.",
+                ))
+                await session.commit()
+                r["meds_seeded"] = 2
+                r["symptoms_seeded"] = 3
 
-        existing_priya_uploads = (await session.execute(
-            select(PatientUpload).where(PatientUpload.patient_id == "priya")
-        )).first()
-        if existing_priya_uploads is None:
-            session.add(PatientUpload(
-                patient_id="priya",
-                upload_kind="vcf",
-                filename="priya_germline_brca_panel.vcf",
-                asset_url=None,
-                summary_json="1 variant: BRCA2 c.5946delT (pathogenic). HRD pathway hit.",
-                uploaded_at=datetime(2025, 7, 15, 10, 22, tzinfo=timezone.utc),
-            ))
-            # Tumor scar HRD report — Priya's headline HRD evidence since
-            # breast cancer doesn't use CT-based radiogenomics. LOH 18 +
-            # LST 22 + NTAI 16 = HRD-sum 56, well above the Myriad cutoff.
-            session.add(PatientUpload(
-                patient_id="priya",
-                upload_kind="report",
-                filename="priya_myChoice_HRD_scars.pdf",
-                asset_url=None,
-                summary_json="LOH 18 · LST 22 · NTAI 16 → HRD-sum 56 (HR-deficient, well above Myriad cutoff of 42).",
-                uploaded_at=datetime(2025, 7, 28, 14, 5, tzinfo=timezone.utc),
-            ))
+            r["uploads_added"] = 0
+            for spec in [
+                dict(
+                    filename="TCGA-13-1411_abd_pel_ct.nii.gz",
+                    upload_kind="ct_scan",
+                    asset_url="/fixtures/diana_ct_scan.nii.gz",
+                    summary_json="HRD 76% (predicted hr deficient, high confidence) — somatic-HRD signal despite clean germline.",
+                    uploaded_at=datetime(2025, 11, 14, 10, 5, tzinfo=timezone.utc),
+                ),
+                dict(
+                    filename="diana_germline_panel.vcf",
+                    upload_kind="vcf",
+                    asset_url=None,
+                    summary_json="1 variant: CYP2D6 *4/*4 (poor metabolizer). HR-repair panel clean.",
+                    uploaded_at=datetime(2025, 10, 30, 14, 18, tzinfo=timezone.utc),
+                ),
+                dict(
+                    filename="myChoice_HRD_summary.pdf",
+                    upload_kind="report",
+                    asset_url=None,
+                    summary_json="Tumor scar test ordered after radiogenomics flag. Awaiting result.",
+                    uploaded_at=datetime(2025, 11, 20, 9, 30, tzinfo=timezone.utc),
+                ),
+            ]:
+                if await _ensure_upload("diana", **spec):
+                    r["uploads_added"] += 1
             await session.commit()
+        except Exception as exc:  # noqa: BLE001
+            log.exception("seed: Diana block failed")
+            report["errors"].append(f"diana: {exc}")
+            await session.rollback()
 
-        existing_diana_uploads = (await session.execute(
-            select(PatientUpload).where(PatientUpload.patient_id == "diana")
-        )).first()
-        if existing_diana_uploads is None:
-            session.add(PatientUpload(
-                patient_id="diana",
-                upload_kind="ct_scan",
-                filename="TCGA-13-1411_abd_pel_ct.nii.gz",
-                asset_url="/fixtures/diana_ct_scan.nii.gz",
-                summary_json="HRD 76% (predicted hr deficient, high confidence) — somatic-HRD signal despite clean germline.",
-                uploaded_at=datetime(2025, 11, 14, 10, 5, tzinfo=timezone.utc),
-            ))
-            session.add(PatientUpload(
-                patient_id="diana",
-                upload_kind="vcf",
-                filename="diana_germline_panel.vcf",
-                asset_url=None,
-                summary_json="1 variant: CYP2D6 *4/*4 (poor metabolizer). HR-repair panel clean.",
-                uploaded_at=datetime(2025, 10, 30, 14, 18, tzinfo=timezone.utc),
-            ))
-            session.add(PatientUpload(
-                patient_id="diana",
-                upload_kind="report",
-                filename="myChoice_HRD_summary.pdf",
-                asset_url=None,
-                summary_json="Tumor scar test ordered after radiogenomics flag. Awaiting result.",
-                uploaded_at=datetime(2025, 11, 20, 9, 30, tzinfo=timezone.utc),
-            ))
+        # ===== Priya ========================================================
+        try:
+            r = report["priya"]
+            r["meds_seeded"] = 0
+            existing_priya_meds = (await session.execute(
+                select(Medication).where(Medication.patient_id == "priya")
+            )).first()
+            if existing_priya_meds is None:
+                session.add(Medication(
+                    patient_id="priya", drug_name="Olaparib", dose="300 mg twice daily",
+                    started_at=date(2025, 8, 22),
+                    notes="OlympiAD-indication. germline BRCA2 + scar-confirmed HRD.",
+                ))
+                session.add(Medication(
+                    patient_id="priya", drug_name="Capecitabine",
+                    dose="1000 mg/m² twice daily, days 1-14 / 21",
+                    started_at=date(2024, 9, 10), ended_at=date(2025, 6, 5),
+                    notes="Prior chemotherapy. Switched to olaparib after BRCA2 + HRD confirmation.",
+                ))
+                session.add(Symptom(
+                    patient_id="priya", occurred_on=date(2025, 12, 17),
+                    label="Anaemia (mild)", severity=4,
+                    notes="Known olaparib side effect. Hgb 11.2 last draw.",
+                ))
+                session.add(Symptom(
+                    patient_id="priya", occurred_on=date(2025, 12, 21),
+                    label="Fatigue", severity=5,
+                    notes="Improving since dose-tolerance period started.",
+                ))
+                await session.commit()
+                r["meds_seeded"] = 2
+                r["symptoms_seeded"] = 2
+
+            r["uploads_added"] = 0
+            for spec in [
+                dict(
+                    filename="priya_germline_brca_panel.vcf",
+                    upload_kind="vcf",
+                    asset_url=None,
+                    summary_json="1 variant: BRCA2 c.5946delT (pathogenic). HRD pathway hit.",
+                    uploaded_at=datetime(2025, 7, 15, 10, 22, tzinfo=timezone.utc),
+                ),
+                dict(
+                    filename="priya_myChoice_HRD_scars.pdf",
+                    upload_kind="report",
+                    asset_url=None,
+                    summary_json="LOH 18 · LST 22 · NTAI 16 → HRD-sum 56 (HR-deficient, well above Myriad cutoff of 42).",
+                    uploaded_at=datetime(2025, 7, 28, 14, 5, tzinfo=timezone.utc),
+                ),
+            ]:
+                if await _ensure_upload("priya", **spec):
+                    r["uploads_added"] += 1
             await session.commit()
+        except Exception as exc:  # noqa: BLE001
+            log.exception("seed: Priya block failed")
+            report["errors"].append(f"priya: {exc}")
+            await session.rollback()
+
+    return report
 
 
 _redis: redis.Redis = redis.from_url(settings.redis_url, decode_responses=True)
@@ -419,6 +449,20 @@ _redis: redis.Redis = redis.from_url(settings.redis_url, decode_responses=True)
 @app.get("/healthz")
 async def healthz() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.post("/admin/reseed")
+async def admin_reseed() -> dict[str, Any]:
+    """Manually re-run the demo-patient seeder. Useful when the lifespan
+    seed silently failed (e.g. on Render, where logs aren't always easy
+    to inspect). Returns a per-patient count of what was added + any
+    error messages so we can debug why a seed didn't take.
+
+    Idempotent: each upload checks its own existence, so calling this
+    twice in a row leaves the second call as a no-op.
+    """
+    report = await _seed_demo_patients()
+    return {"ok": len(report["errors"]) == 0, "report": report}
 
 
 @app.get("/readyz")
