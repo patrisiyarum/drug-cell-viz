@@ -66,6 +66,14 @@ services:
         value: "false"
       - key: RATE_LIMIT_JOBS_PER_HOUR
         value: "100"
+      # Radiogenomics — pull the trained Med3D fold0 checkpoint from the
+      # GitHub Release on first boot. The 176 MB .pt is too big for git,
+      # so we stash it as a release asset and download it once into the
+      # persistent /data/blobs disk. Subsequent restarts use the cached copy.
+      - key: RADIOGENOMICS_MODEL_WEIGHTS_URL
+        value: https://github.com/patrisiyarum/drug-cell-viz/releases/download/model-v1/fold0.pt
+      - key: RADIOGENOMICS_BACKBONE
+        value: med3d
 
   # --- Frontend ---
   - type: web

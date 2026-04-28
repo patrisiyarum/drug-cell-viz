@@ -52,29 +52,98 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # path is unset or missing, the upload endpoint stays on the stub path
     # and the UI surfaces the "model not trained" banner. Failing to load
     # does NOT crash the API — we log loudly and keep serving.
-    if settings.radiogenomics_model_weights:
-        from pathlib import Path
-
+    #
+    # On hosts like Render the 176 MB checkpoint isn't shipped via git
+    # (GitHub blocks files >100 MB). RADIOGENOMICS_MODEL_WEIGHTS_URL lets us
+    # download it from a public URL (GitHub Release asset / S3 / HF Hub) on
+    # first boot and cache it under local_storage_root for subsequent
+    # restarts so we don't re-pull every container start.
+    weights_path = await _resolve_radiogenomics_weights()
+    if weights_path is not None:
         from api.services import radiogenomics as rg
 
-        weights_path = Path(settings.radiogenomics_model_weights)
-        if weights_path.exists():
-            try:
-                rg.set_model_weights(
-                    weights_path, backbone=settings.radiogenomics_backbone,
-                )
-            except Exception:
-                logging.getLogger(__name__).exception(
-                    "failed to wire radiogenomics model — staying on stub path",
-                )
-        else:
-            logging.getLogger(__name__).warning(
-                "RADIOGENOMICS_MODEL_WEIGHTS set to %s but file does not exist; "
-                "serving stub predictions", weights_path,
+        try:
+            rg.set_model_weights(
+                weights_path, backbone=settings.radiogenomics_backbone,
+            )
+        except Exception:
+            logging.getLogger(__name__).exception(
+                "failed to wire radiogenomics model — staying on stub path",
             )
 
     yield
     await close_events()
+
+
+async def _resolve_radiogenomics_weights():
+    """Locate the radiogenomics checkpoint, downloading from a public URL
+    if a local copy isn't present.
+
+    Search order:
+        1. settings.radiogenomics_model_weights (explicit path) — if the
+           file exists, use it as-is.
+        2. settings.radiogenomics_model_weights_url — download to
+           local_storage_root / "models" / "fold0.pt" on first boot and
+           cache for subsequent restarts.
+        3. Otherwise, return None and the API stays on the stub path.
+
+    Returns a Path to a usable checkpoint, or None if neither produced one.
+    Never raises — failures fall through to None so the API stays serving.
+    """
+    from pathlib import Path
+
+    if settings.radiogenomics_model_weights:
+        explicit = Path(settings.radiogenomics_model_weights)
+        if explicit.exists():
+            return explicit
+        logging.getLogger(__name__).warning(
+            "RADIOGENOMICS_MODEL_WEIGHTS set to %s but file does not exist; "
+            "falling back to URL download or stub", explicit,
+        )
+
+    url = settings.radiogenomics_model_weights_url.strip()
+    if not url:
+        return None
+
+    cache_dir = settings.local_storage_root / "models"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    cache_path = cache_dir / "fold0.pt"
+
+    if cache_path.exists():
+        return cache_path
+
+    log = logging.getLogger(__name__)
+    log.info(
+        "downloading radiogenomics checkpoint from %s → %s (one-time, ~176 MB)",
+        url, cache_path,
+    )
+    try:
+        import asyncio
+        import urllib.request
+
+        # Run the blocking download in a thread so we don't block the event loop.
+        def _download() -> None:
+            with urllib.request.urlopen(url, timeout=300) as resp:
+                with cache_path.open("wb") as f:
+                    while True:
+                        chunk = resp.read(1 << 20)  # 1 MB chunks
+                        if not chunk:
+                            break
+                        f.write(chunk)
+
+        await asyncio.to_thread(_download)
+        size_mb = cache_path.stat().st_size / 1_000_000
+        log.info("radiogenomics checkpoint cached (%.1f MB)", size_mb)
+        return cache_path
+    except Exception:
+        # Clean up partial download so the next restart can retry cleanly.
+        if cache_path.exists():
+            try:
+                cache_path.unlink()
+            except OSError:
+                pass
+        log.exception("failed to download radiogenomics checkpoint — staying on stub")
+        return None
 
 
 app = FastAPI(title="drug-cell-viz API", version="0.1.0", lifespan=lifespan)

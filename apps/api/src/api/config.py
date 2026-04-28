@@ -90,6 +90,13 @@ class Settings(BaseSettings):
     # (pyproject.toml) that brings in torch + monai.
     radiogenomics_model_weights: str = ""
     radiogenomics_backbone: str = "monai_densenet"  # or "med3d"
+    # Optional URL the API can download the checkpoint from on startup if the
+    # local path doesn't exist. Lets us ship the 176 MB fold0.pt out-of-band
+    # (GitHub Release asset, S3, HuggingFace Hub, etc.) on hosts like Render
+    # where the file isn't shipped via git. Cached on disk under
+    # `local_storage_root / "models" / "fold0.pt"` so subsequent restarts
+    # skip the download.
+    radiogenomics_model_weights_url: str = ""
 
 
 settings = Settings()

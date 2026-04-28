@@ -17,7 +17,13 @@ WORKDIR /app
 COPY pyproject.toml ./
 COPY src ./src
 
-RUN uv sync --no-dev
+# Install base deps + the radiogenomics extra (torch + monai) so the API
+# can run real CT-scan inference. Pin torch to the CPU-only wheel index;
+# Render web services are CPU-only and the CUDA wheels are ~3x bigger.
+ENV UV_INDEX_STRATEGY=unsafe-best-match \
+    UV_EXTRA_INDEX_URL=https://download.pytorch.org/whl/cpu
+
+RUN uv sync --no-dev --extra radiogenomics
 
 # Writable blob root for the local-filesystem storage backend.
 RUN mkdir -p /data/blobs
