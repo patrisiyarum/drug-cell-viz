@@ -246,58 +246,55 @@ async def _seed_demo_patients() -> None:
             ))
             await session.commit()
 
-        # Seed two demo uploads for Maya — one CT scan, one VCF — pointing
-        # at the static fixtures the web app already ships under /fixtures.
-        # Idempotent: only seeds if she has zero existing uploads.
+        # Seed three demo uploads for Maya — CT scan + VCF + scar report.
+        # Each one checks its own filename existence so a partial seed (e.g.
+        # if a previous boot crashed mid-upload-block) self-heals on the next
+        # boot. Don't gate the entire block on "Maya has zero uploads" — that
+        # left Render in a state where the patient + meds were seeded but
+        # the upload block had silently failed and never retried.
         from datetime import datetime, timezone
-        existing_uploads = (await session.execute(
-            select(PatientUpload).where(PatientUpload.patient_id == "maya")
-        )).first()
-        if existing_uploads is None:
-            session.add(PatientUpload(
-                patient_id="maya",
-                upload_kind="ct_scan",
-                # Swapped from TCGA-09-1659 (a non-HRD patient — CNN was
-                # correctly predicting HR-proficient, breaking the demo) to
-                # TCGA-24-0975, a ground-truth HRD-positive TCGA-OV patient
-                # that the v1 5-fold CNN ensemble scores at p(HRD)=0.97 with
-                # the API's preprocessing pipeline. Both germline + imaging
-                # now point at HR-deficient.
-                filename="TCGA-24-0975_axial_ct.nii.gz",
-                asset_url="/fixtures/maya_ct_scan.nii.gz",
-                summary_json="HRD 97% (predicted hr deficient, high confidence)",
-                uploaded_at=datetime(2025, 11, 5, 14, 22, tzinfo=timezone.utc),
-            ))
-            session.add(PatientUpload(
-                patient_id="maya",
-                upload_kind="vcf",
-                filename="maya_germline_brca_panel.vcf",
-                asset_url=None,
-                summary_json="1 variant detected: BRCA1 p.Cys61Gly (pathogenic)",
-                uploaded_at=datetime(2025, 10, 28, 9, 41, tzinfo=timezone.utc),
-            ))
-            await session.commit()
 
-        # Maya's myChoice / FoundationOne CDx-style scar report — a third
+        async def _ensure_upload(filename: str, **fields: object) -> None:
+            existing = (await session.execute(
+                select(PatientUpload).where(
+                    PatientUpload.patient_id == "maya",
+                    PatientUpload.filename == filename,
+                )
+            )).first()
+            if existing is None:
+                session.add(PatientUpload(
+                    patient_id="maya", filename=filename, **fields,  # type: ignore[arg-type]
+                ))
+
+        # CT scan — TCGA-24-0975 (ground-truth HRD-positive TCGA-OV patient
+        # the v1 CNN ensemble scores at p(HRD)=0.97). Replaced the original
+        # TCGA-09-1659 fixture which was a non-HRD patient and thus
+        # correctly predicted HR-proficient by the model.
+        await _ensure_upload(
+            filename="TCGA-24-0975_axial_ct.nii.gz",
+            upload_kind="ct_scan",
+            asset_url="/fixtures/maya_ct_scan.nii.gz",
+            summary_json="HRD 97% (predicted hr deficient, high confidence)",
+            uploaded_at=datetime(2025, 11, 5, 14, 22, tzinfo=timezone.utc),
+        )
+        await _ensure_upload(
+            filename="maya_germline_brca_panel.vcf",
+            upload_kind="vcf",
+            asset_url=None,
+            summary_json="1 variant detected: BRCA1 p.Cys61Gly (pathogenic)",
+            uploaded_at=datetime(2025, 10, 28, 9, 41, tzinfo=timezone.utc),
+        )
+        # Maya's myChoice / FoundationOne CDx-style scar report — third
         # independent line of evidence (germline BRCA1 + radiogenomics CT +
-        # scar score all agree). Seeded with its own existence check so it
-        # backfills on existing DBs that already had Maya's CT + VCF.
-        scar_existing = (await session.execute(
-            select(PatientUpload).where(
-                PatientUpload.patient_id == "maya",
-                PatientUpload.filename == "maya_myChoice_HRD_scars.pdf",
-            )
-        )).first()
-        if scar_existing is None:
-            session.add(PatientUpload(
-                patient_id="maya",
-                upload_kind="report",
-                filename="maya_myChoice_HRD_scars.pdf",
-                asset_url=None,
-                summary_json="LOH 14 · LST 18 · NTAI 12 → HRD-sum 44 (HR-deficient, scar burden above Myriad cutoff of 42).",
-                uploaded_at=datetime(2025, 11, 18, 11, 14, tzinfo=timezone.utc),
-            ))
-            await session.commit()
+        # scar score all converge on HR-deficient).
+        await _ensure_upload(
+            filename="maya_myChoice_HRD_scars.pdf",
+            upload_kind="report",
+            asset_url=None,
+            summary_json="LOH 14 · LST 18 · NTAI 12 → HRD-sum 44 (HR-deficient, scar burden above Myriad cutoff of 42).",
+            uploaded_at=datetime(2025, 11, 18, 11, 14, tzinfo=timezone.utc),
+        )
+        await session.commit()
 
         # ----- Seed Diana ---------------------------------------------------
         existing_diana_meds = (await session.execute(
