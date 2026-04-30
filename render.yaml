@@ -81,13 +81,14 @@ services:
         value: med3d
 
   # --- Frontend ---
-  # Renamed from drug-cell-viz-web → kintsugi so the public URL becomes
-  # kintsugi.onrender.com. Render's Blueprint treats a name change as
-  # a brand-new service rather than an in-place rename, so the old
-  # drug-cell-viz-web service stays running until manually deleted from
-  # the dashboard. That's intentional — keeps the live site up during
-  # the cutover. After the new service is healthy, delete the old one
-  # at https://dashboard.render.com/web/srv-d7kegal7vvec73cu0gb0.
+  # Public URL for the patient-facing app: kintsugi.onrender.com.
+  # Render Blueprints treat name changes as new-service creations
+  # rather than in-place renames, so the previous drug-cell-viz-web
+  # service stays running until manually deleted from the dashboard.
+  # That's intentional: keeps the live site up during cutover. After
+  # kintsugi.onrender.com is healthy + has NEXT_PUBLIC_API_URL set,
+  # delete the old service at:
+  #   https://dashboard.render.com/web/srv-d7kegal7vvec73cu0gb0
   - type: web
     name: kintsugi
     runtime: node
