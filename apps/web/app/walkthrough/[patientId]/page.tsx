@@ -15,24 +15,27 @@ import type {
 } from "@/lib/bc-types";
 
 /**
- * Pull tumor-scar numbers (LOH / LST / NtAI) out of a patient's stored
- * upload summaries so the HrdCard's scar panel can pre-fill + auto-run.
- * Looks for the canonical "LOH N · LST N · NTAI N" string we seed.
+ * Tumor-scar feature counts (HRD-LOH, LST, NtAI) for the demo patients.
+ * These are real clinical inputs to the scar-score calculation — not
+ * model predictions — so we keep them as structured per-patient data
+ * rather than parsing them out of upload-summary text. When a patient
+ * has a scar report, the scar tile auto-runs against these values.
+ *
+ * Maya: Myriad myChoice numbers consistent with HRD-positive ovarian.
+ * Priya: scar-confirmed BRCA2 metastatic breast cancer.
+ * Diana: no scar test ordered yet; scar tile renders empty inputs.
  */
-function findScarPrefill(
-  profile: PatientFullProfile | undefined,
-): { loh: number; lst: number; ntai: number } | null {
-  if (!profile) return null;
-  for (const u of profile.uploads) {
-    if (!u.summary_json) continue;
-    const m = u.summary_json.match(
-      /LOH\s+(\d+)[^\d]+LST\s+(\d+)[^\d]+NTAI\s+(\d+)/i,
-    );
-    if (m) {
-      return { loh: Number(m[1]), lst: Number(m[2]), ntai: Number(m[3]) };
-    }
-  }
-  return null;
+const SCAR_PREFILL_BY_PATIENT: Record<
+  string,
+  { loh: number; lst: number; ntai: number } | undefined
+> = {
+  maya: { loh: 14, lst: 18, ntai: 12 },
+  priya: { loh: 18, lst: 22, ntai: 16 },
+};
+
+function scarPrefillFor(patientId: string | undefined) {
+  if (!patientId) return null;
+  return SCAR_PREFILL_BY_PATIENT[patientId] ?? null;
 }
 
 /**
@@ -109,7 +112,7 @@ export default function WalkthroughPage() {
     queryFn: () => api.getPatientProfile(patientId!),
     enabled: !!patientId,
   });
-  const scarPrefill = findScarPrefill(profile.data);
+  const scarPrefill = scarPrefillFor(patientId);
   const recordRefs = recordRefsFor(profile.data);
 
   const reportRef = useRef<HTMLDivElement | null>(null);

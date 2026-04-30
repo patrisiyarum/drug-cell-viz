@@ -248,6 +248,27 @@ async def _seed_demo_patients() -> dict:
             ))
             return True
 
+        # One-time cleanup: clear seeded summary_json text on existing demo
+        # uploads. Earlier seeds set hardcoded "HRD 76% (predicted ...)"
+        # strings on CT uploads as placeholders, but those strings claimed
+        # model predictions without actually running the model. They were
+        # also visible in the patient profile UI as misleading metadata.
+        # This UPDATE drops that text. Idempotent — running on an already-
+        # cleaned DB is a no-op. Runs on every container start so any new
+        # environment self-heals.
+        try:
+            from sqlalchemy import update
+            await session.execute(
+                update(PatientUpload)
+                .where(PatientUpload.patient_id.in_(["maya", "diana", "priya"]))
+                .values(summary_json=None),
+            )
+            await session.commit()
+        except Exception as exc:  # noqa: BLE001
+            log.exception("seed: clearing demo summary_json failed")
+            report["errors"].append(f"clear_summary_json: {exc}")
+            await session.rollback()
+
         # ===== Maya =========================================================
         try:
             r = report["maya"]
@@ -286,21 +307,21 @@ async def _seed_demo_patients() -> dict:
                     filename="TCGA-24-0975_axial_ct.nii.gz",
                     upload_kind="ct_scan",
                     asset_url="/fixtures/maya_ct_scan.nii.gz",
-                    summary_json="HRD 97% (predicted hr deficient, high confidence)",
+                    summary_json=None,
                     uploaded_at=datetime(2025, 11, 5, 14, 22),
                 ),
                 dict(
                     filename="maya_germline_brca_panel.vcf",
                     upload_kind="vcf",
                     asset_url=None,
-                    summary_json="1 variant detected: BRCA1 p.Cys61Gly (pathogenic)",
+                    summary_json=None,
                     uploaded_at=datetime(2025, 10, 28, 9, 41),
                 ),
                 dict(
                     filename="maya_myChoice_HRD_scars.pdf",
                     upload_kind="report",
                     asset_url=None,
-                    summary_json="LOH 14 · LST 18 · NTAI 12 → HRD-sum 44 (HR-deficient, scar burden above Myriad cutoff of 42).",
+                    summary_json=None,
                     uploaded_at=datetime(2025, 11, 18, 11, 14),
                 ),
             ]:
@@ -356,21 +377,21 @@ async def _seed_demo_patients() -> dict:
                     filename="TCGA-13-1411_abd_pel_ct.nii.gz",
                     upload_kind="ct_scan",
                     asset_url="/fixtures/diana_ct_scan.nii.gz",
-                    summary_json="HRD 76% (predicted hr deficient, high confidence) — somatic-HRD signal despite clean germline.",
+                    summary_json=None,
                     uploaded_at=datetime(2025, 11, 14, 10, 5),
                 ),
                 dict(
                     filename="diana_germline_panel.vcf",
                     upload_kind="vcf",
                     asset_url=None,
-                    summary_json="1 variant: CYP2D6 *4/*4 (poor metabolizer). HR-repair panel clean.",
+                    summary_json=None,
                     uploaded_at=datetime(2025, 10, 30, 14, 18),
                 ),
                 dict(
                     filename="myChoice_HRD_summary.pdf",
                     upload_kind="report",
                     asset_url=None,
-                    summary_json="Tumor scar test ordered after radiogenomics flag. Awaiting result.",
+                    summary_json=None,
                     uploaded_at=datetime(2025, 11, 20, 9, 30),
                 ),
             ]:
@@ -421,14 +442,14 @@ async def _seed_demo_patients() -> dict:
                     filename="priya_germline_brca_panel.vcf",
                     upload_kind="vcf",
                     asset_url=None,
-                    summary_json="1 variant: BRCA2 c.5946delT (pathogenic). HRD pathway hit.",
+                    summary_json=None,
                     uploaded_at=datetime(2025, 7, 15, 10, 22),
                 ),
                 dict(
                     filename="priya_myChoice_HRD_scars.pdf",
                     upload_kind="report",
                     asset_url=None,
-                    summary_json="LOH 18 · LST 22 · NTAI 16 → HRD-sum 56 (HR-deficient, well above Myriad cutoff of 42).",
+                    summary_json=None,
                     uploaded_at=datetime(2025, 7, 28, 14, 5),
                 ),
             ]:
