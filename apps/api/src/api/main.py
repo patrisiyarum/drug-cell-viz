@@ -452,6 +452,17 @@ async def _seed_demo_patients() -> dict:
                     summary_json=None,
                     uploaded_at=datetime(2025, 7, 28, 14, 5),
                 ),
+                # Metastatic-staging CT (TCGA-09-2055). Metastatic breast
+                # cancer patients routinely get chest/abdomen/pelvis CTs
+                # to monitor for new lesions; this is one of those scans
+                # rather than a breast-specific image.
+                dict(
+                    filename="TCGA-09-2055_staging_ct.nii.gz",
+                    upload_kind="ct_scan",
+                    asset_url="/fixtures/priya_ct_scan.nii.gz",
+                    summary_json=None,
+                    uploaded_at=datetime(2025, 8, 4, 13, 30),
+                ),
             ]:
                 if await _ensure_upload("priya", **spec):
                     r["uploads_added"] += 1
