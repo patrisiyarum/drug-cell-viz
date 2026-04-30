@@ -249,19 +249,28 @@ async def _seed_demo_patients() -> dict:
             return True
 
         # One-time cleanup: clear seeded summary_json text on existing demo
-        # uploads. Earlier seeds set hardcoded "HRD 76% (predicted ...)"
-        # strings on CT uploads as placeholders, but those strings claimed
-        # model predictions without actually running the model. They were
-        # also visible in the patient profile UI as misleading metadata.
-        # This UPDATE drops that text. Idempotent — running on an already-
-        # cleaned DB is a no-op. Runs on every container start so any new
-        # environment self-heals.
+        # uploads + relabel Diana's CT row to the current TCGA barcode.
+        # Earlier seeds had hardcoded "HRD 76% (predicted ...)" strings
+        # claiming model output without running the model. They also had
+        # an old TCGA-13-1411 filename for Diana that pointed at the old
+        # fixture; the fixture file has since been replaced with a CT
+        # from TCGA-25-1314 (an HR-deficient-predicted patient), so the
+        # filename label needs to follow. Idempotent on every container
+        # start so any new environment self-heals.
         try:
             from sqlalchemy import update
             await session.execute(
                 update(PatientUpload)
                 .where(PatientUpload.patient_id.in_(["maya", "diana", "priya"]))
                 .values(summary_json=None),
+            )
+            await session.execute(
+                update(PatientUpload)
+                .where(
+                    PatientUpload.patient_id == "diana",
+                    PatientUpload.filename == "TCGA-13-1411_abd_pel_ct.nii.gz",
+                )
+                .values(filename="TCGA-25-1314_abd_pel_ct.nii.gz"),
             )
             await session.commit()
         except Exception as exc:  # noqa: BLE001
@@ -374,7 +383,7 @@ async def _seed_demo_patients() -> dict:
             r["uploads_added"] = 0
             for spec in [
                 dict(
-                    filename="TCGA-13-1411_abd_pel_ct.nii.gz",
+                    filename="TCGA-25-1314_abd_pel_ct.nii.gz",
                     upload_kind="ct_scan",
                     asset_url="/fixtures/diana_ct_scan.nii.gz",
                     summary_json=None,
