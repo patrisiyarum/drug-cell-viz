@@ -258,7 +258,7 @@ async def _seed_demo_patients() -> dict:
         # filename label needs to follow. Idempotent on every container
         # start so any new environment self-heals.
         try:
-            from sqlalchemy import update
+            from sqlalchemy import delete, update
             await session.execute(
                 update(PatientUpload)
                 .where(PatientUpload.patient_id.in_(["maya", "diana", "priya"]))
@@ -272,10 +272,23 @@ async def _seed_demo_patients() -> dict:
                 )
                 .values(filename="TCGA-25-1314_abd_pel_ct.nii.gz"),
             )
+            # Drop Priya's CT row from existing DBs. We previously seeded
+            # her with a TCGA-OV pelvic CT framed as a breast-cancer
+            # metastatic-staging scan — clinically defensible but
+            # data-dishonest (the file came from an ovarian patient).
+            # Real breast-cancer patients aren't imaged with CT for HRD
+            # assessment, so we remove the upload entirely.
+            await session.execute(
+                delete(PatientUpload)
+                .where(
+                    PatientUpload.patient_id == "priya",
+                    PatientUpload.upload_kind == "ct_scan",
+                )
+            )
             await session.commit()
         except Exception as exc:  # noqa: BLE001
-            log.exception("seed: clearing demo summary_json failed")
-            report["errors"].append(f"clear_summary_json: {exc}")
+            log.exception("seed: cleanup migration failed")
+            report["errors"].append(f"cleanup_migration: {exc}")
             await session.rollback()
 
         # ===== Maya =========================================================
@@ -461,17 +474,12 @@ async def _seed_demo_patients() -> dict:
                     summary_json=None,
                     uploaded_at=datetime(2025, 7, 28, 14, 5),
                 ),
-                # Metastatic-staging CT (TCGA-09-2055). Metastatic breast
-                # cancer patients routinely get chest/abdomen/pelvis CTs
-                # to monitor for new lesions; this is one of those scans
-                # rather than a breast-specific image.
-                dict(
-                    filename="TCGA-09-2055_staging_ct.nii.gz",
-                    upload_kind="ct_scan",
-                    asset_url="/fixtures/priya_ct_scan.nii.gz",
-                    summary_json=None,
-                    uploaded_at=datetime(2025, 8, 4, 13, 30),
-                ),
+                # NOTE: Priya doesn't get a CT upload. Real breast-cancer
+                # patients are imaged with mammography or MRI, not CT, and
+                # TCGA-BRCA on TCIA has no CT modality at all. Her HRD
+                # evidence is BRCA2 germline + tumor scar score — the two
+                # signals that match how breast-cancer HRD is actually
+                # established clinically.
             ]:
                 if await _ensure_upload("priya", **spec):
                     r["uploads_added"] += 1

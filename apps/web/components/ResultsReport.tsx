@@ -59,33 +59,27 @@ export function ResultsReport({
   // Per-patient radiogenomics fixture wiring.
   //   Maya  — pelvic CT (TCGA-24-0975) — supports her HR-deficient germline
   //           call. Model: p(HRD) ~0.97 (green).
-  //   Diana — staging CT — model leans HR-proficient (still using the
-  //           original TCGA-13-1411 fixture; awaiting a Lambda-side swap).
-  //   Priya — metastatic-staging CT (TCGA-09-2055) — metastatic breast
-  //           cancer patients routinely get chest/abdomen/pelvis staging
-  //           scans even though the breast itself is imaged with MR/MG;
-  //           we score the staging CT for HRD signal. Model: p(HRD)
-  //           ~0.92 (green).
-  // Patients without a fixture pass null. /build users who uploaded their
-  // own CT scan override either lookup with the blob URL of their upload.
+  //   Diana — staging CT (TCGA-25-1314) — somatic-HRD pre-screen story.
+  //           Model: p(HRD) ~0.91 (green).
+  //   Priya — no CT. Real breast cancer patients are imaged with MG/MRI,
+  //           not CT, and TCGA-BRCA on TCIA has no CT modality. Her HRD
+  //           evidence is the BRCA2 germline variant + tumor scar score.
+  // /build users who uploaded their own CT scan override the lookup with
+  // the blob URL of their upload.
   const ctScanUrl =
     uploadedCtScanUrl ??
     (patient?.id === "maya"
       ? "/fixtures/maya_ct_scan.nii.gz"
       : patient?.id === "diana"
         ? "/fixtures/diana_ct_scan.nii.gz"
-        : patient?.id === "priya"
-          ? "/fixtures/priya_ct_scan.nii.gz"
-          : null);
+        : null);
   const ctScanLabel = uploadedCtScanUrl
     ? "Your uploaded CT"
     : patient?.id === "maya"
       ? "Maya's pelvic CT"
       : patient?.id === "diana"
         ? "Diana's staging CT"
-        : patient?.id === "priya"
-          ? "Priya's metastatic-staging CT"
-          : null;
+        : null;
 
   return (
     <div className="space-y-6">

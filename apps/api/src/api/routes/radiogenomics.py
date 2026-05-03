@@ -14,7 +14,9 @@ endpoint to real predictions without any route-level changes.
 
 from __future__ import annotations
 
+import hashlib
 import logging
+from collections import OrderedDict
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field
@@ -29,6 +31,17 @@ router = APIRouter(prefix="/api/radiogenomics", tags=["radiogenomics"])
 # Hard cap on upload size — a single CT series is typically 50-500 MB; we cap
 # at 1 GB to reject accidental whole-body studies or malformed zips.
 MAX_UPLOAD_BYTES = 1_000_000_000
+
+# In-memory prediction cache. Keyed by SHA-256 of the raw upload bytes —
+# identical input → identical preprocessing → identical prediction, so
+# re-running the model on a CT we've already scored is pure waste. The
+# demo CTs (Maya, Diana) are stable fixtures, so the second visit to
+# their clinical-analysis page is served instantly from cache.
+#
+# OrderedDict for FIFO eviction. Cap is generous because each entry is
+# ~1 KB (a small JSON blob); 256 entries ≈ 256 KB total memory.
+_PREDICTION_CACHE: "OrderedDict[str, RadiogenomicsResponse]" = OrderedDict()
+_PREDICTION_CACHE_MAX = 256
 
 
 class VolumeMetadataOut(BaseModel):
@@ -73,6 +86,22 @@ async def upload_ct_scan(file: UploadFile = File(...)) -> RadiogenomicsResponse:
             ),
         )
 
+    # Cache hit: identical input bytes → identical prediction. Cuts the
+    # second-visit-to-the-same-patient load from ~10s (re-preprocess +
+    # re-inference) to ~10ms (just the JSON serialize). Cache key is the
+    # SHA-256 of the raw upload — collision-free for any practical use.
+    cache_key = hashlib.sha256(raw).hexdigest()
+    cached = _PREDICTION_CACHE.get(cache_key)
+    if cached is not None:
+        # Move to end of OrderedDict so frequently-accessed entries don't
+        # get evicted by FIFO. (Effectively LRU.)
+        _PREDICTION_CACHE.move_to_end(cache_key)
+        logger.info(
+            "radiogenomics cache hit %s (%d bytes saved from re-inference)",
+            cache_key[:8], len(raw),
+        )
+        return cached
+
     try:
         volume, metadata = radiogenomics.load_volume(raw, file.filename)
     except radiogenomics.RadiogenomicsError as exc:
@@ -100,7 +129,7 @@ async def upload_ct_scan(file: UploadFile = File(...)) -> RadiogenomicsResponse:
 
     prediction = radiogenomics.infer_hrd(preprocessed, metadata)
 
-    return RadiogenomicsResponse(
+    response = RadiogenomicsResponse(
         metadata=VolumeMetadataOut(
             modality=prediction.metadata.modality,
             original_shape=prediction.metadata.original_shape,
@@ -115,6 +144,13 @@ async def upload_ct_scan(file: UploadFile = File(...)) -> RadiogenomicsResponse:
         model_available=prediction.label != "model_not_trained",
         volume_url=volume_url,
     )
+
+    # Cache for next request. FIFO eviction once we hit the cap.
+    _PREDICTION_CACHE[cache_key] = response
+    if len(_PREDICTION_CACHE) > _PREDICTION_CACHE_MAX:
+        _PREDICTION_CACHE.popitem(last=False)
+
+    return response
 
 
 def _persist_volume_as_nifti(

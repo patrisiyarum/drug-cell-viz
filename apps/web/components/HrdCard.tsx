@@ -228,17 +228,25 @@ export function HrdCard({
     ? hrd.evidence.filter((e) => e.source !== "ml_prediction")
     : hrd.evidence;
 
-  // Build the lab tiles dynamically so we only render experiments that
-  // actually apply to this patient.
+  // Lab tiles are gated on whether the patient actually uploaded the
+  // record that experiment reads from. A user who picked a variant from
+  // the catalog (no VCF upload) shouldn't see a "DNA-repair classifier"
+  // tile claiming to read their VCF — there is no VCF. Same logic for
+  // the scar tile (needs a tumor scar report) and the CT tile (needs a
+  // CT scan upload). Demo patients have these uploads in their profile,
+  // so all three tiles still light up for Maya / Diana / Priya.
+  const hasVcf = !!recordRefs.vcfFilename;
+  const hasScarData = !!recordRefs.reportFilename || !!scarPrefill;
+
   const tiles: React.ReactNode[] = [];
-  if (classifiableBrca1Variants.length > 0) {
+  if (classifiableBrca1Variants.length > 0 && hasVcf) {
     tiles.push(
       <LabTile
         key="ml"
         title="DNA-repair classifier"
         tests="Tests whether your variant breaks BRCA1's repair function."
         icon={<FlaskConical className="w-4 h-4" aria-hidden />}
-        recordLabel={recordRefs.vcfFilename ?? "your VCF (genetic data)"}
+        recordLabel={recordRefs.vcfFilename}
       >
         <Brca1ClassifierBody hgvsList={classifiableBrca1Variants} />
       </LabTile>,
@@ -262,7 +270,7 @@ export function HrdCard({
       </LabTile>,
     );
   }
-  if (hrd.label !== "hr_proficient") {
+  if (hrd.label !== "hr_proficient" && hasScarData) {
     tiles.push(
       <LabTile
         key="scar"
@@ -294,7 +302,7 @@ export function HrdCard({
           tab switches instead of re-running the experiments on every flip
           back. React Query handles the BRCA1 case automatically; the CT
           and scar panels need this trick because their state is local. */}
-      <div className={tab === "result" ? "" : "hidden"}>
+      <div className={tab === "result" || tiles.length === 0 ? "" : "hidden"}>
         <div className="space-y-3">
           {/* 1. Verdict — wrapped in a SectionCard so it shares the same
               gold-seam + rounded-2xl border treatment as the rest of the
@@ -428,23 +436,23 @@ function TabBar({
       >
         Result
       </button>
-      <button
-        type="button"
-        onClick={() => setTab("lab")}
-        className={`${base} inline-flex items-center gap-2 ${
-          tab === "lab"
-            ? "border-amber-500 text-foreground"
-            : "border-transparent text-muted-foreground hover:text-foreground"
-        }`}
-      >
-        <Microscope className="w-3.5 h-3.5" aria-hidden />
-        Lab
-        {labTileCount > 0 ? (
+      {labTileCount > 0 ? (
+        <button
+          type="button"
+          onClick={() => setTab("lab")}
+          className={`${base} inline-flex items-center gap-2 ${
+            tab === "lab"
+              ? "border-amber-500 text-foreground"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <Microscope className="w-3.5 h-3.5" aria-hidden />
+          Lab
           <span className="text-[11px] rounded-full bg-amber-100 text-amber-800 px-1.5 py-0.5 font-mono">
             {labTileCount}
           </span>
-        ) : null}
-      </button>
+        </button>
+      ) : null}
       {analysisResult ? (
         <div className="ml-auto pb-1 no-print">
           <PdfDownloadInline
