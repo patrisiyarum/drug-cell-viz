@@ -317,10 +317,12 @@ export function HrdCard({
           and scar panels need this trick because their state is local. */}
       <div className={tab === "result" || tiles.length === 0 ? "" : "hidden"}>
         <div className="space-y-3">
-          {/* 1. Verdict — wrapped in a SectionCard so it shares the same
-              gold-seam + rounded-2xl border treatment as the rest of the
-              Result-tab sections. The label-specific tint is now a slim
-              top-of-card accent strip instead of a full background. */}
+          {/* 1. Verdict — combined with the patient's variant data
+              into a single SectionCard. The previous layout had the
+              variant chip in its own "Your sample" card directly below
+              the verdict, which read as two competing pieces of
+              information. They belong together: the verdict IS the
+              answer for that variant. */}
           <SectionCard label="HR-deficiency result">
             <div className="flex items-start justify-between gap-4 flex-wrap">
               <h3 className="text-xl md:text-2xl font-semibold">
@@ -333,19 +335,14 @@ export function HrdCard({
               </div>
             </div>
             <p className="text-sm leading-relaxed">{style.oneLiner}</p>
-            {showReversionCallout ? <ReversionAwarenessInfo /> : null}
-            {hrd.label === "hr_deficient" ? (
-              <NextStepBanner drugId={drugId} />
-            ) : null}
-          </SectionCard>
 
-          {/* 2. Your sample — same SectionCard shell. */}
-          {variantEvidence.length > 0 ? (
-            <SectionCard label="Your sample">
-              <p className="text-xs text-muted-foreground">
-                What the lab is reading.
-              </p>
-              <div className="flex flex-wrap gap-2">
+            {/* Variant chips — same row as the verdict, framed as
+                "based on" rather than a separate concept. */}
+            {variantEvidence.length > 0 ? (
+              <div className="flex items-baseline gap-2 flex-wrap pt-1">
+                <span className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold">
+                  Based on
+                </span>
                 {variantEvidence.map((e, i) => (
                   <div
                     key={i}
@@ -358,8 +355,13 @@ export function HrdCard({
                   </div>
                 ))}
               </div>
-            </SectionCard>
-          ) : null}
+            ) : null}
+
+            {showReversionCallout ? <ReversionAwarenessInfo /> : null}
+            {hrd.label === "hr_deficient" ? (
+              <NextStepBanner drugId={drugId} />
+            ) : null}
+          </SectionCard>
 
           {/* 3. Clinical evidence agent — runs only when there's a VCF
               upload (we don't want to fire it on catalog-only flows
