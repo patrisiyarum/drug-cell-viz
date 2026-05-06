@@ -60,45 +60,54 @@ CLAUDE_MODEL = "claude-sonnet-4-5-20250929"
 CLAUDE_TIMEOUT_SECONDS = 30.0
 
 SYSTEM_PROMPT = """\
-You are a clinical-evidence formatter for a patient-facing cancer-treatment
-app. You will be given a JSON dict of evidence retrieved from four public
-clinical databases: ClinVar, COSMIC, OpenFDA, and gnomAD.
+You are writing for a cancer patient who has no medical training. They
+are scared, confused, and need plain-English answers. Imagine a 60-year-
+old reading this on their phone in a hospital waiting room.
 
-Output ONLY a JSON object that conforms exactly to this schema:
+You will be given a JSON dict of evidence from public clinical databases
+(ClinVar, COSMIC, OpenFDA, gnomAD). Output ONLY a JSON object with this
+exact schema:
 
 {
-  "pathogenicity": "<2-3 sentence summary of what ClinVar (and similar
-                    pathogenicity sources) report about this variant.
-                    Name ClinVar specifically. Mention the conditions it
-                    is associated with and the review-status quality.>",
+  "pathogenicity": "<1-2 short sentences in plain English. Lead with what
+                    this mutation actually means for the patient. Always
+                    name ClinVar as the source. If you must use a
+                    clinical term (e.g. 'pathogenic'), briefly translate
+                    it the first time, e.g. 'pathogenic (harmful)'.>",
   "drugs": [
     {
       "generic": "<lowercase generic drug name, e.g. 'olaparib'>",
-      "brand": "<brand name from the FDA label, or null if not present>",
-      "indication": "<one-line plain-English summary of the labeled
-                      indication. Cancer type + maintenance/treatment role.
-                      Keep under 20 words.>"
+      "brand": "<brand name from the FDA label, or null>",
+      "indication": "<plain-English summary of what this drug treats.
+                      Under 12 words. No insurance jargon. No compound
+                      clauses with 'maintenance treatment for adult
+                      patients with deleterious...'. Just say what the
+                      drug is for, in everyday words.>"
     }
   ],
-  "rarity": "<optional 1-sentence claim about population frequency, ONLY
-              if gnomAD returned status='ok' or status='absent' with
-              meaningful data. Use null if gnomAD failed.>"
+  "rarity": "<optional 1 short sentence about how rare this mutation is.
+              Use everyday words: 'very rare', 'extremely rare', 'common'.
+              Translate scientific notation: instead of '1.7×10⁻⁵' say
+              'about 1 in 50,000 people'. Use null if gnomAD failed.>"
 }
 
-Rules — followed strictly:
-  • Only describe data from sources that returned status="ok" (or
-    "absent" for gnomAD, which is itself a useful answer). SKIP sources
-    that returned status="error", "auth_required", "not_found", or
-    "no_curated_drugs". Do NOT mention what failed. Do NOT mention
-    missing sources.
-  • One drug entry per OpenFDA hit with status="ok". Do NOT include
-    drugs that returned status="missing".
-  • Do NOT invent any value that isn't in the evidence dict. If a brand
-    is not in the OpenFDA payload, set brand to null.
-  • Do NOT make treatment recommendations. The agent reports evidence;
-    it does not prescribe.
+Plain-English rules — followed strictly:
+  • Read every sentence out loud. If a non-medical person would not
+    understand it, rewrite it shorter and simpler.
+  • Avoid jargon by default. When a clinical term is unavoidable,
+    briefly translate it on first use: 'pathogenic (harmful)',
+    'allele frequency (how common a mutation is)'. Don't lecture.
+  • Short sentences. Two short sentences beat one long one.
+  • Skip sources that returned status='error', 'auth_required',
+    'not_found', or 'no_curated_drugs'. Do not mention missing sources.
+  • Drug indications: lead with the cancer type. 'For ovarian cancer
+    with BRCA mutations.' is better than 'Maintenance treatment of adult
+    patients with deleterious or suspected deleterious germline...'.
+  • Do not invent values. If a brand is not in the evidence, set null.
+  • Do not make treatment recommendations. The agent reports evidence;
+    doctors prescribe.
 
-Output ONLY the JSON. No markdown, no prose before or after, no commentary.
+Output ONLY the JSON. No markdown, no prose, no commentary.
 """
 
 
@@ -300,18 +309,19 @@ def _render_summary(
 
 def _stub_synthesis(state: AgentState, reason: str) -> dict[str, Any]:
     """Fallback synthesis when the LLM step can't run. Builds the same
-    structured fields directly from the evidence dict so the frontend's
-    rendering doesn't need a separate code path."""
+    structured fields directly from the evidence dict in plain language,
+    so the frontend's rendering doesn't need a separate code path."""
     cv = state.get("clinvar") or {}
     fda = state.get("openfda") or {}
     gn = state.get("gnomad") or {}
 
     pathogenicity = ""
     if cv.get("status") == "ok":
+        sig = (cv.get("significance") or "").lower()
+        plain_sig = _plain_significance(sig)
         pathogenicity = (
-            f"ClinVar classifies {state['gene']} {state['hgvs_protein']} as "
-            f"{cv.get('significance', 'unspecified')} "
-            f"(review status: {cv.get('review_status', 'unknown')})."
+            f"ClinVar reports this {state['gene']} mutation as "
+            f"{plain_sig}."
         )
 
     drugs: list[dict[str, Any]] = []
@@ -323,15 +333,17 @@ def _stub_synthesis(state: AgentState, reason: str) -> dict[str, Any]:
             drugs.append({
                 "generic": d.get("generic_name", ""),
                 "brand": brand_list[0] if brand_list else None,
-                "indication": (d.get("indication_excerpt") or "").split(".")[0][:200],
+                # First clause of the FDA indication often runs ~200 words.
+                # Trim hard for plain-English fallback.
+                "indication": _plain_indication(d.get("indication_excerpt") or ""),
             })
 
     rarity: str | None = None
     if gn.get("status") == "absent":
-        rarity = "Variant is absent from gnomAD's 800,000 sequenced individuals — consistent with rare."
+        rarity = "This mutation is very rare — not seen in 800,000 people gnomAD has sequenced."
     elif gn.get("status") == "ok":
         af = gn.get("allele_frequency") or 0.0
-        rarity = f"gnomAD reports an allele frequency of {af:.6g} in the general population."
+        rarity = _plain_rarity(af)
 
     summary = _render_summary(pathogenicity, drugs, rarity)
     return {
@@ -341,6 +353,62 @@ def _stub_synthesis(state: AgentState, reason: str) -> dict[str, Any]:
         "summary": summary + (f"\n\n[LLM-synthesis offline: {reason}]" if summary else f"[LLM-synthesis offline: {reason}]"),
         "model": "stub",
     }
+
+
+def _plain_significance(sig: str) -> str:
+    """Translate ClinVar's clinical-significance string into plain English."""
+    sig = sig.lower()
+    if "pathogenic" in sig and "likely" not in sig and "benign" not in sig:
+        return "harmful (it raises cancer risk)"
+    if "likely pathogenic" in sig:
+        return "probably harmful (multiple labs lean toward raising cancer risk)"
+    if "benign" in sig and "likely" not in sig:
+        return "harmless"
+    if "likely benign" in sig:
+        return "probably harmless"
+    if "uncertain" in sig or "vus" in sig:
+        return "uncertain — not enough evidence yet to say"
+    return sig or "unknown significance"
+
+
+def _plain_indication(indication: str) -> str:
+    """Strip a long FDA indication paragraph down to a plain phrase."""
+    if not indication:
+        return ""
+    # Lower-case opening, keep first clause.
+    first = indication.split(".")[0]
+    # Drop boilerplate prefixes like "Maintenance treatment of adult
+    # patients with deleterious or suspected deleterious germline or
+    # somatic BRCA-mutated".
+    drops = [
+        "maintenance treatment of adult patients with",
+        "treatment of adult patients with",
+        "for the treatment of",
+        "indicated for",
+    ]
+    f = first.strip()
+    for d in drops:
+        if f.lower().startswith(d):
+            f = f[len(d):].strip()
+            break
+    if len(f) > 80:
+        f = f[:80].rsplit(" ", 1)[0] + "…"
+    return f or first
+
+
+def _plain_rarity(af: float) -> str:
+    """Translate gnomAD allele frequency into plain English."""
+    if af <= 0:
+        return "Not seen in gnomAD's general population — very rare."
+    if af < 1e-5:
+        return f"Extremely rare — fewer than 1 in 100,000 people carry it."
+    if af < 1e-4:
+        return f"Very rare — about 1 in {int(1 / af):,} people carry it."
+    if af < 1e-3:
+        return f"Rare — about 1 in {int(1 / af):,} people carry it."
+    if af < 0.01:
+        return f"Uncommon — about {af * 100:.2f}% of people carry it."
+    return f"Common — about {af * 100:.1f}% of people carry it."
 
 
 # ============================================================================
