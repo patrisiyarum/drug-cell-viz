@@ -64,23 +64,41 @@ You are a clinical-evidence formatter for a patient-facing cancer-treatment
 app. You will be given a JSON dict of evidence retrieved from four public
 clinical databases: ClinVar, COSMIC, OpenFDA, and gnomAD.
 
-Your job is to write a 3–5 sentence summary that:
-  • Reports what the retrieved evidence shows.
-  • Names the source of every claim (e.g. "ClinVar classifies this as
-    pathogenic" not "this is pathogenic").
-  • Flags missing or uncertain data instead of glossing over it. If
-    COSMIC returned auth_required or gnomAD returned absent, say so.
-  • Mentions the labeled drug indications when OpenFDA returned drugs.
+Output ONLY a JSON object that conforms exactly to this schema:
 
-You MUST NOT:
-  • Invent any clinical claim that isn't in the evidence dict.
-  • Make a treatment recommendation. The agent points at evidence; it
-    does not prescribe.
-  • Use hedging language to imply more certainty than the data provides.
+{
+  "pathogenicity": "<2-3 sentence summary of what ClinVar (and similar
+                    pathogenicity sources) report about this variant.
+                    Name ClinVar specifically. Mention the conditions it
+                    is associated with and the review-status quality.>",
+  "drugs": [
+    {
+      "generic": "<lowercase generic drug name, e.g. 'olaparib'>",
+      "brand": "<brand name from the FDA label, or null if not present>",
+      "indication": "<one-line plain-English summary of the labeled
+                      indication. Cancer type + maintenance/treatment role.
+                      Keep under 20 words.>"
+    }
+  ],
+  "rarity": "<optional 1-sentence claim about population frequency, ONLY
+              if gnomAD returned status='ok' or status='absent' with
+              meaningful data. Use null if gnomAD failed.>"
+}
 
-Voice: clear, concrete, neutral. Patient-readable but not condescending.
-The output is a single paragraph of plain text — no markdown, no headers,
-no bullet points.
+Rules — followed strictly:
+  • Only describe data from sources that returned status="ok" (or
+    "absent" for gnomAD, which is itself a useful answer). SKIP sources
+    that returned status="error", "auth_required", "not_found", or
+    "no_curated_drugs". Do NOT mention what failed. Do NOT mention
+    missing sources.
+  • One drug entry per OpenFDA hit with status="ok". Do NOT include
+    drugs that returned status="missing".
+  • Do NOT invent any value that isn't in the evidence dict. If a brand
+    is not in the OpenFDA payload, set brand to null.
+  • Do NOT make treatment recommendations. The agent reports evidence;
+    it does not prescribe.
+
+Output ONLY the JSON. No markdown, no prose before or after, no commentary.
 """
 
 
@@ -96,8 +114,11 @@ class AgentState(TypedDict, total=False):
     openfda: dict[str, Any]
     gnomad: dict[str, Any]
 
-    # Synthesis
-    summary: str
+    # Synthesis (structured — Claude returns JSON we parse into fields)
+    pathogenicity: str
+    drugs: list[dict[str, Any]]  # {generic, brand, indication}
+    rarity: str | None
+    summary: str  # backward-compat: rendered text version of the above
     model: str
     duration_ms: int
     tool_calls_succeeded: list[str]
@@ -138,12 +159,17 @@ async def fetch_gnomad(state: AgentState) -> dict[str, Any]:
 
 
 async def synthesize(state: AgentState) -> dict[str, Any]:
-    """Format the four evidence dicts into a single patient-readable paragraph.
+    """Format the four evidence dicts into structured JSON sections.
 
-    The LLM is constrained to *describing* the retrieved data, not
-    inventing new claims. The system prompt enforces this and we surface
-    the constraint in the response so users can audit it.
+    Claude returns a JSON object with `pathogenicity` (prose paragraph),
+    `drugs` (list of {generic, brand, indication}), and optional
+    `rarity` (one-sentence allele-frequency claim). The agent parses the
+    JSON, falls back to the structured stub on any parsing or API
+    failure, and surfaces both the structured fields and a flat `summary`
+    string (built from those fields) for non-UI consumers like the PDF.
     """
+    import json
+
     import anthropic
 
     api_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
@@ -165,14 +191,14 @@ async def synthesize(state: AgentState) -> dict[str, Any]:
         f"Patient indication: {state.get('indication') or 'unspecified'}\n\n"
         f"Evidence retrieved from public databases:\n"
         f"{evidence}\n\n"
-        "Write the summary."
+        "Return the JSON object."
     )
 
     client = anthropic.AsyncAnthropic(api_key=api_key, timeout=CLAUDE_TIMEOUT_SECONDS)
     try:
         message = await client.messages.create(
             model=CLAUDE_MODEL,
-            max_tokens=512,
+            max_tokens=1024,
             system=SYSTEM_PROMPT,
             messages=[{"role": "user", "content": user_message}],
         )
@@ -186,37 +212,135 @@ async def synthesize(state: AgentState) -> dict[str, Any]:
         logger.exception("Claude synthesis failed")
         return _stub_synthesis(state, reason=f"Claude synthesis failed: {exc}")
 
-    return {"summary": text.strip(), "model": CLAUDE_MODEL}
+    # Parse the JSON. Be defensive — sometimes the model wraps it in a
+    # markdown fence or prepends a courtesy sentence despite the prompt.
+    payload = _extract_json(text)
+    if payload is None:
+        logger.warning("Claude returned non-JSON; falling back to stub. Output was: %r", text[:200])
+        return _stub_synthesis(state, reason="Claude returned non-JSON output")
+
+    pathogenicity = str(payload.get("pathogenicity") or "").strip()
+    drugs_raw = payload.get("drugs") or []
+    drugs: list[dict[str, Any]] = []
+    for d in drugs_raw:
+        if not isinstance(d, dict):
+            continue
+        generic = (d.get("generic") or "").strip()
+        if not generic:
+            continue
+        drugs.append({
+            "generic": generic,
+            "brand": (d.get("brand") or None),
+            "indication": (d.get("indication") or "").strip(),
+        })
+    rarity = payload.get("rarity")
+    if isinstance(rarity, str):
+        rarity = rarity.strip() or None
+
+    summary = _render_summary(pathogenicity, drugs, rarity)
+
+    return {
+        "pathogenicity": pathogenicity,
+        "drugs": drugs,
+        "rarity": rarity,
+        "summary": summary,
+        "model": CLAUDE_MODEL,
+    }
+
+
+def _extract_json(text: str) -> dict[str, Any] | None:
+    """Tolerantly parse the LLM's response. Strips markdown fences if
+    present, then takes the first { ... } block. Returns None if no
+    valid JSON object can be recovered."""
+    import json
+
+    s = text.strip()
+    # Strip ```json ... ``` or ``` ... ``` fences if Claude added them.
+    if s.startswith("```"):
+        s = s.strip("`")
+        # Drop a leading "json" language tag.
+        if s.lower().startswith("json"):
+            s = s[4:].lstrip()
+    # Find the first {...} block.
+    start = s.find("{")
+    end = s.rfind("}")
+    if start < 0 or end <= start:
+        return None
+    try:
+        return json.loads(s[start : end + 1])
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _render_summary(
+    pathogenicity: str,
+    drugs: list[dict[str, Any]],
+    rarity: str | None,
+) -> str:
+    """Build a flat-text rendering of the structured synthesis. Used by
+    the PDF generator and any other consumer that expects a single
+    string field. The frontend renders the structured fields directly."""
+    parts: list[str] = []
+    if pathogenicity:
+        parts.append(pathogenicity)
+    if drugs:
+        drug_lines = []
+        for d in drugs:
+            label = f"{d['generic']}"
+            if d.get("brand"):
+                label += f" ({d['brand']})"
+            if d.get("indication"):
+                label += f" — {d['indication']}"
+            drug_lines.append(label)
+        parts.append("FDA-approved drugs:\n" + "\n".join(f"  • {line}" for line in drug_lines))
+    if rarity:
+        parts.append(rarity)
+    return "\n\n".join(parts)
 
 
 def _stub_synthesis(state: AgentState, reason: str) -> dict[str, Any]:
-    """Fallback summary when the LLM step can't run. Surfaces the raw
-    evidence as a structured paragraph so the agent still produces
-    *something* useful even without Claude."""
-    parts: list[str] = []
+    """Fallback synthesis when the LLM step can't run. Builds the same
+    structured fields directly from the evidence dict so the frontend's
+    rendering doesn't need a separate code path."""
     cv = state.get("clinvar") or {}
+    fda = state.get("openfda") or {}
+    gn = state.get("gnomad") or {}
+
+    pathogenicity = ""
     if cv.get("status") == "ok":
-        parts.append(
+        pathogenicity = (
             f"ClinVar classifies {state['gene']} {state['hgvs_protein']} as "
             f"{cv.get('significance', 'unspecified')} "
             f"(review status: {cv.get('review_status', 'unknown')})."
         )
-    fda = state.get("openfda") or {}
+
+    drugs: list[dict[str, Any]] = []
     if fda.get("status") == "ok":
-        drug_names = [d["generic_name"] for d in fda.get("drugs", []) if d.get("status") == "ok"]
-        if drug_names:
-            parts.append(
-                f"FDA-approved drugs targeting {state['gene']}: {', '.join(drug_names)}."
-            )
-    gn = state.get("gnomad") or {}
-    if gn.get("status") in ("ok", "absent"):
-        if gn.get("status") == "absent":
-            parts.append("gnomAD: variant absent from 800,000 sequenced individuals (consistent with rare).")
-        else:
-            af = gn.get("allele_frequency", 0.0)
-            parts.append(f"gnomAD allele frequency: {af:.6g} (rare: {gn.get('is_rare', False)}).")
-    parts.append(f"[LLM-synthesis offline: {reason}]")
-    return {"summary": " ".join(parts), "model": "stub"}
+        for d in fda.get("drugs", []) or []:
+            if d.get("status") != "ok":
+                continue
+            brand_list = d.get("brand_names") or []
+            drugs.append({
+                "generic": d.get("generic_name", ""),
+                "brand": brand_list[0] if brand_list else None,
+                "indication": (d.get("indication_excerpt") or "").split(".")[0][:200],
+            })
+
+    rarity: str | None = None
+    if gn.get("status") == "absent":
+        rarity = "Variant is absent from gnomAD's 800,000 sequenced individuals — consistent with rare."
+    elif gn.get("status") == "ok":
+        af = gn.get("allele_frequency") or 0.0
+        rarity = f"gnomAD reports an allele frequency of {af:.6g} in the general population."
+
+    summary = _render_summary(pathogenicity, drugs, rarity)
+    return {
+        "pathogenicity": pathogenicity,
+        "drugs": drugs,
+        "rarity": rarity,
+        "summary": summary + (f"\n\n[LLM-synthesis offline: {reason}]" if summary else f"[LLM-synthesis offline: {reason}]"),
+        "model": "stub",
+    }
 
 
 # ============================================================================
@@ -286,6 +410,11 @@ async def run_agent(
         "gene": gene,
         "hgvs_protein": hgvs_protein,
         "indication": indication,
+        # Structured synthesis (the frontend renders these directly).
+        "pathogenicity": result.get("pathogenicity", ""),
+        "drugs": result.get("drugs", []),
+        "rarity": result.get("rarity"),
+        # Flat-text rendering for non-UI consumers (PDF, CLI, etc).
         "summary": result.get("summary", ""),
         "model": result.get("model", "unknown"),
         "evidence": {

@@ -15,6 +15,13 @@ import type {
 
 export const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
+export interface DrugSummary {
+  generic: string;
+  brand: string | null;
+  /** One-line plain-English indication summary from the FDA label. */
+  indication: string;
+}
+
 /**
  * Response from the variant-evidence agent. Mirrors the FastAPI
  * `VariantEvidenceResponse` model exactly.
@@ -23,9 +30,20 @@ export interface VariantEvidenceResponse {
   gene: string;
   hgvs_protein: string;
   indication: string | null;
-  /** Claude-synthesized paragraph (or stub paragraph if API key absent). */
+  /** 2-3 sentence Claude-synthesized pathogenicity summary. The frontend
+   * renders this as a paragraph above the drug list. */
+  pathogenicity: string;
+  /** Structured drug list — one entry per FDA-approved drug returned by
+   * OpenFDA. Frontend renders as a bulleted list, one per line. */
+  drugs: DrugSummary[];
+  /** Optional one-sentence allele-frequency claim from gnomAD. Null if
+   * gnomAD didn't return useful data. */
+  rarity: string | null;
+  /** Flat-text rendering of pathogenicity + drugs + rarity. Used by the
+   * PDF generator and any non-UI consumer. */
   summary: string;
-  /** Model name used for synthesis, e.g. "claude-sonnet-4-5-20250929". */
+  /** Model name used for synthesis, e.g. "claude-sonnet-4-5-20250929"
+   * or "stub" if the key was missing or parsing failed. */
   model: string;
   /** Raw structured output from each tool call, keyed by source. */
   evidence: {

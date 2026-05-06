@@ -54,10 +54,21 @@ class ToolCallResult(BaseModel):
     payload: dict
 
 
+class DrugSummary(BaseModel):
+    generic: str
+    brand: str | None = None
+    indication: str = ""
+
+
 class VariantEvidenceResponse(BaseModel):
     gene: str
     hgvs_protein: str
     indication: str | None
+    # Structured synthesis (preferred path for the frontend).
+    pathogenicity: str = ""
+    drugs: list[DrugSummary] = []
+    rarity: str | None = None
+    # Flat-text rendering for PDFs / CLI consumers.
     summary: str
     model: str
     evidence: dict

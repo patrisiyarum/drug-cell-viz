@@ -1073,8 +1073,52 @@ function VariantEvidenceAgentBody({
 
   return (
     <div className="space-y-4">
-      {/* Summary paragraph — the main thing the patient reads. */}
-      <p className="text-sm leading-relaxed text-foreground">{r.summary}</p>
+      {/* Pathogenicity prose — the main paragraph the patient reads. */}
+      {r.pathogenicity ? (
+        <p className="text-sm leading-relaxed text-foreground">
+          {r.pathogenicity}
+        </p>
+      ) : null}
+
+      {/* FDA-approved drugs — rendered as a real list with one drug per
+          row. Each row: brand + generic + indication. Easier to scan
+          than a comma-separated paragraph. */}
+      {r.drugs.length > 0 ? (
+        <div className="space-y-2">
+          <h5 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            FDA-approved drugs
+          </h5>
+          <ul className="space-y-2">
+            {r.drugs.map((d) => (
+              <li
+                key={d.generic}
+                className="rounded-lg border bg-white px-3 py-2 text-sm"
+              >
+                <div className="flex items-baseline gap-2 flex-wrap">
+                  <span className="font-semibold capitalize">{d.generic}</span>
+                  {d.brand ? (
+                    <span className="text-xs text-muted-foreground">
+                      ({d.brand})
+                    </span>
+                  ) : null}
+                </div>
+                {d.indication ? (
+                  <p className="text-xs text-muted-foreground leading-relaxed mt-0.5">
+                    {d.indication}
+                  </p>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {/* Rarity — only shown when gnomAD returned useful data. */}
+      {r.rarity ? (
+        <p className="text-xs text-muted-foreground leading-relaxed italic">
+          {r.rarity}
+        </p>
+      ) : null}
 
       {/* Source-status row: at-a-glance picture of what contributed. */}
       <div className="flex flex-wrap gap-1.5">
