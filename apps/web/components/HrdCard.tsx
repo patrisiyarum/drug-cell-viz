@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   FlaskConical,
   Activity,
@@ -13,7 +14,12 @@ import {
 } from "lucide-react";
 
 import { Brca1FunctionCard } from "./Brca1FunctionCard";
-import { api, type CtScanResponse, type HrdScarResponse } from "@/lib/api";
+import {
+  api,
+  type CtScanResponse,
+  type HrdScarResponse,
+  type VariantEvidenceResponse,
+} from "@/lib/api";
 import type { AnalysisResult, HrdResult } from "@/lib/bc-types";
 
 // Drugs in the PARP-inhibitor class. When the patient's current drug is one
@@ -249,6 +255,33 @@ export function HrdCard({
         recordLabel={recordRefs.vcfFilename}
       >
         <Brca1ClassifierBody hgvsList={classifiableBrca1Variants} />
+      </LabTile>,
+    );
+  }
+  // Variant-evidence agent (LangGraph + Claude). Runs whenever any
+  // classifiable variant is present, BRCA1 or otherwise — the agent
+  // covers BRCA1, BRCA2, ATM, PALB2, RAD51C/D, CYP2D6 today (see
+  // GENE_DRUG_HINTS in apps/api/src/api/agents/tools/openfda.py).
+  // We surface it as its own tile because the answer is structurally
+  // different from the BRCA1-specific ML classifier: this one fetches
+  // public-database evidence and formats it, rather than producing a
+  // model probability.
+  if (variantEvidence.length > 0 && hasVcf) {
+    tiles.push(
+      <LabTile
+        key="agent"
+        title="Clinical evidence agent"
+        tests="Pulls ClinVar, COSMIC, OpenFDA, and gnomAD records for your variant and synthesizes a clinician-readable summary."
+        icon={<FlaskConical className="w-4 h-4" aria-hidden />}
+        recordLabel={recordRefs.vcfFilename}
+      >
+        <VariantEvidenceAgentBody
+          gene={variantEvidence[0].gene}
+          variant={stripGenePrefix(
+            variantEvidence[0].variant_label,
+            variantEvidence[0].gene,
+          )}
+        />
       </LabTile>,
     );
   }
@@ -990,6 +1023,78 @@ function Brca1ClassifierBody({ hgvsList }: { hgvsList: string[] }) {
           <Brca1FunctionCard key={hgvs} hgvsProtein={hgvs} />
         ))}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Variant-evidence agent body. Calls the LangGraph endpoint, which
+ * fetches ClinVar / COSMIC / OpenFDA / gnomAD in parallel and asks
+ * Claude to format the retrieved evidence into a clinician-readable
+ * paragraph (constrained — no fabricated claims). Auto-runs on mount.
+ */
+function VariantEvidenceAgentBody({
+  gene,
+  variant,
+}: {
+  gene: string;
+  variant: string;
+}) {
+  const query = useQuery<VariantEvidenceResponse>({
+    queryKey: ["variant-evidence", gene, variant],
+    queryFn: () => api.variantEvidence(gene, variant),
+    retry: 0,
+    staleTime: 5 * 60_000,
+  });
+
+  if (query.isLoading) {
+    return (
+      <div className="flex-1 flex flex-col justify-end min-h-[5rem]">
+        <p className="text-xs text-muted-foreground italic">
+          Querying ClinVar, COSMIC, OpenFDA, gnomAD…
+        </p>
+      </div>
+    );
+  }
+  if (query.isError) {
+    return (
+      <div className="flex-1 flex flex-col justify-end min-h-[5rem]">
+        <p className="text-xs text-red-600">
+          Agent failed: {(query.error as Error).message}
+        </p>
+      </div>
+    );
+  }
+  if (!query.data) return null;
+
+  const r = query.data;
+  const succeeded = r.tool_calls_succeeded;
+  const sourcesText = succeeded.length === 0
+    ? "no public databases returned data"
+    : `Sources: ${succeeded.map((s) => s.toUpperCase()).join(" · ")}`;
+
+  return (
+    <div className="flex-1 flex flex-col justify-end min-h-[5rem] space-y-3">
+      <div className="rounded-lg border bg-white/60 p-3 text-sm leading-relaxed">
+        {r.summary}
+      </div>
+      <div className="text-[10px] text-muted-foreground space-y-1">
+        <div>{sourcesText}</div>
+        <div className="italic">
+          {r.constrained}
+        </div>
+        <div className="font-mono">
+          {r.model} · {r.duration_ms}ms
+        </div>
+      </div>
+      <details className="text-xs">
+        <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
+          Raw evidence
+        </summary>
+        <pre className="mt-2 overflow-auto text-[10px] bg-muted/40 rounded p-2 max-h-64">
+          {JSON.stringify(r.evidence, null, 2)}
+        </pre>
+      </details>
     </div>
   );
 }

@@ -60,6 +60,15 @@ dependencies = [
     "pydicom>=2.4",
     "nibabel>=5.2",
     "scipy>=1.13",
+    # Variant-evidence agent. Uses Anthropic's Claude with structured tool
+    # calls to query ClinVar / COSMIC / OpenFDA / gnomAD on demand and
+    # synthesize a clinician-ready summary. The agent's flow is a small
+    # LangGraph state machine: parallel fetches → single synthesis node.
+    # The synthesis prompt is deliberately constrained to "format only what
+    # the evidence dict contains" so the LLM doesn't invent medical claims.
+    "anthropic>=0.40",
+    "langgraph>=0.2",
+    "langchain-core>=0.3",
 ]
 
 [project.optional-dependencies]

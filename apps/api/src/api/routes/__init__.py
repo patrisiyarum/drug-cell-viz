@@ -1,3 +1,4 @@
+from api.routes.agent import router as agent_router
 from api.routes.bc import router as bc_router
 from api.routes.brca1 import router as brca1_router
 from api.routes.brca2 import router as brca2_router
@@ -13,6 +14,7 @@ from api.routes.screening import router as screening_router
 from api.routes.vcf import router as vcf_router
 
 __all__ = [
+    "agent_router",
     "bc_router",
     "brca1_router",
     "brca2_router",

@@ -16,6 +16,7 @@ from api.config import settings
 from api.db import check_db, init_db
 from api.events import close as close_events
 from api.routes import (
+    agent_router,
     bc_router,
     brca1_router,
     brca2_router,
@@ -177,6 +178,7 @@ app.include_router(screening_router)
 app.include_router(hrd_scars_router)
 app.include_router(radiogenomics_router)
 app.include_router(patients_router)
+app.include_router(agent_router)
 
 # Serve local blob storage so the frontend can fetch PDBs and thumbnails by URL.
 if settings.storage_backend == "local":

@@ -15,6 +15,33 @@ import type {
 
 export const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
+/**
+ * Response from the variant-evidence agent. Mirrors the FastAPI
+ * `VariantEvidenceResponse` model exactly.
+ */
+export interface VariantEvidenceResponse {
+  gene: string;
+  hgvs_protein: string;
+  indication: string | null;
+  /** Claude-synthesized paragraph (or stub paragraph if API key absent). */
+  summary: string;
+  /** Model name used for synthesis, e.g. "claude-sonnet-4-5-20250929". */
+  model: string;
+  /** Raw structured output from each tool call, keyed by source. */
+  evidence: {
+    clinvar: Record<string, unknown> | null;
+    cosmic: Record<string, unknown> | null;
+    openfda: Record<string, unknown> | null;
+    gnomad: Record<string, unknown> | null;
+  };
+  tool_calls_succeeded: string[];
+  tool_calls_attempted: string[];
+  duration_ms: number;
+  /** Disclosure that the synthesis step was constrained to formatting,
+   * not invention. Surface this to the user so they can audit. */
+  constrained: string;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     ...init,
@@ -46,6 +73,19 @@ export const api = {
     request<Brca1Classification>("/api/brca1/classify", {
       method: "POST",
       body: JSON.stringify({ hgvs_protein: hgvsProtein }),
+    }),
+
+  /**
+   * LangGraph agent that pulls evidence for a variant from four public
+   * databases (ClinVar, COSMIC, OpenFDA, gnomAD) in parallel and asks
+   * Claude to format the retrieved evidence into a clinician-readable
+   * summary. The synthesis prompt is constrained to *describing* the
+   * evidence dict, not generating new medical claims.
+   */
+  variantEvidence: (gene: string, variant: string, indication?: string | null) =>
+    request<VariantEvidenceResponse>("/api/agent/variant-evidence", {
+      method: "POST",
+      body: JSON.stringify({ gene, variant, indication: indication ?? null }),
     }),
   lookupBrcaExchange: (hgvsProtein: string) =>
     request<BrcaExchangeRecord | null>(

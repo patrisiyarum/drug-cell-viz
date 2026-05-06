@@ -79,6 +79,24 @@ services:
         value: https://github.com/patrisiyarum/drug-cell-viz/releases/download/model-v1/fold0.pt
       - key: RADIOGENOMICS_BACKBONE
         value: med3d
+      # Variant-evidence agent. Required for the LangGraph + Claude
+      # synthesis step to run; without it, the agent's tool calls still
+      # fire but the synthesis step falls back to a structured stub.
+      # Set this in the Render dashboard, NOT in this file (sync: false).
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      # Optional: COSMIC requires a personal access token. Without it,
+      # the COSMIC tool returns a structured "auth required" stub which
+      # the agent surfaces honestly. Other 3 tools (ClinVar / OpenFDA /
+      # gnomAD) are public and need no auth.
+      - key: COSMIC_API_TOKEN
+        sync: false
+      # Optional: NCBI rate-limit headroom for ClinVar.
+      - key: NCBI_API_KEY
+        sync: false
+      # Optional: OpenFDA rate-limit headroom.
+      - key: OPENFDA_API_KEY
+        sync: false
 
   # --- Frontend ---
   # Public URL for the patient-facing app: kintsugi.onrender.com.
