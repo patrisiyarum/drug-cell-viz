@@ -258,33 +258,13 @@ export function HrdCard({
       </LabTile>,
     );
   }
-  // Variant-evidence agent (LangGraph + Claude). Runs whenever any
-  // classifiable variant is present, BRCA1 or otherwise — the agent
-  // covers BRCA1, BRCA2, ATM, PALB2, RAD51C/D, CYP2D6 today (see
-  // GENE_DRUG_HINTS in apps/api/src/api/agents/tools/openfda.py).
-  // We surface it as its own tile because the answer is structurally
-  // different from the BRCA1-specific ML classifier: this one fetches
-  // public-database evidence and formats it, rather than producing a
-  // model probability.
-  if (variantEvidence.length > 0 && hasVcf) {
-    tiles.push(
-      <LabTile
-        key="agent"
-        title="Clinical evidence agent"
-        tests="Pulls ClinVar, COSMIC, OpenFDA, and gnomAD records for your variant and synthesizes a clinician-readable summary."
-        icon={<FlaskConical className="w-4 h-4" aria-hidden />}
-        recordLabel={recordRefs.vcfFilename}
-      >
-        <VariantEvidenceAgentBody
-          gene={variantEvidence[0].gene}
-          variant={stripGenePrefix(
-            variantEvidence[0].variant_label,
-            variantEvidence[0].gene,
-          )}
-        />
-      </LabTile>,
-    );
-  }
+  // The variant-evidence agent (LangGraph + Claude) lives in the Result
+  // tab as its own SectionCard — see below. Treating it as a "lab tile"
+  // alongside ML models was a category mismatch: the lab tiles run
+  // models on the patient's data, while the agent retrieves public
+  // evidence and formats it. The Result tab is the right home — it's
+  // where the patient sees what we know *about* their data, separate
+  // from what we predicted *from* their data.
   if (ctScanUrl) {
     tiles.push(
       <LabTile
@@ -381,14 +361,23 @@ export function HrdCard({
             </SectionCard>
           ) : null}
 
-          {/* 3. Caveats — same SectionCard, content is the bullet list. */}
-          {hrd.caveats.length > 0 ? (
-            <SectionCard label="Caveats">
-              <ul className="space-y-1 list-disc pl-5 text-xs text-muted-foreground leading-relaxed">
-                {hrd.caveats.map((c, i) => (
-                  <li key={i}>{c}</li>
-                ))}
-              </ul>
+          {/* 3. Clinical evidence agent — runs only when there's a VCF
+              upload (we don't want to fire it on catalog-only flows
+              where we have no actual record to back the variant). The
+              tile fetches ClinVar / COSMIC / OpenFDA / gnomAD in parallel
+              and asks Claude to format the retrieved evidence into a
+              clinician-readable summary. The synthesis prompt is
+              constrained — Claude can only describe what's in the
+              retrieved evidence dict, not generate new claims. */}
+          {variantEvidence.length > 0 && hasVcf ? (
+            <SectionCard label="Clinical evidence">
+              <VariantEvidenceAgentBody
+                gene={variantEvidence[0].gene}
+                variant={stripGenePrefix(
+                  variantEvidence[0].variant_label,
+                  variantEvidence[0].gene,
+                )}
+              />
             </SectionCard>
           ) : null}
         </div>
@@ -1028,10 +1017,21 @@ function Brca1ClassifierBody({ hgvsList }: { hgvsList: string[] }) {
 }
 
 /**
- * Variant-evidence agent body. Calls the LangGraph endpoint, which
- * fetches ClinVar / COSMIC / OpenFDA / gnomAD in parallel and asks
- * Claude to format the retrieved evidence into a clinician-readable
- * paragraph (constrained — no fabricated claims). Auto-runs on mount.
+ * Variant-evidence agent body, rendered inside a Result-tab SectionCard.
+ *
+ * Calls the LangGraph endpoint that fans out to ClinVar / COSMIC /
+ * OpenFDA / gnomAD in parallel and asks Claude to synthesize the
+ * retrieved evidence into a clinician-readable paragraph (with the
+ * synthesis prompt constrained — Claude formats, doesn't invent).
+ *
+ * Layout choices for readability:
+ *   - Summary paragraph rendered at the section's body size with
+ *     comfortable line-height; this is the main thing the patient reads.
+ *   - Source-status pills below the paragraph show at a glance which
+ *     databases returned data, which were unavailable, and which errored.
+ *   - The constrained-by-prompt disclosure is a single small line, not
+ *     a header-level statement.
+ *   - Raw evidence stays auditable but tucked into a Details expander.
  */
 function VariantEvidenceAgentBody({
   gene,
@@ -1049,52 +1049,88 @@ function VariantEvidenceAgentBody({
 
   if (query.isLoading) {
     return (
-      <div className="flex-1 flex flex-col justify-end min-h-[5rem]">
-        <p className="text-xs text-muted-foreground italic">
-          Querying ClinVar, COSMIC, OpenFDA, gnomAD…
-        </p>
-      </div>
+      <p className="text-xs text-muted-foreground italic">
+        Querying ClinVar, COSMIC, OpenFDA, gnomAD…
+      </p>
     );
   }
   if (query.isError) {
     return (
-      <div className="flex-1 flex flex-col justify-end min-h-[5rem]">
-        <p className="text-xs text-red-600">
-          Agent failed: {(query.error as Error).message}
-        </p>
-      </div>
+      <p className="text-xs text-red-600">
+        Agent failed: {(query.error as Error).message}
+      </p>
     );
   }
   if (!query.data) return null;
 
   const r = query.data;
-  const succeeded = r.tool_calls_succeeded;
-  const sourcesText = succeeded.length === 0
-    ? "no public databases returned data"
-    : `Sources: ${succeeded.map((s) => s.toUpperCase()).join(" · ")}`;
+  const sourceMeta: { key: string; label: string; status: string }[] = [
+    { key: "clinvar", label: "ClinVar",  status: getStatus(r.evidence.clinvar) },
+    { key: "cosmic",  label: "COSMIC",   status: getStatus(r.evidence.cosmic)  },
+    { key: "openfda", label: "OpenFDA",  status: getStatus(r.evidence.openfda) },
+    { key: "gnomad",  label: "gnomAD",   status: getStatus(r.evidence.gnomad)  },
+  ];
 
   return (
-    <div className="flex-1 flex flex-col justify-end min-h-[5rem] space-y-3">
-      <div className="rounded-lg border bg-white/60 p-3 text-sm leading-relaxed">
-        {r.summary}
+    <div className="space-y-4">
+      {/* Summary paragraph — the main thing the patient reads. */}
+      <p className="text-sm leading-relaxed text-foreground">{r.summary}</p>
+
+      {/* Source-status row: at-a-glance picture of what contributed. */}
+      <div className="flex flex-wrap gap-1.5">
+        {sourceMeta.map((s) => (
+          <SourcePill key={s.key} label={s.label} status={s.status} />
+        ))}
       </div>
-      <div className="text-[10px] text-muted-foreground space-y-1">
-        <div>{sourcesText}</div>
-        <div className="italic">
-          {r.constrained}
-        </div>
-        <div className="font-mono">
-          {r.model} · {r.duration_ms}ms
-        </div>
-      </div>
+
+      {/* Footer: how the summary was generated. */}
+      <p className="text-[11px] text-muted-foreground italic leading-snug">
+        Summary written by {r.model.startsWith("claude") ? "Claude" : r.model},
+        constrained to formatting retrieved evidence rather than generating
+        new clinical claims. Generated in {(r.duration_ms / 1000).toFixed(1)}s.
+      </p>
+
+      {/* Audit-trail expander. */}
       <details className="text-xs">
         <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
-          Raw evidence
+          See the raw evidence the agent retrieved
         </summary>
-        <pre className="mt-2 overflow-auto text-[10px] bg-muted/40 rounded p-2 max-h-64">
+        <pre className="mt-2 overflow-auto text-[10px] bg-muted/40 rounded p-2 max-h-64 leading-snug">
           {JSON.stringify(r.evidence, null, 2)}
         </pre>
       </details>
     </div>
+  );
+}
+
+/**
+ * Translate a tool's response status into a 3-bucket UI state. Anything
+ * other than "ok" is shown as either "missing" (intentional gaps like
+ * COSMIC's auth-required, gnomAD's "absent") or "error" (transient
+ * failure). Three buckets keep the source pills scannable.
+ */
+function getStatus(payload: Record<string, unknown> | null): string {
+  if (!payload) return "error";
+  const s = String(payload.status ?? "");
+  if (s === "ok") return "ok";
+  if (s === "error") return "error";
+  return "missing"; // not_found, absent, auth_required, no_curated_drugs
+}
+
+function SourcePill({ label, status }: { label: string; status: string }) {
+  const styles =
+    status === "ok"
+      ? "bg-success/10 text-success border-success/30"
+      : status === "missing"
+        ? "bg-muted text-muted-foreground border-border"
+        : "bg-warning/10 text-warning border-warning/30";
+  const symbol = status === "ok" ? "✓" : status === "missing" ? "—" : "⚠";
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium ${styles}`}
+    >
+      <span aria-hidden>{symbol}</span>
+      {label}
+    </span>
   );
 }

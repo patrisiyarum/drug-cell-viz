@@ -175,20 +175,62 @@ def build_pdf(result: AnalysisResult, patient_label: str | None = None) -> bytes
         flow.append(_psafe(result.hrd.parp_inhibitor_context, S["body"]))
         if result.hrd.evidence:
             flow.append(_p("Evidence", S["h3"]))
-            rows = [["Gene", "Variant", "Source", "Detail"]]
+            # Wrap every cell in a Paragraph so reportlab's flowable
+            # word-wrap kicks in. The previous version passed raw strings
+            # and tried to fake wrapping with WORDWRAP=CJK, which only
+            # affects CJK character runs — English text overflowed the
+            # column off the right edge of the page.
+            cell_style = ParagraphStyle(
+                "evidence_cell",
+                parent=S["body"],
+                fontSize=8,
+                leading=10,
+                spaceBefore=0,
+                spaceAfter=0,
+            )
+            header_style = ParagraphStyle(
+                "evidence_header",
+                parent=cell_style,
+                fontName="Helvetica-Bold",
+            )
+
+            def _cell(text: str, style: ParagraphStyle = cell_style):
+                return Paragraph(_esc(str(text)), style)
+
+            rows = [
+                [
+                    _cell("Gene", header_style),
+                    _cell("Variant", header_style),
+                    _cell("Source", header_style),
+                    _cell("Detail", header_style),
+                ]
+            ]
             for e in result.hrd.evidence:
-                # Table renders strings literally (no XML parsing), so raw is fine.
-                rows.append([e.gene, e.variant_label, e.source.replace("_", " "), e.detail])
-            t = Table(rows, colWidths=[0.7 * inch, 1.7 * inch, 1.2 * inch, 3.2 * inch])
+                rows.append([
+                    _cell(e.gene),
+                    _cell(e.variant_label),
+                    _cell(e.source.replace("_", " ")),
+                    _cell(e.detail),
+                ])
+            # Tighten the first three columns and give the Detail column
+            # the rest of the printable width. Letter page minus
+            # 0.75" margins each side = ~7" usable; the four columns
+            # below sum to 6.7" which leaves a small comfort margin.
+            t = Table(
+                rows,
+                colWidths=[0.7 * inch, 1.5 * inch, 1.1 * inch, 3.4 * inch],
+                repeatRows=1,
+            )
             t.setStyle(
                 TableStyle(
                     [
                         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e2e8f0")),
-                        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-                        ("FONTSIZE", (0, 0), (-1, -1), 8),
                         ("VALIGN", (0, 0), (-1, -1), "TOP"),
                         ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#cbd5e1")),
-                        ("WORDWRAP", (3, 0), (3, -1), "CJK"),
+                        ("LEFTPADDING", (0, 0), (-1, -1), 4),
+                        ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+                        ("TOPPADDING", (0, 0), (-1, -1), 4),
+                        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
                     ]
                 )
             )
