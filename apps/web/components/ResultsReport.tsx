@@ -91,12 +91,13 @@ export function ResultsReport({
         />
       ) : null}
 
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 md:gap-8">
-        {/* Left column: slideshow only — just the visuals (drug on target,
-            patient variant, CT volume render). Narrower (2/5) so the
-            slideshow square stays compact and the right-column report
-            gets the bulk of the page. */}
-        <div className="lg:col-span-2 no-print">
+      {/* Two equal columns side-by-side, each capped to the viewport so the
+          page reads as one card on the left, one on the right with no
+          vertical scroll. The slideshow drives its own square aspect; the
+          right card matches that height and scrolls internally only if a
+          tab's contents overflow. */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8 lg:max-h-[calc(100vh-10rem)]">
+        <div className="no-print min-h-0">
           <StructureSlideshow
             result={result}
             ctScanVolumeUrl={ctScanUrl}
@@ -104,10 +105,7 @@ export function ResultsReport({
           />
         </div>
 
-        {/* Right column: HRD result first, then the drug-match verdict
-            ("Olaparib is explicitly endorsed for your variants"), then
-            the doctor-visit PDF as the closing action. */}
-        <div className="lg:col-span-3 space-y-6 md:space-y-8">
+        <div className="min-h-0 overflow-hidden flex">
           {result.hrd ? (
             <HrdCard
               hrd={result.hrd}
@@ -203,10 +201,6 @@ function StructureSlideshow({
     | { kind: "ct_scan"; volumeUrl: string; label: string };
 
   const slides: Slide[] = [
-    { kind: "main" },
-    ...(result.off_target_structures ?? []).map(
-      (s): Slide => ({ kind: "off_target", structure: s }),
-    ),
     ...(ctScanVolumeUrl
       ? [
           {
@@ -216,6 +210,10 @@ function StructureSlideshow({
           },
         ]
       : []),
+    { kind: "main" },
+    ...(result.off_target_structures ?? []).map(
+      (s): Slide => ({ kind: "off_target", structure: s }),
+    ),
   ];
   const [idx, setIdx] = useState(0);
   const clamped = Math.min(idx, slides.length - 1);
@@ -229,12 +227,12 @@ function StructureSlideshow({
     return s.label;
   };
 
-  // Square aspect. Width = column width (the column is now the narrower
-  // 2/5 of the page) so the card stays compact without an explicit
-  // max-w cap; aspect-square enforces a true square. overflow-hidden
-  // absorbs inner viewer/header variance so cycling slides never reflows.
+  // Card fills its column on the no-scroll layout: full width, full
+  // height of the side-by-side grid (lg:max-h-[calc(100vh-10rem)]). On
+  // narrow screens it falls back to its natural square aspect so the
+  // viewer doesn't collapse to nothing.
   return (
-    <div className="bg-card rounded-2xl overflow-hidden border flex flex-col aspect-square w-full">
+    <div className="bg-card rounded-2xl overflow-hidden border flex flex-col w-full aspect-square lg:aspect-auto lg:h-full">
       {total > 1 ? (
         <div className="flex items-center gap-2 px-3 py-2 border-b bg-muted/40">
           <button

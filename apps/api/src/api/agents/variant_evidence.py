@@ -1,4 +1,4 @@
-"""LangGraph agent that pulls variant evidence from 4 public databases
+"""LangGraph agent that pulls variant evidence from 3 public databases
 and synthesizes it into a clinician-ready summary.
 
 Architecture:
@@ -11,26 +11,26 @@ Architecture:
        │  build_state  │  initialize evidence dict
        └───────┬───────┘
                │
-       ┌───────┴────────┬──────────────┬─────────────┐
-       │                │              │             │     (parallel)
-   ┌───▼───┐       ┌────▼────┐    ┌────▼───┐   ┌────▼────┐
-   │ClinVar│       │ COSMIC  │    │OpenFDA │   │ gnomAD  │
-   └───┬───┘       └────┬────┘    └────┬───┘   └────┬────┘
-       │                │              │             │
-       └───────┬────────┴──────────────┴─────────────┘
-               │
-       ┌───────▼────────┐
-       │   synthesize   │  Claude formats the evidence
-       └───────┬────────┘
-               │
-       ┌───────▼────────┐
-       │     return     │
-       └────────────────┘
+       ┌───────┴──────────────┬─────────────┐
+       │                      │             │     (parallel)
+   ┌───▼───┐             ┌────▼───┐   ┌────▼────┐
+   │ClinVar│             │OpenFDA │   │ gnomAD  │
+   └───┬───┘             └────┬───┘   └────┬────┘
+       │                      │             │
+       └──────────┬───────────┴─────────────┘
+                  │
+          ┌───────▼────────┐
+          │   synthesize   │  Claude formats the evidence
+          └───────┬────────┘
+                  │
+          ┌───────▼────────┐
+          │     return     │
+          └────────────────┘
 
 Why a graph instead of a sequential chain:
-    - The four lookups are independent. LangGraph runs them in parallel.
-    - Failures don't cascade. If COSMIC's API key is missing, the
-      synthesis step still has ClinVar + OpenFDA + gnomAD to work with.
+    - The three lookups are independent. LangGraph runs them in parallel.
+    - Failures don't cascade. If gnomAD is unreachable, the synthesis
+      step still has ClinVar + OpenFDA to work with.
     - The graph is a real artifact you can show in a demo (visualize via
       `app.get_graph().draw_ascii()`).
 
@@ -52,7 +52,7 @@ from typing import Any, TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
-from api.agents.tools import clinvar, cosmic, gnomad, openfda
+from api.agents.tools import clinvar, gnomad, openfda
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +65,7 @@ are scared, confused, and need plain-English answers. Imagine a 60-year-
 old reading this on their phone in a hospital waiting room.
 
 You will be given a JSON dict of evidence from public clinical databases
-(ClinVar, COSMIC, OpenFDA, gnomAD). Output ONLY a JSON object with this
+(ClinVar, OpenFDA, gnomAD). Output ONLY a JSON object with this
 exact schema:
 
 {
@@ -119,7 +119,6 @@ class AgentState(TypedDict, total=False):
 
     # Tool outputs (populated in parallel)
     clinvar: dict[str, Any]
-    cosmic: dict[str, Any]
     openfda: dict[str, Any]
     gnomad: dict[str, Any]
 
@@ -144,11 +143,6 @@ class AgentState(TypedDict, total=False):
 async def fetch_clinvar(state: AgentState) -> dict[str, Any]:
     result = await clinvar.lookup_variant(state["gene"], state["hgvs_protein"])
     return {"clinvar": result}
-
-
-async def fetch_cosmic(state: AgentState) -> dict[str, Any]:
-    result = await cosmic.lookup_variant(state["gene"], state["hgvs_protein"])
-    return {"cosmic": result}
 
 
 async def fetch_openfda(state: AgentState) -> dict[str, Any]:
@@ -191,7 +185,6 @@ async def synthesize(state: AgentState) -> dict[str, Any]:
 
     evidence = {
         "clinvar": state.get("clinvar", {}),
-        "cosmic": state.get("cosmic", {}),
         "openfda": state.get("openfda", {}),
         "gnomad": state.get("gnomad", {}),
     }
@@ -419,19 +412,18 @@ def _plain_rarity(af: float) -> str:
 def build_graph() -> Any:
     """Compile the LangGraph state machine.
 
-    Topology: START fans out to the four fetch nodes in parallel, all
-    four converge on `synthesize`, which goes to END.
+    Topology: START fans out to the three fetch nodes in parallel, all
+    three converge on `synthesize`, which goes to END.
     """
     g = StateGraph(AgentState)
 
     g.add_node("fetch_clinvar", fetch_clinvar)
-    g.add_node("fetch_cosmic", fetch_cosmic)
     g.add_node("fetch_openfda", fetch_openfda)
     g.add_node("fetch_gnomad", fetch_gnomad)
     g.add_node("synthesize", synthesize)
 
-    # Parallel fan-out: START -> all four fetches simultaneously
-    for node in ("fetch_clinvar", "fetch_cosmic", "fetch_openfda", "fetch_gnomad"):
+    # Parallel fan-out: START -> all three fetches simultaneously
+    for node in ("fetch_clinvar", "fetch_openfda", "fetch_gnomad"):
         g.add_edge(START, node)
         g.add_edge(node, "synthesize")
 
@@ -471,7 +463,7 @@ async def run_agent(
     duration_ms = int((time.time() - t0) * 1000)
 
     succeeded = [
-        name for name in ("clinvar", "cosmic", "openfda", "gnomad")
+        name for name in ("clinvar", "openfda", "gnomad")
         if (result.get(name) or {}).get("status") == "ok"
     ]
     return {
@@ -487,12 +479,11 @@ async def run_agent(
         "model": result.get("model", "unknown"),
         "evidence": {
             "clinvar": result.get("clinvar"),
-            "cosmic": result.get("cosmic"),
             "openfda": result.get("openfda"),
             "gnomad": result.get("gnomad"),
         },
         "tool_calls_succeeded": succeeded,
-        "tool_calls_attempted": ["clinvar", "cosmic", "openfda", "gnomad"],
+        "tool_calls_attempted": ["clinvar", "openfda", "gnomad"],
         "duration_ms": duration_ms,
         "constrained": (
             "The synthesis step is constrained by a system prompt that "

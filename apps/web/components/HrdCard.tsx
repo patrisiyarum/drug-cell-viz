@@ -5,11 +5,9 @@ import { useQuery } from "@tanstack/react-query";
 import {
   FlaskConical,
   Activity,
-  Clock,
   Info,
   Scan,
   Microscope,
-  ArrowRight,
   FileText,
 } from "lucide-react";
 
@@ -120,10 +118,6 @@ export function HrdCard({
   patientLabel = null,
 }: Props) {
   const [tab, setTab] = useState<"result" | "lab">("result");
-  const showReversionCallout =
-    hrd.label === "hr_deficient" &&
-    !!drugId &&
-    PARP_INHIBITOR_DRUG_IDS.has(drugId);
 
   // Compact "not applicable" rendering for patients without HR-panel variants.
   // When a CT fixture is provided we still render the radiogenomics tile so
@@ -151,7 +145,7 @@ export function HrdCard({
     }
 
     return (
-      <div className="space-y-4">
+      <div className="flex-1 min-w-0 flex flex-col gap-3">
         {indeterminateTiles.length > 0 ? (
           <TabBar
             tab={tab}
@@ -163,11 +157,11 @@ export function HrdCard({
         ) : null}
 
         <div
-          className={
+          className={`flex-1 min-h-0 ${
             tab === "result" || indeterminateTiles.length === 0 ? "" : "hidden"
-          }
+          }`}
         >
-          <section className="rounded-2xl border border-border bg-muted/40 p-5 text-sm space-y-2">
+          <section className="rounded-2xl border border-border bg-muted/40 p-5 text-sm space-y-2 h-full overflow-y-auto">
             <div className="flex items-baseline justify-between gap-3 flex-wrap">
               <div>
                 <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
@@ -191,7 +185,11 @@ export function HrdCard({
         </div>
 
         {indeterminateTiles.length > 0 ? (
-          <div className={tab === "lab" ? "" : "hidden"}>
+          <div
+            className={`flex-1 min-h-0 overflow-y-auto pr-1 -mr-1 ${
+              tab === "lab" ? "" : "hidden"
+            }`}
+          >
             <LabSection
               tagline="Even with a clean germline panel, imaging can pick up HR-deficiency from somatic events."
               tiles={indeterminateTiles}
@@ -299,8 +297,13 @@ export function HrdCard({
     );
   }
 
+  // Agent runs against public databases keyed only on gene + variant, so it
+  // works whether the variant came from a VCF upload (preset patients) or
+  // from the /build catalog picker. Show it whenever we have a variant.
+  const showAgent = variantEvidence.length > 0;
+
   return (
-    <div className="space-y-5">
+    <div className="flex-1 min-w-0 flex flex-col gap-3">
       <TabBar
         tab={tab}
         setTab={setTab}
@@ -315,64 +318,18 @@ export function HrdCard({
           tab switches instead of re-running the experiments on every flip
           back. React Query handles the BRCA1 case automatically; the CT
           and scar panels need this trick because their state is local. */}
-      <div className={tab === "result" || tiles.length === 0 ? "" : "hidden"}>
-        <div className="space-y-3">
-          {/* 1. Verdict — combined with the patient's variant data
-              into a single SectionCard. The previous layout had the
-              variant chip in its own "Your sample" card directly below
-              the verdict, which read as two competing pieces of
-              information. They belong together: the verdict IS the
-              answer for that variant. */}
-          <SectionCard label="HR-deficiency result">
-            <div className="flex items-start justify-between gap-4 flex-wrap">
-              <h3 className="text-xl md:text-2xl font-semibold">
-                {style.label}
-              </h3>
-              <div
-                className={`px-3 py-1.5 rounded-full text-sm font-semibold ${style.pill}`}
-              >
-                Score {hrd.score} / 100
-              </div>
-            </div>
-            <p className="text-sm leading-relaxed">{style.oneLiner}</p>
-
-            {/* Variant chips — same row as the verdict, framed as
-                "based on" rather than a separate concept. */}
-            {variantEvidence.length > 0 ? (
-              <div className="flex items-baseline gap-2 flex-wrap pt-1">
-                <span className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold">
-                  Based on
-                </span>
-                {variantEvidence.map((e, i) => (
-                  <div
-                    key={i}
-                    className="inline-flex items-baseline gap-2 rounded-lg border bg-white px-3 py-1.5 text-sm"
-                  >
-                    <span className="font-semibold">{e.gene}</span>
-                    <span className="font-mono text-xs text-muted-foreground">
-                      {stripGenePrefix(e.variant_label, e.gene)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            ) : null}
-
-            {showReversionCallout ? <ReversionAwarenessInfo /> : null}
-            {hrd.label === "hr_deficient" ? (
-              <NextStepBanner drugId={drugId} />
-            ) : null}
-          </SectionCard>
-
-          {/* 3. Clinical evidence agent — runs only when there's a VCF
-              upload (we don't want to fire it on catalog-only flows
-              where we have no actual record to back the variant). The
-              tile fetches ClinVar / COSMIC / OpenFDA / gnomAD in parallel
-              and asks Claude to format the retrieved evidence into a
-              clinician-readable summary. The synthesis prompt is
-              constrained — Claude can only describe what's in the
-              retrieved evidence dict, not generate new claims. */}
-          {variantEvidence.length > 0 && hasVcf ? (
-            <SectionCard label="Clinical evidence">
+      <div
+        className={`flex-1 min-h-0 ${
+          tab === "result" || tiles.length === 0 ? "" : "hidden"
+        }`}
+      >
+        {/* One unified card — agent at the top, then HR status below.
+            Card is height-bounded by the right column so the page never
+            needs to scroll; the inner body scrolls if the agent prose
+            overflows. */}
+        <SectionCard label="Clinical evidence & HR-deficiency status" fillHeight>
+          <div className="flex-1 min-h-0 overflow-y-auto pr-1 -mr-1 space-y-4">
+            {showAgent ? (
               <VariantEvidenceAgentBody
                 gene={variantEvidence[0].gene}
                 variant={stripGenePrefix(
@@ -380,13 +337,57 @@ export function HrdCard({
                   variantEvidence[0].gene,
                 )}
               />
-            </SectionCard>
-          ) : null}
-        </div>
+            ) : null}
+
+            <div
+              className={`space-y-3 ${
+                showAgent ? "border-t pt-4" : ""
+              }`}
+            >
+              <div className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold">
+                HR-deficiency status
+              </div>
+              <div className="flex items-start justify-between gap-4 flex-wrap">
+                <h3 className="text-xl md:text-2xl font-semibold">
+                  {style.label}
+                </h3>
+                <div
+                  className={`px-3 py-1.5 rounded-full text-sm font-semibold ${style.pill}`}
+                >
+                  Score {hrd.score} / 100
+                </div>
+              </div>
+              <p className="text-sm leading-relaxed">{style.oneLiner}</p>
+
+              {variantEvidence.length > 0 ? (
+                <div className="flex items-baseline gap-2 flex-wrap pt-1">
+                  <span className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold">
+                    Based on
+                  </span>
+                  {variantEvidence.map((e, i) => (
+                    <div
+                      key={i}
+                      className="inline-flex items-baseline gap-2 rounded-lg border bg-white px-3 py-1.5 text-sm"
+                    >
+                      <span className="font-semibold">{e.gene}</span>
+                      <span className="font-mono text-xs text-muted-foreground">
+                        {stripGenePrefix(e.variant_label, e.gene)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </SectionCard>
       </div>
 
       {tiles.length > 0 ? (
-        <div className={tab === "lab" ? "" : "hidden"}>
+        <div
+          className={`flex-1 min-h-0 overflow-y-auto pr-1 -mr-1 ${
+            tab === "lab" ? "" : "hidden"
+          }`}
+        >
           <LabSection
             tagline={`${tiles.length === 1 ? "One experiment" : `${tiles.length} independent experiments`} testing whether your tumor is HR-deficient. Each runs on a different record from your profile.`}
             tiles={tiles}
@@ -410,14 +411,25 @@ export function HrdCard({
 function SectionCard({
   label,
   children,
+  fillHeight = false,
 }: {
   label: string;
   children: React.ReactNode;
+  /** When true, the card stretches to fill its parent and its body
+   *  becomes a flex column so an inner overflow-y-auto child can scroll
+   *  independently of the outer page. */
+  fillHeight?: boolean;
 }) {
+  const shell = fillHeight
+    ? "rounded-2xl border bg-card overflow-hidden h-full flex flex-col"
+    : "rounded-2xl border bg-card overflow-hidden";
+  const body = fillHeight
+    ? "p-4 md:p-5 flex-1 min-h-0 flex flex-col gap-3"
+    : "p-4 md:p-5 space-y-3";
   return (
-    <div className="rounded-2xl border bg-card overflow-hidden">
+    <div className={shell}>
       <div className="h-px bg-gradient-to-r from-amber-400/40 via-amber-500 to-amber-400/40" />
-      <div className="p-4 md:p-5 space-y-3">
+      <div className={body}>
         <div className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold">
           {label}
         </div>
@@ -640,29 +652,6 @@ function LabTile({
   );
 }
 
-/**
- * The "what to do with this result" CTA for HR-deficient patients.
- * If they're already on a PARP inhibitor, we point at reversion monitoring;
- * otherwise we point at the PARPi conversation.
- */
-function NextStepBanner({ drugId }: { drugId: string | null }) {
-  const onParpi = !!drugId && PARP_INHIBITOR_DRUG_IDS.has(drugId);
-  return (
-    <div className="rounded-xl border border-amber-300 bg-amber-50/70 p-3 flex items-start gap-3">
-      <ArrowRight
-        className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5"
-        aria-hidden
-      />
-      <div className="text-sm leading-relaxed">
-        <span className="font-semibold">Next step:</span>{" "}
-        {onParpi
-          ? "Ask your oncologist about serial ctDNA monitoring to catch reversion mutations early."
-          : "Bring this report to your oncologist and ask whether a PARP inhibitor (olaparib, niraparib, or rucaparib) is right for you."}
-      </div>
-    </div>
-  );
-}
-
 // ============================================================================
 // Experiment bodies
 // ============================================================================
@@ -815,52 +804,6 @@ function LabeledNumber({
         placeholder="0"
       />
     </label>
-  );
-}
-
-/**
- * Collapsible info button that surfaces the reversion-awareness caveat for
- * PARPi patients.
- */
-function ReversionAwarenessInfo() {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="relative inline-flex">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="inline-flex items-center gap-1 rounded-full border border-warning/40 bg-warning/10 px-2 py-0.5 text-[11px] font-medium text-warning hover:bg-warning/20 transition-colors"
-        aria-label="Reversion awareness info"
-        aria-expanded={open}
-      >
-        <Info className="w-3 h-3" aria-hidden />
-        Reversion awareness
-      </button>
-      {open ? (
-        <div className="absolute left-0 top-7 z-30 w-80 rounded-xl border border-warning/40 bg-white p-4 shadow-xl text-sm leading-relaxed space-y-2">
-          <div className="flex items-center gap-2 text-xs uppercase tracking-wide font-semibold text-warning">
-            <Clock className="w-3.5 h-3.5" aria-hidden />
-            Reversion awareness
-          </div>
-          <p>
-            An HR-deficient result is <strong>historical</strong>. It describes
-            the tumor&apos;s past DNA-repair state, not its current one.
-          </p>
-          <p className="text-muted-foreground">
-            Roughly 20 to 30 percent of BRCA-associated tumors treated with a
-            PARP inhibitor develop small &ldquo;reversion&rdquo; mutations that
-            quietly restore the broken BRCA gene under drug pressure. When that
-            happens the tumor is no longer HR-deficient, but the scar-based
-            score on this card won&apos;t reflect it (the scars are permanent).
-          </p>
-          <p className="text-muted-foreground">
-            If you&apos;ve been on a PARP inhibitor for six months or more, ask
-            your oncologist about <strong>serial ctDNA testing</strong> to
-            catch reversion mutations early.
-          </p>
-        </div>
-      ) : null}
-    </div>
   );
 }
 
@@ -1021,10 +964,10 @@ function Brca1ClassifierBody({ hgvsList }: { hgvsList: string[] }) {
 /**
  * Variant-evidence agent body, rendered inside a Result-tab SectionCard.
  *
- * Calls the LangGraph endpoint that fans out to ClinVar / COSMIC /
- * OpenFDA / gnomAD in parallel and asks Claude to synthesize the
- * retrieved evidence into a clinician-readable paragraph (with the
- * synthesis prompt constrained — Claude formats, doesn't invent).
+ * Calls the LangGraph endpoint that fans out to ClinVar / OpenFDA /
+ * gnomAD in parallel and asks Claude to synthesize the retrieved
+ * evidence into a clinician-readable paragraph (with the synthesis
+ * prompt constrained — Claude formats, doesn't invent).
  *
  * Layout choices for readability:
  *   - Summary paragraph rendered at the section's body size with
@@ -1052,7 +995,7 @@ function VariantEvidenceAgentBody({
   if (query.isLoading) {
     return (
       <p className="text-xs text-muted-foreground italic">
-        Querying ClinVar, COSMIC, OpenFDA, gnomAD…
+        Querying ClinVar, OpenFDA, gnomAD…
       </p>
     );
   }
@@ -1068,7 +1011,6 @@ function VariantEvidenceAgentBody({
   const r = query.data;
   const sourceMeta: { key: string; label: string; status: string }[] = [
     { key: "clinvar", label: "ClinVar",  status: getStatus(r.evidence.clinvar) },
-    { key: "cosmic",  label: "COSMIC",   status: getStatus(r.evidence.cosmic)  },
     { key: "openfda", label: "OpenFDA",  status: getStatus(r.evidence.openfda) },
     { key: "gnomad",  label: "gnomAD",   status: getStatus(r.evidence.gnomad)  },
   ];
@@ -1136,15 +1078,6 @@ function VariantEvidenceAgentBody({
         new clinical claims. Generated in {(r.duration_ms / 1000).toFixed(1)}s.
       </p>
 
-      {/* Audit-trail expander. */}
-      <details className="text-xs">
-        <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
-          See the raw evidence the agent retrieved
-        </summary>
-        <pre className="mt-2 overflow-auto text-[10px] bg-muted/40 rounded p-2 max-h-64 leading-snug">
-          {JSON.stringify(r.evidence, null, 2)}
-        </pre>
-      </details>
     </div>
   );
 }
@@ -1152,8 +1085,8 @@ function VariantEvidenceAgentBody({
 /**
  * Translate a tool's response status into a 3-bucket UI state. Anything
  * other than "ok" is shown as either "missing" (intentional gaps like
- * COSMIC's auth-required, gnomAD's "absent") or "error" (transient
- * failure). Three buckets keep the source pills scannable.
+ * gnomAD's "absent") or "error" (transient failure). Three buckets keep
+ * the source pills scannable.
  */
 function getStatus(payload: Record<string, unknown> | null): string {
   if (!payload) return "error";

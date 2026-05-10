@@ -48,7 +48,6 @@ export interface VariantEvidenceResponse {
   /** Raw structured output from each tool call, keyed by source. */
   evidence: {
     clinvar: Record<string, unknown> | null;
-    cosmic: Record<string, unknown> | null;
     openfda: Record<string, unknown> | null;
     gnomad: Record<string, unknown> | null;
   };
@@ -94,8 +93,8 @@ export const api = {
     }),
 
   /**
-   * LangGraph agent that pulls evidence for a variant from four public
-   * databases (ClinVar, COSMIC, OpenFDA, gnomAD) in parallel and asks
+   * LangGraph agent that pulls evidence for a variant from three public
+   * databases (ClinVar, OpenFDA, gnomAD) in parallel and asks
    * Claude to format the retrieved evidence into a clinician-readable
    * summary. The synthesis prompt is constrained to *describing* the
    * evidence dict, not generating new medical claims.
