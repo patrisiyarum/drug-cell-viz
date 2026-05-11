@@ -22,6 +22,7 @@ from api.routes import (
     brca2_router,
     export_router,
     hrd_scars_router,
+    hrdetect_router,
     jobs_limiter,
     jobs_router,
     molecular_router,
@@ -176,6 +177,7 @@ app.include_router(brca2_router)
 app.include_router(vcf_router)
 app.include_router(screening_router)
 app.include_router(hrd_scars_router)
+app.include_router(hrdetect_router)
 app.include_router(radiogenomics_router)
 app.include_router(patients_router)
 app.include_router(agent_router)

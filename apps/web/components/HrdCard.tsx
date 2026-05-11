@@ -15,6 +15,7 @@ import { Brca1FunctionCard } from "./Brca1FunctionCard";
 import {
   api,
   type CtScanResponse,
+  type HRDetectResponse,
   type HrdScarResponse,
   type VariantEvidenceResponse,
 } from "@/lib/api";
@@ -302,6 +303,20 @@ export function HrdCard({
       </LabTile>,
     );
   }
+  // HRDetect always renders. The user can upload a VCF inside the tile;
+  // the signature-extraction step is a documented stub but the
+  // logistic-regression evaluation is real.
+  tiles.push(
+    <LabTile
+      key="hrdetect"
+      title="HRDetect (WGS signature classifier)"
+      tests="Davies 2017 — six WGS signature features into a logistic regression."
+      icon={<FlaskConical className="w-4 h-4" aria-hidden />}
+      recordLabel="VCF upload (optional)"
+    >
+      <HrdetectBody />
+    </LabTile>,
+  );
 
   // Agent runs against public databases keyed only on gene + variant, so it
   // works whether the variant came from a VCF upload (preset patients) or
@@ -964,6 +979,107 @@ function Brca1ClassifierBody({ hgvsList }: { hgvsList: string[] }) {
           <Brca1FunctionCard key={hgvs} hgvsProtein={hgvs} />
         ))}
       </div>
+    </div>
+  );
+}
+
+/**
+ * HRDetect tile body. Lets the user upload a VCF; backend stubs
+ * signature extraction (real WGS extraction needs SigProfiler) and
+ * runs the published Davies 2017 logistic regression. The tile is
+ * explicit about which step is real vs stubbed via the caveats list
+ * the API returns.
+ */
+function HrdetectBody() {
+  const [file, setFile] = useState<File | null>(null);
+  const [running, setRunning] = useState(false);
+  const [result, setResult] = useState<HRDetectResponse | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setFile(f);
+    setErr(null);
+    setRunning(true);
+    try {
+      const resp = await api.scoreHrdetectVcf(f);
+      setResult(resp);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "HRDetect failed");
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  const labelText: Record<HRDetectResponse["label"], string> = {
+    predicted_hr_deficient: "Predicted HR-deficient",
+    predicted_hr_proficient: "Predicted HR-proficient",
+    uncertain: "Uncertain",
+  };
+  const labelStyles: Record<HRDetectResponse["label"], string> = {
+    predicted_hr_deficient: "text-success bg-success/10 border-success/40",
+    predicted_hr_proficient: "text-muted-foreground bg-muted border-border",
+    uncertain: "text-warning bg-warning/10 border-warning/40",
+  };
+
+  return (
+    <div className="flex-1 flex flex-col gap-3 min-h-[5rem]">
+      <label className="block">
+        <span className="sr-only">Upload VCF for HRDetect</span>
+        <input
+          type="file"
+          accept=".vcf,.vcf.gz"
+          onChange={onFile}
+          disabled={running}
+          className="block w-full text-xs file:mr-3 file:rounded-md file:border-0 file:bg-amber-100 file:text-amber-800 file:px-3 file:py-1.5 file:text-xs file:font-medium hover:file:bg-amber-200 disabled:opacity-60"
+        />
+      </label>
+      {file ? (
+        <p className="text-[11px] text-muted-foreground italic truncate">
+          {running ? "Scoring " : "Scored "}
+          {file.name}
+        </p>
+      ) : null}
+      {err ? <p className="text-xs text-red-600">{err}</p> : null}
+      {result ? (
+        <div className="space-y-2">
+          <div
+            className={`rounded-lg border p-3 text-sm ${labelStyles[result.label]}`}
+          >
+            <div className="flex items-baseline justify-between gap-2 flex-wrap">
+              <span className="font-semibold">{labelText[result.label]}</span>
+              <span className="text-xs">
+                {Math.round(result.probability * 100)}% p(HRD)
+              </span>
+            </div>
+            <details className="mt-2 text-xs">
+              <summary className="cursor-pointer opacity-80 hover:opacity-100">
+                Caveats &amp; signature features
+              </summary>
+              <ul className="mt-1 space-y-1 list-disc pl-5 opacity-90">
+                {result.caveats.map((c, i) => (
+                  <li key={i}>{c}</li>
+                ))}
+              </ul>
+              <ul className="mt-2 grid grid-cols-2 gap-x-3 gap-y-0.5 opacity-90">
+                <li>HRD-LOH: {result.features.hrd_loh.toFixed(1)}</li>
+                <li>e.del.mh: {result.features.e_del_mh_prop.toFixed(2)}</li>
+                <li>SBS3: {result.features.sbs3.toFixed(2)}</li>
+                <li>SBS8: {result.features.sbs8.toFixed(2)}</li>
+                <li>RS3: {result.features.rs3.toFixed(2)}</li>
+                <li>RS5: {result.features.rs5.toFixed(2)}</li>
+              </ul>
+            </details>
+          </div>
+        </div>
+      ) : (
+        <p className="text-[11px] text-muted-foreground leading-snug">
+          Upload a VCF to run HRDetect. The signature-extraction step is
+          a documented demo stub (real WGS extraction needs SigProfiler);
+          the logistic regression that produces the score is real.
+        </p>
+      )}
     </div>
   );
 }

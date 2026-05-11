@@ -213,6 +213,27 @@ export const api = {
     return res.blob();
   },
 
+  /**
+   * HRDetect — score a VCF upload through the demo signature stub +
+   * the published HRDetect logistic regression. Honest about the stub
+   * extraction step (real signature deconvolution requires whole-genome
+   * sequencing, not panel data); the frontend tile surfaces the
+   * caveats array verbatim so the user knows what's real and what's
+   * approximated.
+   */
+  scoreHrdetectVcf: async (file: File): Promise<HRDetectResponse> => {
+    const fd = new FormData();
+    fd.append("file", file);
+    const res = await fetch(`${API_BASE}/api/hrdetect/score-vcf`, {
+      method: "POST",
+      body: fd,
+    });
+    if (!res.ok) {
+      throw new Error(`HRDetect failed: ${res.status} ${await res.text()}`);
+    }
+    return res.json() as Promise<HRDetectResponse>;
+  },
+
   // ----- Patient profile -----
 
   getPatientProfile: (patientId: string) =>
@@ -268,6 +289,26 @@ export interface PatientRead {
   indication: string;
   drug_id: string | null;
   drug_name: string | null;
+}
+
+export interface HRDetectFeatures {
+  hrd_loh: number;
+  e_del_mh_prop: number;
+  sbs3: number;
+  sbs8: number;
+  rs3: number;
+  rs5: number;
+}
+
+export interface HRDetectResponse {
+  probability: number;
+  label: "predicted_hr_deficient" | "predicted_hr_proficient" | "uncertain";
+  features: HRDetectFeatures;
+  feature_source: "stub_extraction" | "user_provided";
+  intercept: number;
+  coefficients: Record<string, number>;
+  duration_ms: number;
+  caveats: string[];
 }
 
 export interface WalkthroughResponse {
