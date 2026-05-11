@@ -35,17 +35,10 @@ export default function VolumeViewerInner({
 
     let cancelled = false;
 
-    // Niivue's constructor creates a WebGL2 context. Multi-planar slice
-    // view (axial + sagittal + coronal) is what radiologists actually use
-    // to read CTs; pure volumetric rendering of a synthetic scan hides the
-    // tumor inside an opaque body blob. Crosshair on so the three panels
-    // stay coordinated when the patient clicks to navigate.
     const nv = new Niivue({
       loadingText: "Loading CT volume",
       backColor: [0, 0, 0, 1],
-      show3Dcrosshair: true,
-      crosshairWidth: 1,
-      crosshairColor: [1, 0.6, 0, 0.8],
+      show3Dcrosshair: false,
       dragAndDropEnabled: false,
       isColorbar: false,
       isOrientCube: false,
@@ -63,8 +56,6 @@ export default function VolumeViewerInner({
       await nv.loadVolumes([
         {
           url: volumeUrl,
-          // HU window equivalent to the training preprocess pipeline so the
-          // viewer highlights the same tissue band the model is looking at.
           cal_min: huWindow[0],
           cal_max: huWindow[1],
           colormap: "gray",
@@ -73,25 +64,31 @@ export default function VolumeViewerInner({
       ]);
       if (cancelled) return;
 
-      // SLICE_TYPE.MULTIPLANAR (value 3) = three orthogonal slice views + a
-      // 3D render corner panel. Far more legible than the pure volumetric
-      // mode for a small synthetic dataset: each slice plane slices THROUGH
-      // the body so the tumor blob is immediately visible in all three.
-      nv.setSliceType(3);
+      // SLICE_TYPE.AXIAL (value 0) = single big axial slice that fills the
+      // canvas. Multiplanar (value 3) was rendering as four small panels
+      // and looked "shrunk" inside the slideshow card.
+      nv.setSliceType(0);
+      // High-DPI canvases need niivue to recompute its drawing buffer. Run
+      // it once after load so the initial render is sharp on Retina screens.
+      nv.resizeListener();
     }
 
     run().catch((e) => {
-      // Don't crash the page if WebGL2 is unavailable (old browser / headless
-      // CI). Logging is enough — the parent card caption already tells the
-      // user this is a research demo.
       // eslint-disable-next-line no-console
       console.warn("niivue volume load failed", e);
     });
 
+    // Keep the canvas resolution in sync when the parent container resizes
+    // (slideshow tab switches, layout changes, window resize). Without this
+    // the canvas keeps its initial CSS-pixel size and stretches blurrily.
+    const ro = new ResizeObserver(() => {
+      nv.resizeListener();
+    });
+    if (canvasRef.current) ro.observe(canvasRef.current);
+
     return () => {
       cancelled = true;
-      // Niivue doesn't expose an explicit destroy() across all versions; the
-      // canvas removal + the WebGL context loss on unmount handle cleanup.
+      ro.disconnect();
     };
   }, [volumeUrl, huWindow]);
 
