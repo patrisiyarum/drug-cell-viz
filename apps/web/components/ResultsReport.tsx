@@ -12,6 +12,7 @@ import {
 import { HrdCard, type RecordRefs } from "./HrdCard";
 import { MolViewer } from "./MolViewer";
 import { VolumeViewer } from "./VolumeViewer";
+import { WalkthroughChat } from "./WalkthroughChat";
 import type {
   AnalysisResult,
   DemoPatient,
@@ -129,6 +130,13 @@ export function ResultsReport({
           ) : null}
         </div>
       </div>
+
+      <WalkthroughChat
+        result={result}
+        patient={patient}
+        indication={indication ?? patient?.indication ?? null}
+        patientLabel={patient?.persona_name ?? null}
+      />
     </div>
   );
 }

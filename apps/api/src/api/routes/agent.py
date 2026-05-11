@@ -19,7 +19,7 @@ import logging
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from api.agents import variant_evidence
+from api.agents import variant_evidence, walkthrough
 
 logger = logging.getLogger(__name__)
 
@@ -96,3 +96,63 @@ async def variant_evidence_endpoint(req: VariantEvidenceRequest) -> VariantEvide
         raise HTTPException(500, f"agent execution failed: {exc}") from exc
 
     return VariantEvidenceResponse(**result)
+
+
+# ---------------------------------------------------------------------------
+# Walkthrough chat — conversational explanation of the analysis.
+# ---------------------------------------------------------------------------
+
+
+class ChatMessage(BaseModel):
+    role: str = Field(..., description="'user' or 'assistant'")
+    content: str = Field(..., min_length=1, max_length=8000)
+
+
+class WalkthroughRequest(BaseModel):
+    messages: list[ChatMessage] = Field(
+        ...,
+        description=(
+            "Full conversation history including the latest user turn. "
+            "The frontend is the source of truth for chat history."
+        ),
+    )
+    context: dict = Field(
+        default_factory=dict,
+        description=(
+            "Structured analysis result + indication. Forwarded into the "
+            "system prompt as JSON so the model has the full picture."
+        ),
+    )
+
+
+class Citation(BaseModel):
+    url: str
+    title: str
+
+
+class WalkthroughResponse(BaseModel):
+    reply: str
+    citations: list[Citation] = []
+    model: str
+    duration_ms: int
+
+
+@router.post("/walkthrough", response_model=WalkthroughResponse)
+async def walkthrough_endpoint(req: WalkthroughRequest) -> WalkthroughResponse:
+    if not req.messages:
+        raise HTTPException(400, "at least one message is required")
+    if req.messages[-1].role != "user":
+        raise HTTPException(400, "last message must be from the user")
+    if any(m.role not in ("user", "assistant") for m in req.messages):
+        raise HTTPException(400, "messages must be 'user' or 'assistant'")
+
+    try:
+        result = await walkthrough.reply(
+            messages=[m.model_dump() for m in req.messages],
+            context=req.context,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("walkthrough agent failed")
+        raise HTTPException(500, f"chat agent failed: {exc}") from exc
+
+    return WalkthroughResponse(**result)

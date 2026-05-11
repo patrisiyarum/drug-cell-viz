@@ -1,0 +1,191 @@
+"""Conversational walkthrough agent.
+
+Talks the patient through their pharmacogenomic analysis results in
+plain English. Has access to:
+    - The structured analysis result (HRD score + label, drug + target,
+      variants, patient indication, lab tile outputs the frontend has
+      already computed).
+    - Claude's native web_search tool, so it can pull current
+      information (e.g. recent guideline changes, ongoing trials) and
+      cite the source URLs back to the patient.
+
+This agent is multi-turn: the frontend persists the message history
+client-side and re-sends it on every turn. The system prompt is locked
+to a "explain, don't prescribe" stance and tells Claude to cite the
+analysis context when it can rather than re-searching for known facts.
+
+We keep this agent separate from `variant_evidence` because the two
+have very different jobs:
+    - variant_evidence is a one-shot, parallel-fan-out retrieval that
+      returns structured fields (pathogenicity / drugs / rarity).
+    - walkthrough is a stateful conversation that explains those
+      results and answers follow-ups, allowed to search the web.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import os
+import time
+from typing import Any
+
+logger = logging.getLogger(__name__)
+
+CLAUDE_MODEL = "claude-sonnet-4-5-20250929"
+CLAUDE_TIMEOUT_SECONDS = 60.0
+MAX_TOKENS = 1500
+
+SYSTEM_PROMPT = """\
+You are talking with a woman who has cancer about her pharmacogenomic
+results. She has no medical training. Be warm, plain-spoken, and brief.
+Imagine she's reading on her phone in a waiting room.
+
+You will be given:
+  1. The full structured analysis result (drug, target gene, HRD label
+     and score, variants, lab-tile outputs).
+  2. The cancer type she entered (her indication).
+  3. The conversation history.
+
+Your job:
+  - Help her understand what the results mean for her cancer.
+  - Connect the dots across the lab tiles (HRD score, CT model,
+     scar score, variant evidence) into a coherent story.
+  - Answer follow-up questions in plain English.
+  - When relevant, use the web_search tool to find current information
+     (recent FDA approvals, guideline updates, ongoing trials for her
+     specific indication). Cite sources when you do.
+
+Hard rules:
+  - You are NOT her doctor and NOT giving medical advice.
+  - Never tell her to start, stop, or change a medication. Always
+     redirect those questions back to her oncologist.
+  - Don't invent results. If something isn't in the analysis context
+     or the web search results, say you don't know.
+  - Translate medical terms on first use ("pathogenic — meaning harmful").
+  - Short replies. Two short paragraphs is usually enough.
+  - When you cite a source, say where it's from (e.g. "according to
+     the FDA label for olaparib") so she knows it's real.
+
+If the patient asks about something outside her cancer (e.g. a different
+disease, a different drug class), politely note the tool is built for
+her female-specific cancer context and redirect.
+"""
+
+
+def _format_context(context: dict[str, Any]) -> str:
+    """Serialize the analysis context into a compact JSON block the
+    model can read without us having to flatten it into prose."""
+    return json.dumps(context, indent=2, default=str)
+
+
+async def reply(
+    messages: list[dict[str, str]],
+    context: dict[str, Any],
+) -> dict[str, Any]:
+    """Run one turn of the walkthrough conversation.
+
+    Args:
+        messages: chat history. Each entry is {"role": "user"|"assistant",
+            "content": str}. The latest user message is the prompt
+            being responded to; everything before it is history.
+        context: structured analysis result + indication. Passed verbatim
+            into the system prompt as JSON so the model has the full
+            picture without needing tool calls to retrieve it.
+
+    Returns:
+        {
+            "reply": str,            # assistant's text response
+            "citations": [{url, title}, ...],  # web_search citations
+            "model": str,            # the model id used
+            "duration_ms": int,
+        }
+
+    Falls back to a stub response if ANTHROPIC_API_KEY is missing so the
+    UI still works in dev / offline.
+    """
+    t0 = time.time()
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+    if not api_key:
+        return {
+            "reply": (
+                "The chat agent is offline because no ANTHROPIC_API_KEY "
+                "is set on this server. Once it's configured, this is "
+                "where I'd walk you through your results in plain English "
+                "and answer your questions."
+            ),
+            "citations": [],
+            "model": "stub",
+            "duration_ms": int((time.time() - t0) * 1000),
+        }
+
+    import anthropic
+
+    system = (
+        SYSTEM_PROMPT
+        + "\n\n--- ANALYSIS CONTEXT (JSON) ---\n"
+        + _format_context(context)
+    )
+
+    # Anthropic's native web_search server-side tool. The `max_uses`
+    # cap keeps a chatty model from burning the API budget on trivial
+    # questions; if it needs more it can ask the user to be specific.
+    tools = [
+        {
+            "type": "web_search_20250305",
+            "name": "web_search",
+            "max_uses": 3,
+        }
+    ]
+
+    client = anthropic.AsyncAnthropic(api_key=api_key, timeout=CLAUDE_TIMEOUT_SECONDS)
+    try:
+        msg = await client.messages.create(
+            model=CLAUDE_MODEL,
+            max_tokens=MAX_TOKENS,
+            system=system,
+            tools=tools,
+            messages=messages,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("walkthrough chat failed")
+        return {
+            "reply": (
+                "Something went wrong reaching the chat agent: "
+                f"{exc}. Try again in a moment."
+            ),
+            "citations": [],
+            "model": CLAUDE_MODEL,
+            "duration_ms": int((time.time() - t0) * 1000),
+        }
+
+    # Extract the assistant's text and any web-search citations the
+    # model attached. The web_search tool emits citation objects inside
+    # text blocks when it grounds a sentence on a source.
+    reply_parts: list[str] = []
+    citations: list[dict[str, str]] = []
+    for block in msg.content:
+        block_type = getattr(block, "type", None)
+        if block_type == "text":
+            reply_parts.append(getattr(block, "text", ""))
+            for cite in getattr(block, "citations", None) or []:
+                url = getattr(cite, "url", None)
+                title = getattr(cite, "title", None) or url
+                if url:
+                    citations.append({"url": url, "title": title})
+
+    # Dedupe citations by URL while preserving order.
+    seen: set[str] = set()
+    unique_citations: list[dict[str, str]] = []
+    for c in citations:
+        if c["url"] in seen:
+            continue
+        seen.add(c["url"])
+        unique_citations.append(c)
+
+    return {
+        "reply": "".join(reply_parts).strip(),
+        "citations": unique_citations,
+        "model": CLAUDE_MODEL,
+        "duration_ms": int((time.time() - t0) * 1000),
+    }

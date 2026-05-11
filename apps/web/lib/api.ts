@@ -104,6 +104,23 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ gene, variant, indication: indication ?? null }),
     }),
+
+  /**
+   * Conversational walkthrough agent. Multi-turn — the frontend keeps
+   * the full message history and re-sends it on every turn. The
+   * `context` is the structured analysis result + indication, forwarded
+   * into Claude's system prompt so the model can reason about the
+   * patient's actual data and call the web_search tool when it needs
+   * to ground something on a current source.
+   */
+  walkthroughChat: (
+    messages: { role: "user" | "assistant"; content: string }[],
+    context: Record<string, unknown>,
+  ) =>
+    request<WalkthroughResponse>("/api/agent/walkthrough", {
+      method: "POST",
+      body: JSON.stringify({ messages, context }),
+    }),
   lookupBrcaExchange: (hgvsProtein: string) =>
     request<BrcaExchangeRecord | null>(
       `/api/brca1/exchange?hgvs_protein=${encodeURIComponent(hgvsProtein)}`,
@@ -251,6 +268,13 @@ export interface PatientRead {
   indication: string;
   drug_id: string | null;
   drug_name: string | null;
+}
+
+export interface WalkthroughResponse {
+  reply: string;
+  citations: { url: string; title: string }[];
+  model: string;
+  duration_ms: number;
 }
 
 export interface PatientCreate {
