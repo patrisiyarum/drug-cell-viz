@@ -91,12 +91,12 @@ export function ResultsReport({
         />
       ) : null}
 
-      {/* Two equal columns side-by-side at a fixed viewport height so the
-          page reads as one card on the left, one on the right with no
-          vertical scroll. The grid row height is locked to the viewport
-          (not just capped) so the slideshow doesn't reflow as the right
-          card's async content (agent query) settles. */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8 lg:h-[calc(100vh-10rem)]">
+      {/* Two equal columns side-by-side at a fixed pixel height so the
+          slideshow renders at a consistent size regardless of viewport
+          or how the right card's async content (agent, lab tiles) sizes.
+          Both columns get the same locked row height; the right card
+          scrolls internally when its contents overflow. */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8 lg:h-[640px]">
         <div className="no-print min-h-0 flex">
           <StructureSlideshow
             result={result}
