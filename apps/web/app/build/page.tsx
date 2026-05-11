@@ -167,10 +167,11 @@ export default function BuildPage() {
         <div className="max-w-3xl mx-auto space-y-6">
           <div className="space-y-3 text-center">
             <h1 className="text-3xl md:text-4xl font-semibold">
-              See how a medication might affect you
+              See how your medication works with your cancer
             </h1>
             <p className="text-muted-foreground text-sm">
-              Pick a drug. Upload data or pick variants. Get a report.
+              Built for women with ovarian, breast, or gynecologic cancers.
+              Create a profile, pick a drug, share what we have, and read the report.
             </p>
             <div className="h-px max-w-xs mx-auto bg-gradient-to-r from-transparent via-amber-500 to-transparent" />
           </div>

@@ -19,10 +19,11 @@ export default function LandingPage() {
         <section className="flex-1 flex items-center justify-center px-6 py-20 md:py-28">
           <div className="max-w-3xl mx-auto text-center space-y-8">
             <h1 className="text-4xl md:text-6xl leading-tight font-semibold tracking-tight">
-              Understand how your medications work with your body.
+              Built for women navigating ovarian, breast, and gynecologic cancer.
             </h1>
             <p className="text-lg text-muted-foreground max-w-xl mx-auto">
-              A tool for people living with cancer. Based on FDA and clinical guidelines.
+              Understand how your medications work with your genetics. Grounded in FDA
+              labels and clinical guidelines for female-specific oncology.
             </p>
             <div className="flex flex-wrap items-center justify-center gap-3">
               <Link
@@ -64,13 +65,13 @@ export default function LandingPage() {
             />
             <FeaturePanel
               icon={<Dna className="w-5 h-5 text-primary" />}
-              title="Understand your genetics"
-              body="How your variants affect drug response — no jargon."
+              title="HRD, BRCA, and PARP inhibitors"
+              body="What your BRCA variants and HR-deficiency status mean for olaparib, niraparib, and rucaparib."
             />
             <FeaturePanel
               icon={<MessageCircle className="w-5 h-5 text-primary" />}
               title="Prepared for your appointment"
-              body="Specific questions to bring to your care team."
+              body="Specific questions to bring to your gynecologic oncologist or breast oncologist."
             />
           </div>
         </section>
