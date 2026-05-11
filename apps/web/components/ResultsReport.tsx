@@ -46,6 +46,12 @@ interface Props {
    * lab-tile so the patient can trace which file drives which model.
    */
   recordRefs?: RecordRefs;
+  /**
+   * Cancer type the patient entered (preset patients use their stored
+   * indication). Forwarded to the variant-evidence agent so the
+   * synthesis is framed for the right disease context.
+   */
+  indication?: string | null;
 }
 
 export function ResultsReport({
@@ -55,6 +61,7 @@ export function ResultsReport({
   uploadedCtScanUrl,
   scarPrefill,
   recordRefs,
+  indication,
 }: Props) {
   // Per-patient radiogenomics fixture wiring.
   //   Maya  — pelvic CT (TCGA-24-0975) — supports her HR-deficient germline
@@ -117,6 +124,7 @@ export function ResultsReport({
               recordRefs={recordRefs}
               analysisResult={result}
               patientLabel={patient?.persona_name ?? null}
+              indication={indication ?? patient?.indication ?? null}
             />
           ) : null}
         </div>

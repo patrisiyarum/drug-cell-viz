@@ -84,6 +84,12 @@ interface Props {
   analysisResult?: AnalysisResult | null;
   /** Patient name for the PDF filename / header. */
   patientLabel?: string | null;
+  /**
+   * Cancer type ("Stage III ovarian", "metastatic breast", etc).
+   * Forwarded to the variant-evidence agent so its synthesis is framed
+   * for the patient's actual disease context.
+   */
+  indication?: string | null;
 }
 
 /**
@@ -116,6 +122,7 @@ export function HrdCard({
   recordRefs = {},
   analysisResult = null,
   patientLabel = null,
+  indication = null,
 }: Props) {
   const [tab, setTab] = useState<"result" | "lab">("result");
 
@@ -335,6 +342,7 @@ export function HrdCard({
                   variantEvidence[0].variant_label,
                   variantEvidence[0].gene,
                 )}
+                indication={indication}
               />
             ) : null}
 
@@ -980,13 +988,15 @@ function Brca1ClassifierBody({ hgvsList }: { hgvsList: string[] }) {
 function VariantEvidenceAgentBody({
   gene,
   variant,
+  indication = null,
 }: {
   gene: string;
   variant: string;
+  indication?: string | null;
 }) {
   const query = useQuery<VariantEvidenceResponse>({
-    queryKey: ["variant-evidence", gene, variant],
-    queryFn: () => api.variantEvidence(gene, variant),
+    queryKey: ["variant-evidence", gene, variant, indication],
+    queryFn: () => api.variantEvidence(gene, variant, indication),
     retry: 0,
     staleTime: 5 * 60_000,
   });

@@ -201,6 +201,12 @@ export const api = {
   getPatientProfile: (patientId: string) =>
     request<PatientFullProfile>(`/api/patients/${patientId}`),
 
+  createPatient: (body: PatientCreate) =>
+    request<PatientRead>("/api/patients", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
   addMedication: (patientId: string, body: MedicationCreate) =>
     request<MedicationRead>(`/api/patients/${patientId}/medications`, {
       method: "POST",
@@ -245,6 +251,15 @@ export interface PatientRead {
   indication: string;
   drug_id: string | null;
   drug_name: string | null;
+}
+
+export interface PatientCreate {
+  id: string;
+  name: string;
+  age: number;
+  indication: string;
+  drug_id?: string | null;
+  drug_name?: string | null;
 }
 
 export interface MedicationRead {

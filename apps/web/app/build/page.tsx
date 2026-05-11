@@ -43,10 +43,19 @@ export default function BuildPage() {
   // the patient's Records section. localStorage persists the choice
   // across page reloads.
   const [patientId, setPatientId] = useState<string>("maya");
+  // The user-entered cancer type / indication for the active profile. Drives
+  // the variant-evidence agent's framing. Persisted alongside patientId so
+  // a returning visitor doesn't have to retype it.
+  const [profileName, setProfileName] = useState<string | null>(null);
+  const [profileIndication, setProfileIndication] = useState<string | null>(null);
   useEffect(() => {
     if (typeof window !== "undefined") {
       const stored = window.localStorage.getItem("kintsugi:patientId");
       if (stored) setPatientId(stored);
+      const storedName = window.localStorage.getItem("kintsugi:profileName");
+      if (storedName) setProfileName(storedName);
+      const storedInd = window.localStorage.getItem("kintsugi:profileIndication");
+      if (storedInd) setProfileIndication(storedInd);
     }
   }, []);
   useEffect(() => {
@@ -54,6 +63,19 @@ export default function BuildPage() {
       window.localStorage.setItem("kintsugi:patientId", patientId);
     }
   }, [patientId]);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (profileName) {
+      window.localStorage.setItem("kintsugi:profileName", profileName);
+    } else {
+      window.localStorage.removeItem("kintsugi:profileName");
+    }
+    if (profileIndication) {
+      window.localStorage.setItem("kintsugi:profileIndication", profileIndication);
+    } else {
+      window.localStorage.removeItem("kintsugi:profileIndication");
+    }
+  }, [profileName, profileIndication]);
 
   // CT-scan upload state. We hold the File so the HrdCard's
   // RadiogenomicsCtPanel can re-POST it to the upload endpoint when the
@@ -153,12 +175,33 @@ export default function BuildPage() {
             <div className="h-px max-w-xs mx-auto bg-gradient-to-r from-transparent via-amber-500 to-transparent" />
           </div>
 
-          <StepCard n={1} title="Pick a medication">
+          <StepCard
+            n={1}
+            title="Create your profile"
+            subtitle="Optional. Adds your cancer type so the clinical evidence agent frames its summary for your disease."
+          >
+            <ProfileCreator
+              activeName={profileName}
+              activeIndication={profileIndication}
+              onCreated={(p) => {
+                setPatientId(p.id);
+                setProfileName(p.name);
+                setProfileIndication(p.indication);
+              }}
+              onClear={() => {
+                setProfileName(null);
+                setProfileIndication(null);
+                setPatientId("maya");
+              }}
+            />
+          </StepCard>
+
+          <StepCard n={2} title="Pick a medication">
             <DrugPickerSection form={form} />
           </StepCard>
 
           <StepCard
-            n={2}
+            n={3}
             title="Upload your data"
             subtitle="Optional. Skip if you already know which variants to pick."
           >
@@ -198,7 +241,7 @@ export default function BuildPage() {
             </div>
           </StepCard>
 
-          <StepCard n={3} title="Select your variants">
+          <StepCard n={4} title="Select your variants">
             <div className="space-y-5">
               <VariantPickerSection form={form} />
               <div className="pt-2 border-t">
@@ -226,6 +269,7 @@ export default function BuildPage() {
               result={result}
               onSwitchDrug={onSwitchDrug}
               uploadedCtScanUrl={ctScanSlideshowUrl}
+              indication={profileIndication}
             />
           </div>
         ) : null}
@@ -271,6 +315,142 @@ function StepNumber({ n }: { n: number }) {
     <span className="w-7 h-7 flex-shrink-0 rounded-full bg-primary text-primary-foreground text-sm font-semibold flex items-center justify-center">
       {n}
     </span>
+  );
+}
+
+/**
+ * Lightweight profile-creation form. POSTs to /api/patients with a
+ * slugified id derived from the user's name + a timestamp suffix so the
+ * id stays unique across sessions. The created patient becomes the
+ * upload target for subsequent file uploads on this page, and the
+ * cancer-type field is forwarded as `indication` to the variant-evidence
+ * agent so its synthesis is framed for the correct disease.
+ */
+function ProfileCreator({
+  activeName,
+  activeIndication,
+  onCreated,
+  onClear,
+}: {
+  activeName: string | null;
+  activeIndication: string | null;
+  onCreated: (p: { id: string; name: string; indication: string }) => void;
+  onClear: () => void;
+}) {
+  const [name, setName] = useState("");
+  const [age, setAge] = useState("");
+  const [indication, setIndication] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  if (activeName) {
+    return (
+      <div className="rounded-xl border bg-amber-50/60 border-amber-200 p-4 flex items-center justify-between gap-3 flex-wrap">
+        <div className="text-sm leading-snug">
+          <div className="font-medium">{activeName}</div>
+          {activeIndication ? (
+            <div className="text-xs text-muted-foreground">
+              Cancer type: {activeIndication}
+            </div>
+          ) : null}
+        </div>
+        <button
+          type="button"
+          onClick={onClear}
+          className="text-xs text-muted-foreground hover:text-foreground underline"
+        >
+          Clear profile
+        </button>
+      </div>
+    );
+  }
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setErr(null);
+    const trimmedName = name.trim();
+    const trimmedInd = indication.trim();
+    const ageNum = Number(age);
+    if (!trimmedName || !trimmedInd || !Number.isFinite(ageNum)) {
+      setErr("Name, age, and cancer type are all required.");
+      return;
+    }
+    const slug = trimmedName
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 32) || "patient";
+    const id = `${slug}-${Date.now().toString(36)}`;
+    setSubmitting(true);
+    try {
+      const created = await api.createPatient({
+        id,
+        name: trimmedName,
+        age: ageNum,
+        indication: trimmedInd,
+      });
+      onCreated({ id: created.id, name: created.name, indication: created.indication });
+      setName("");
+      setAge("");
+      setIndication("");
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Could not create profile");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <form onSubmit={onSubmit} className="space-y-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <label className="text-sm space-y-1">
+          <span className="text-xs uppercase tracking-wide text-muted-foreground font-semibold">
+            Name
+          </span>
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="e.g. Anna"
+            className="w-full rounded-lg border px-3 py-2 text-sm"
+          />
+        </label>
+        <label className="text-sm space-y-1">
+          <span className="text-xs uppercase tracking-wide text-muted-foreground font-semibold">
+            Age
+          </span>
+          <input
+            type="number"
+            min={0}
+            max={130}
+            value={age}
+            onChange={(e) => setAge(e.target.value)}
+            placeholder="e.g. 54"
+            className="w-full rounded-lg border px-3 py-2 text-sm"
+          />
+        </label>
+      </div>
+      <label className="text-sm space-y-1 block">
+        <span className="text-xs uppercase tracking-wide text-muted-foreground font-semibold">
+          Cancer type
+        </span>
+        <input
+          type="text"
+          value={indication}
+          onChange={(e) => setIndication(e.target.value)}
+          placeholder="e.g. Stage III ovarian cancer"
+          className="w-full rounded-lg border px-3 py-2 text-sm"
+        />
+      </label>
+      {err ? <p className="text-xs text-red-600">{err}</p> : null}
+      <button
+        type="submit"
+        disabled={submitting}
+        className="rounded-lg bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:opacity-90 disabled:opacity-60"
+      >
+        {submitting ? "Saving…" : "Save profile"}
+      </button>
+    </form>
   );
 }
 
