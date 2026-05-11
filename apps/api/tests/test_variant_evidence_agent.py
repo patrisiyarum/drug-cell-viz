@@ -96,7 +96,12 @@ async def test_agent_runs_end_to_end_with_stub_synthesis(monkeypatch):
     assert "clinvar" in result["tool_calls_succeeded"]
     assert "openfda" in result["tool_calls_succeeded"]
     # The summary mentions ClinVar's pathogenic call (from the stub).
-    assert "Pathogenic" in result["summary"]
+    # The stub now translates "pathogenic" -> "harmful" for the patient,
+    # so the assertion checks for the translated phrasing instead of the
+    # raw clinical term, plus the source attribution.
+    summary = result["summary"]
+    assert "ClinVar" in summary
+    assert "harmful" in summary.lower()
     # The summary mentions FDA-approved drugs.
     assert "olaparib" in result["summary"].lower()
     # Constrained-by-prompt disclosure is in the response.
