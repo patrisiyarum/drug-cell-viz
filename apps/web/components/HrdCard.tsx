@@ -1141,68 +1141,63 @@ function VariantEvidenceAgentBody({
   ];
 
   return (
-    <div className="space-y-4">
-      {/* Pathogenicity prose — the main paragraph the patient reads. */}
+    <div className="space-y-3">
+      {/* Headline: the one sentence the patient should walk away with. */}
       {r.pathogenicity ? (
-        <p className="text-sm leading-relaxed text-foreground">
+        <p className="text-base font-medium leading-snug text-foreground">
           {r.pathogenicity}
         </p>
       ) : null}
 
-      {/* FDA-approved drugs — rendered as a real list with one drug per
-          row. Each row: brand + generic + indication. Easier to scan
-          than a comma-separated paragraph. */}
+      {/* Rarity sits as a quiet caption right under the headline so it
+          reads as one thought ("...harmful. Very rare in gnomAD.") */}
+      {r.rarity ? (
+        <p className="text-xs text-muted-foreground leading-snug">
+          {r.rarity}
+        </p>
+      ) : null}
+
+      {/* Drug list — visually distinct from the prose. Compact rows,
+          one drug per line: bold generic, lighter brand, very short
+          indication. */}
       {r.drugs.length > 0 ? (
-        <div className="space-y-2">
-          <h5 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            FDA-approved drugs
+        <div className="space-y-1.5">
+          <h5 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            FDA-approved
           </h5>
-          <ul className="space-y-2">
+          <ul className="divide-y rounded-lg border bg-white">
             {r.drugs.map((d) => (
-              <li
-                key={d.generic}
-                className="rounded-lg border bg-white px-3 py-2 text-sm"
-              >
+              <li key={d.generic} className="px-3 py-2 text-sm">
                 <div className="flex items-baseline gap-2 flex-wrap">
                   <span className="font-semibold capitalize">{d.generic}</span>
                   {d.brand ? (
-                    <span className="text-xs text-muted-foreground">
-                      ({d.brand})
+                    <span className="text-[11px] text-muted-foreground">
+                      {d.brand}
+                    </span>
+                  ) : null}
+                  {d.indication ? (
+                    <span className="text-[11px] text-muted-foreground">
+                      · {d.indication}
                     </span>
                   ) : null}
                 </div>
-                {d.indication ? (
-                  <p className="text-xs text-muted-foreground leading-relaxed mt-0.5">
-                    {d.indication}
-                  </p>
-                ) : null}
               </li>
             ))}
           </ul>
         </div>
       ) : null}
 
-      {/* Rarity — only shown when gnomAD returned useful data. */}
-      {r.rarity ? (
-        <p className="text-xs text-muted-foreground leading-relaxed italic">
-          {r.rarity}
-        </p>
-      ) : null}
-
-      {/* Source-status row: at-a-glance picture of what contributed. */}
-      <div className="flex flex-wrap gap-1.5">
-        {sourceMeta.map((s) => (
-          <SourcePill key={s.key} label={s.label} status={s.status} />
-        ))}
+      {/* Sources + provenance collapsed into one quiet row. */}
+      <div className="flex items-center justify-between gap-2 flex-wrap pt-1">
+        <div className="flex flex-wrap gap-1">
+          {sourceMeta.map((s) => (
+            <SourcePill key={s.key} label={s.label} status={s.status} />
+          ))}
+        </div>
+        <span className="text-[10px] text-muted-foreground italic">
+          {r.model.startsWith("claude") ? "Claude" : r.model} · {(r.duration_ms / 1000).toFixed(1)}s
+        </span>
       </div>
-
-      {/* Footer: how the summary was generated. */}
-      <p className="text-[11px] text-muted-foreground italic leading-snug">
-        Summary written by {r.model.startsWith("claude") ? "Claude" : r.model},
-        constrained to formatting retrieved evidence rather than generating
-        new clinical claims. Generated in {(r.duration_ms / 1000).toFixed(1)}s.
-      </p>
-
     </div>
   );
 }
