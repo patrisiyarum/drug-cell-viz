@@ -239,18 +239,17 @@ export function HrdCard({
   // the scar tile (needs a tumor scar report) and the CT tile (needs a
   // CT scan upload). Demo patients have these uploads in their profile,
   // so all three tiles still light up for Maya / Diana / Priya.
-  const hasVcf = !!recordRefs.vcfFilename;
   const hasScarData = !!recordRefs.reportFilename || !!scarPrefill;
 
   const tiles: React.ReactNode[] = [];
-  if (classifiableBrca1Variants.length > 0 && hasVcf) {
+  if (classifiableBrca1Variants.length > 0) {
     tiles.push(
       <LabTile
         key="ml"
         title="DNA-repair classifier"
         tests="Tests whether your variant breaks BRCA1's repair function."
         icon={<FlaskConical className="w-4 h-4" aria-hidden />}
-        recordLabel={recordRefs.vcfFilename}
+        recordLabel={recordRefs.vcfFilename ?? "your selected variant"}
       >
         <Brca1ClassifierBody hgvsList={classifiableBrca1Variants} />
       </LabTile>,
