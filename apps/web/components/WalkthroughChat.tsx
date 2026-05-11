@@ -443,7 +443,11 @@ function serializeLabResults(lab: LabResultsState): Record<string, unknown> {
   if (lab.scar) {
     out.tumor_scar_score = {
       label: lab.scar.label,
-      score: lab.scar.score,
+      hrd_sum: lab.scar.hrd_sum,
+      loh: lab.scar.loh,
+      lst: lab.scar.lst,
+      ntai: lab.scar.ntai,
+      interpretation: lab.scar.interpretation,
     };
   }
   if (lab.hrdetect) {
