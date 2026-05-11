@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 
 import { Brca1FunctionCard } from "./Brca1FunctionCard";
+import { useLabResultsWriter } from "./LabResultsContext";
 import {
   api,
   type CtScanResponse,
@@ -693,6 +694,7 @@ function TumorScarBody({
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<HrdScarResponse | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const writer = useLabResultsWriter();
 
   useEffect(() => {
     if (!prefill) return;
@@ -704,7 +706,10 @@ function TumorScarBody({
       setRunning(true);
       try {
         const resp = await api.scoreHrdScars(prefill);
-        if (!cancelled) setResult(resp);
+        if (!cancelled) {
+          setResult(resp);
+          writer?.setScar(resp);
+        }
       } catch (e) {
         if (!cancelled)
           setErr(e instanceof Error ? e.message : "scoring failed");
@@ -729,6 +734,7 @@ function TumorScarBody({
         ntai: Number(ntai),
       });
       setResult(resp);
+      writer?.setScar(resp);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "scoring failed");
     } finally {
@@ -842,6 +848,7 @@ function RadiogenomicsCtPanelBody({
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<CtScanResponse | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const writer = useLabResultsWriter();
 
   // Auto-run on mount so the CT tile reaches the same "result-shown" state
   // as the BRCA1 + scar tiles without an extra click. Same fetch + upload
@@ -857,7 +864,10 @@ function RadiogenomicsCtPanelBody({
         const name = ctScanUrl.split("/").pop() ?? "ct_scan.nii.gz";
         const file = new File([blob], name, { type: "application/gzip" });
         const out = await api.uploadCtScan(file);
-        if (!cancelled) setResult(out);
+        if (!cancelled) {
+          setResult(out);
+          writer?.setCt(out);
+        }
       } catch (e) {
         if (!cancelled)
           setErr(e instanceof Error ? e.message : "CT upload failed");
@@ -868,6 +878,9 @@ function RadiogenomicsCtPanelBody({
     return () => {
       cancelled = true;
     };
+    // writer is stable from context, intentionally not in deps so a
+    // re-render doesn't refetch the CT scan.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ctScanUrl]);
 
   return (
@@ -976,11 +989,37 @@ function Brca1ClassifierBody({ hgvsList }: { hgvsList: string[] }) {
     <div className="flex-1 flex flex-col justify-end min-h-[5rem]">
       <div className="space-y-3">
         {hgvsList.map((hgvs) => (
-          <Brca1FunctionCard key={hgvs} hgvsProtein={hgvs} />
+          <div key={hgvs}>
+            <Brca1ResultPublisher hgvsProtein={hgvs} />
+            <Brca1FunctionCard hgvsProtein={hgvs} />
+          </div>
         ))}
       </div>
     </div>
   );
+}
+
+/**
+ * Headless adapter that re-runs the same React-Query call the
+ * Brca1FunctionCard uses (the cache is shared by query key) and writes
+ * the result into the LabResultsContext as soon as it's available.
+ * Renders nothing — purely a side-effect bridge from React Query into
+ * the lab-results context the chat reads from.
+ */
+function Brca1ResultPublisher({ hgvsProtein }: { hgvsProtein: string }) {
+  const writer = useLabResultsWriter();
+  const q = useQuery({
+    queryKey: ["brca1", hgvsProtein],
+    queryFn: () => api.classifyBrca1(hgvsProtein),
+    retry: 1,
+  });
+  useEffect(() => {
+    if (q.data) writer?.setBrca1(hgvsProtein, q.data);
+    // No cleanup-on-unmount — the chat may still want to reference the
+    // last result even if the lab tab gets re-mounted.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q.data, hgvsProtein]);
+  return null;
 }
 
 /**
@@ -995,6 +1034,7 @@ function HrdetectBody() {
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<HRDetectResponse | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const writer = useLabResultsWriter();
 
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
@@ -1005,6 +1045,7 @@ function HrdetectBody() {
     try {
       const resp = await api.scoreHrdetectVcf(f);
       setResult(resp);
+      writer?.setHrdetect(resp);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "HRDetect failed");
     } finally {

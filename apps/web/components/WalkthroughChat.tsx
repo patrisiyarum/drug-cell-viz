@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { MessageCircle, Send, Volume2, VolumeX, X } from "lucide-react";
 
 import { api } from "@/lib/api";
+import { useLabResults, type LabResultsState } from "./LabResultsContext";
 import type { AnalysisResult, DemoPatient } from "@/lib/bc-types";
 
 interface ChatMessage {
@@ -64,8 +65,9 @@ export function WalkthroughChat({
 
   const effectiveIndication = indication ?? patient?.indication ?? null;
   const name = patientLabel ?? patient?.persona_name ?? null;
+  const labResults = useLabResults();
 
-  const context = buildContext(result, effectiveIndication, name);
+  const context = buildContext(result, effectiveIndication, name, labResults);
 
   async function send(text: string) {
     const trimmed = text.trim();
@@ -386,12 +388,15 @@ function SpeakButton({ text }: { text: string }) {
  * Pull the analysis context Claude needs into a JSON-friendly object.
  * We deliberately drop heavy/unstructured fields (e.g. raw PDB blobs)
  * and keep the things that matter for explaining results: the verdict,
- * the variants, the suggested drugs, and the patient's cancer type.
+ * the variants, the suggested drugs, the patient's cancer type, and
+ * whatever lab tiles have actually run so far (CT model, scar score,
+ * HRDetect, BRCA1 classifier).
  */
 function buildContext(
   result: AnalysisResult,
   indication: string | null,
   name: string | null,
+  lab: LabResultsState,
 ): Record<string, unknown> {
   return {
     patient_name: name,
@@ -414,5 +419,51 @@ function buildContext(
     off_target_genes: (result.off_target_structures ?? []).map(
       (s) => s.gene_symbol,
     ),
+    lab_results: serializeLabResults(lab),
   };
+}
+
+/**
+ * Compact projection of the lab tiles' actual outputs. Only includes
+ * tiles that have produced a result so the agent can tell the
+ * difference between "tile didn't run" and "tile ran and the answer
+ * was X." Field names match how the user sees them in the UI so the
+ * model's prose lines up with the patient's screen.
+ */
+function serializeLabResults(lab: LabResultsState): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (lab.ct) {
+    out.ct_imaging_model = {
+      label: lab.ct.label,
+      hrd_probability: lab.ct.hrd_probability,
+      confidence: lab.ct.confidence,
+      caveats: lab.ct.caveats,
+    };
+  }
+  if (lab.scar) {
+    out.tumor_scar_score = {
+      label: lab.scar.label,
+      score: lab.scar.score,
+    };
+  }
+  if (lab.hrdetect) {
+    out.hrdetect = {
+      label: lab.hrdetect.label,
+      probability: lab.hrdetect.probability,
+      feature_source: lab.hrdetect.feature_source,
+      features: lab.hrdetect.features,
+      caveats: lab.hrdetect.caveats,
+    };
+  }
+  const brca1Entries = Object.entries(lab.brca1);
+  if (brca1Entries.length > 0) {
+    out.brca1_dna_repair_classifier = brca1Entries.map(([hgvs, c]) => ({
+      hgvs_protein: hgvs,
+      label: c.label,
+      probability_loss_of_function: c.probability_loss_of_function,
+      confidence: c.confidence,
+      domain: c.domain,
+    }));
+  }
+  return out;
 }

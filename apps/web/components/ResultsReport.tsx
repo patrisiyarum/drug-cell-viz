@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 
 import { HrdCard, type RecordRefs } from "./HrdCard";
+import { LabResultsProvider } from "./LabResultsContext";
 import { MolViewer } from "./MolViewer";
 import { VolumeViewer } from "./VolumeViewer";
 import { WalkthroughChat } from "./WalkthroughChat";
@@ -90,6 +91,7 @@ export function ResultsReport({
         : null;
 
   return (
+    <LabResultsProvider>
     <div className="space-y-6">
       {result.relevance_warning ? (
         <RelevanceWarning
@@ -138,6 +140,7 @@ export function ResultsReport({
         patientLabel={patient?.persona_name ?? null}
       />
     </div>
+    </LabResultsProvider>
   );
 }
 
