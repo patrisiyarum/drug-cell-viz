@@ -166,14 +166,29 @@ export default function BuildPage() {
       <main className="flex-1 px-6 md:px-8 py-12 md:py-16">
         <div className="max-w-3xl mx-auto space-y-6">
           <div className="space-y-3 text-center">
-            <h1 className="text-3xl md:text-4xl font-semibold">
-              See how your medication works with your cancer
+            <h1 className="text-3xl md:text-4xl font-semibold tracking-tight">
+              Build your{" "}
+              <span
+                className="bg-clip-text text-transparent"
+                style={{
+                  backgroundImage:
+                    "linear-gradient(120deg, #b45309 0%, #ea580c 35%, #be185d 100%)",
+                }}
+              >
+                personal report
+              </span>
             </h1>
-            <p className="text-muted-foreground text-sm">
-              Built for women with ovarian, breast, or gynecologic cancers.
-              Create a profile, pick a drug, share what we have, and read the report.
+            <p className="text-muted-foreground text-sm max-w-md mx-auto leading-relaxed">
+              Tell us a little about yourself, pick a medication, and share
+              what data you have. We&apos;ll explain the rest in plain language.
             </p>
-            <div className="h-px max-w-xs mx-auto bg-gradient-to-r from-transparent via-amber-500 to-transparent" />
+            <div
+              className="h-[2px] max-w-xs mx-auto rounded-full"
+              style={{
+                backgroundImage:
+                  "linear-gradient(90deg, transparent 0%, #f59e0b 30%, #ec4899 70%, transparent 100%)",
+              }}
+            />
           </div>
 
           <StepCard

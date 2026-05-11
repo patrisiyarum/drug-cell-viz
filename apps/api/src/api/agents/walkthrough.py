@@ -24,6 +24,7 @@ have very different jobs:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -31,6 +32,15 @@ import time
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+
+# Transient Anthropic errors that should trigger a retry rather than be
+# surfaced as a hard chat failure. 529 ("Overloaded") happens during
+# capacity spikes on Anthropic's side; 429 is our rate limit. Both
+# typically clear within a few seconds.
+RETRYABLE_STATUS_CODES = {429, 503, 529}
+MAX_RETRIES = 3
+INITIAL_BACKOFF_SECONDS = 1.5
 
 CLAUDE_MODEL = "claude-opus-4-7"
 CLAUDE_TIMEOUT_SECONDS = 60.0
@@ -195,21 +205,45 @@ async def reply(
     ]
 
     client = anthropic.AsyncAnthropic(api_key=api_key, timeout=CLAUDE_TIMEOUT_SECONDS)
-    try:
-        msg = await client.messages.create(
-            model=CLAUDE_MODEL,
-            max_tokens=MAX_TOKENS,
-            system=system,
-            tools=tools,
-            messages=messages,
+
+    # Retry transient overloaded / rate-limit errors with exponential
+    # backoff. Anthropic returns 529 ("Overloaded") during capacity
+    # spikes; retrying after a short pause is the documented mitigation.
+    msg = None
+    last_exc: Exception | None = None
+    for attempt in range(MAX_RETRIES):
+        try:
+            msg = await client.messages.create(
+                model=CLAUDE_MODEL,
+                max_tokens=MAX_TOKENS,
+                system=system,
+                tools=tools,
+                messages=messages,
+            )
+            break
+        except Exception as exc:  # noqa: BLE001
+            last_exc = exc
+            status = getattr(exc, "status_code", None)
+            if status in RETRYABLE_STATUS_CODES and attempt < MAX_RETRIES - 1:
+                backoff = INITIAL_BACKOFF_SECONDS * (2**attempt)
+                logger.warning(
+                    "walkthrough chat got %s, retrying in %.1fs (attempt %d/%d)",
+                    status, backoff, attempt + 1, MAX_RETRIES,
+                )
+                await asyncio.sleep(backoff)
+                continue
+            logger.exception("walkthrough chat failed (no more retries)")
+            break
+
+    if msg is None:
+        status = getattr(last_exc, "status_code", None)
+        friendly = (
+            "Claude is briefly overloaded — try again in a few seconds."
+            if status == 529
+            else f"Something went wrong reaching the chat agent: {last_exc}. Try again in a moment."
         )
-    except Exception as exc:  # noqa: BLE001
-        logger.exception("walkthrough chat failed")
         return {
-            "reply": (
-                "Something went wrong reaching the chat agent: "
-                f"{exc}. Try again in a moment."
-            ),
+            "reply": friendly,
             "citations": [],
             "followups": [],
             "model": CLAUDE_MODEL,
