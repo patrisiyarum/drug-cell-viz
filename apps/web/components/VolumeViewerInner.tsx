@@ -39,6 +39,13 @@ export default function VolumeViewerInner({
       loadingText: "Loading CT volume",
       backColor: [0, 0, 0, 1],
       show3Dcrosshair: false,
+      // Hide niivue's 2D slice crosshair entirely — width=0 removes the
+      // red lines, transparent color is a belt-and-braces fallback in
+      // case a future niivue version draws on width=0. The slideshow
+      // shows a single fixed axial slice, so the dragable crosshair UI
+      // would just be a non-functional distraction.
+      crosshairWidth: 0,
+      crosshairColor: [0, 0, 0, 0],
       dragAndDropEnabled: false,
       isColorbar: false,
       isOrientCube: false,
