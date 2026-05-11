@@ -91,13 +91,13 @@ export function ResultsReport({
         />
       ) : null}
 
-      {/* Two equal columns side-by-side, each capped to the viewport so the
+      {/* Two equal columns side-by-side at a fixed viewport height so the
           page reads as one card on the left, one on the right with no
-          vertical scroll. The slideshow drives its own square aspect; the
-          right card matches that height and scrolls internally only if a
-          tab's contents overflow. */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8 lg:max-h-[calc(100vh-10rem)]">
-        <div className="no-print min-h-0">
+          vertical scroll. The grid row height is locked to the viewport
+          (not just capped) so the slideshow doesn't reflow as the right
+          card's async content (agent query) settles. */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8 lg:h-[calc(100vh-10rem)]">
+        <div className="no-print min-h-0 flex">
           <StructureSlideshow
             result={result}
             ctScanVolumeUrl={ctScanUrl}
@@ -228,11 +228,10 @@ function StructureSlideshow({
   };
 
   // Card fills its column on the no-scroll layout: full width, full
-  // height of the side-by-side grid (lg:max-h-[calc(100vh-10rem)]). On
-  // narrow screens it falls back to its natural square aspect so the
-  // viewer doesn't collapse to nothing.
+  // height of the locked grid row. On narrow screens it falls back to a
+  // square aspect so the viewer doesn't collapse to nothing.
   return (
-    <div className="bg-card rounded-2xl overflow-hidden border flex flex-col w-full aspect-square lg:aspect-auto lg:h-full">
+    <div className="bg-card rounded-2xl overflow-hidden border flex flex-col w-full min-h-0 aspect-square lg:aspect-auto lg:h-full lg:flex-1">
       {total > 1 ? (
         <div className="flex items-center gap-2 px-3 py-2 border-b bg-muted/40">
           <button
