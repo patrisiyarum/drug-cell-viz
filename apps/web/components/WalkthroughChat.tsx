@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { MessageCircle, Send, X } from "lucide-react";
+import { MessageCircle, Send, Volume2, VolumeX, X } from "lucide-react";
 
 import { api } from "@/lib/api";
 import type { AnalysisResult, DemoPatient } from "@/lib/bc-types";
@@ -10,6 +10,7 @@ interface ChatMessage {
   role: "user" | "assistant";
   content: string;
   citations?: { url: string; title: string }[];
+  followups?: string[];
 }
 
 interface Props {
@@ -88,6 +89,7 @@ export function WalkthroughChat({
           role: "assistant",
           content: resp.reply,
           citations: resp.citations,
+          followups: resp.followups,
         },
       ]);
     } catch (e) {
@@ -106,6 +108,28 @@ export function WalkthroughChat({
       );
     }
   }
+
+  // Built-in starter buttons shown before the user has said anything.
+  // Once the conversation has begun the model's own follow-up suggestions
+  // take over (rendered under the latest assistant message).
+  const STARTER_PROMPTS: { label: string; prompt: string }[] = [
+    {
+      label: "Walk me through this",
+      prompt: effectiveIndication
+        ? `I have ${effectiveIndication}. Walk me through what these results mean for me, and what I should ask my oncologist.`
+        : "Walk me through what these results mean and what I should ask my oncologist.",
+    },
+    {
+      label: "Explain my lab results",
+      prompt:
+        "Look at the lab results in my analysis (HRD score, CT model, scar score, BRCA classifier, HRDetect) and explain what each one is testing and what mine show in plain language.",
+    },
+    {
+      label: "What should I ask my doctor?",
+      prompt:
+        "Based on these results, what specific questions should I bring to my oncologist?",
+    },
+  ];
 
   if (!open) {
     return (
@@ -155,18 +179,32 @@ export function WalkthroughChat({
               cancer in plain English. Ask me anything — I can also look up
               current information on the web.
             </p>
-            <button
-              type="button"
-              onClick={startConversation}
-              className="text-sm rounded-lg border bg-amber-50 hover:bg-amber-100 border-amber-300 px-3 py-2"
-            >
-              Walk me through this
-            </button>
+            <div className="flex flex-col gap-2">
+              {STARTER_PROMPTS.map((s) => (
+                <button
+                  key={s.label}
+                  type="button"
+                  onClick={() => void send(s.prompt)}
+                  className="text-left text-sm rounded-lg border bg-amber-50 hover:bg-amber-100 border-amber-300 px-3 py-2"
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
           </div>
         ) : null}
 
         {messages.map((m, i) => (
-          <ChatBubble key={i} msg={m} />
+          <ChatBubble
+            key={i}
+            msg={m}
+            isLatestAssistant={
+              m.role === "assistant" &&
+              i === messages.length - 1 &&
+              !pending
+            }
+            onFollowupClick={(text) => void send(text)}
+          />
         ))}
         {pending ? (
           <div className="text-xs text-muted-foreground italic">Thinking…</div>
@@ -214,10 +252,18 @@ export function WalkthroughChat({
   );
 }
 
-function ChatBubble({ msg }: { msg: ChatMessage }) {
+function ChatBubble({
+  msg,
+  isLatestAssistant = false,
+  onFollowupClick,
+}: {
+  msg: ChatMessage;
+  isLatestAssistant?: boolean;
+  onFollowupClick?: (text: string) => void;
+}) {
   const isUser = msg.role === "user";
   return (
-    <div className={isUser ? "flex justify-end" : "flex justify-start"}>
+    <div className={isUser ? "flex justify-end" : "flex flex-col items-start gap-2"}>
       <div
         className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap ${
           isUser
@@ -244,8 +290,95 @@ function ChatBubble({ msg }: { msg: ChatMessage }) {
             ))}
           </div>
         ) : null}
+        {!isUser ? (
+          <div className="mt-2 pt-2 border-t border-current/10 flex justify-end">
+            <SpeakButton text={msg.content} />
+          </div>
+        ) : null}
       </div>
+      {/* Follow-up suggestion buttons — only on the latest assistant
+          turn, so the chat history doesn't get cluttered with stale
+          suggestions from earlier replies. */}
+      {!isUser && isLatestAssistant && msg.followups && msg.followups.length > 0 ? (
+        <div className="flex flex-col gap-1.5 max-w-[85%]">
+          <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
+            Suggested next
+          </div>
+          {msg.followups.map((q) => (
+            <button
+              key={q}
+              type="button"
+              onClick={() => onFollowupClick?.(q)}
+              className="text-left text-xs rounded-lg border bg-white hover:bg-amber-50 border-amber-200 px-3 py-1.5 leading-snug"
+            >
+              {q}
+            </button>
+          ))}
+        </div>
+      ) : null}
     </div>
+  );
+}
+
+/**
+ * Speak the assistant message aloud using the browser's native
+ * SpeechSynthesis API. No external service / API key required. Toggle:
+ * pressing while it's speaking cancels playback.
+ */
+function SpeakButton({ text }: { text: string }) {
+  const [speaking, setSpeaking] = useState(false);
+
+  // Browser SSR safety: only touch window in event handlers.
+  useEffect(() => {
+    return () => {
+      if (typeof window !== "undefined" && window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, []);
+
+  function toggle() {
+    if (typeof window === "undefined" || !window.speechSynthesis) return;
+    const synth = window.speechSynthesis;
+    if (speaking) {
+      synth.cancel();
+      setSpeaking(false);
+      return;
+    }
+    synth.cancel(); // stop anything else first
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.rate = 1.0;
+    utter.pitch = 1.0;
+    utter.onend = () => setSpeaking(false);
+    utter.onerror = () => setSpeaking(false);
+    synth.speak(utter);
+    setSpeaking(true);
+  }
+
+  // Hide the button entirely when the API isn't available (e.g. some
+  // mobile browsers), rather than showing a non-functional control.
+  if (typeof window !== "undefined" && !window.speechSynthesis) {
+    return null;
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={toggle}
+      className="inline-flex items-center gap-1 text-[10px] opacity-70 hover:opacity-100 transition-opacity"
+      aria-label={speaking ? "Stop speaking" : "Read this aloud"}
+      title={speaking ? "Stop" : "Read aloud"}
+    >
+      {speaking ? (
+        <>
+          <VolumeX className="w-3 h-3" aria-hidden /> Stop
+        </>
+      ) : (
+        <>
+          <Volume2 className="w-3 h-3" aria-hidden /> Listen
+        </>
+      )}
+    </button>
   );
 }
 

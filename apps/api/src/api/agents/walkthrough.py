@@ -32,7 +32,7 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-CLAUDE_MODEL = "claude-sonnet-4-5-20250929"
+CLAUDE_MODEL = "claude-opus-4-7"
 CLAUDE_TIMEOUT_SECONDS = 60.0
 MAX_TOKENS = 1500
 
@@ -70,7 +70,51 @@ Hard rules:
 If the patient asks about something outside her cancer (e.g. a different
 disease, a different drug class), politely note the tool is built for
 her female-specific cancer context and redirect.
+
+OUTPUT FORMAT — every reply must end with a follow-up block in this
+exact format on its own lines, with no trailing text after it:
+
+FOLLOWUPS:
+- <one short question she might want to ask next, <=12 words>
+- <a second short question, <=12 words>
+- <a third short question, <=12 words>
+
+The follow-ups should be concrete next questions tied to what you just
+said — not generic prompts. If you can only think of two good ones,
+return two. Never invent a topic outside her actual context to fill
+the slots. The block will be parsed out and rendered as buttons; do
+not number or punctuate the items differently.
 """
+
+FOLLOWUPS_MARKER = "FOLLOWUPS:"
+
+
+def _parse_followups(text: str) -> tuple[str, list[str]]:
+    """Split the model's text into (reply_without_block, followups list).
+
+    Looks for the literal "FOLLOWUPS:" marker at the start of a line.
+    Everything before becomes the visible reply; everything after is
+    parsed as a hyphenated list. Defensive: if the block is missing or
+    malformed we just return ([], full_text) so the user still sees the
+    reply.
+    """
+    if FOLLOWUPS_MARKER not in text:
+        return text.strip(), []
+    body, _, raw_block = text.partition(FOLLOWUPS_MARKER)
+    items: list[str] = []
+    for line in raw_block.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        # Strip leading "- ", "* ", or "1. " style markers.
+        if line.startswith(("-", "*", "•")):
+            line = line[1:].strip()
+        elif len(line) > 2 and line[0].isdigit() and line[1] in (".", ")"):
+            line = line[2:].strip()
+        if line:
+            items.append(line)
+    # Cap at 4 to keep the UI tidy.
+    return body.strip(), items[:4]
 
 
 def _format_context(context: dict[str, Any]) -> str:
@@ -115,6 +159,7 @@ async def reply(
                 "and answer your questions."
             ),
             "citations": [],
+            "followups": [],
             "model": "stub",
             "duration_ms": int((time.time() - t0) * 1000),
         }
@@ -155,6 +200,7 @@ async def reply(
                 f"{exc}. Try again in a moment."
             ),
             "citations": [],
+            "followups": [],
             "model": CLAUDE_MODEL,
             "duration_ms": int((time.time() - t0) * 1000),
         }
@@ -183,9 +229,13 @@ async def reply(
         seen.add(c["url"])
         unique_citations.append(c)
 
+    full_text = "".join(reply_parts)
+    visible_reply, followups = _parse_followups(full_text)
+
     return {
-        "reply": "".join(reply_parts).strip(),
+        "reply": visible_reply,
         "citations": unique_citations,
+        "followups": followups,
         "model": CLAUDE_MODEL,
         "duration_ms": int((time.time() - t0) * 1000),
     }

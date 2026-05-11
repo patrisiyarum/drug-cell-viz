@@ -133,6 +133,7 @@ class Citation(BaseModel):
 class WalkthroughResponse(BaseModel):
     reply: str
     citations: list[Citation] = []
+    followups: list[str] = []
     model: str
     duration_ms: int
 

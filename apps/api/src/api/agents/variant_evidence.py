@@ -56,7 +56,7 @@ from api.agents.tools import clinvar, gnomad, openfda
 
 logger = logging.getLogger(__name__)
 
-CLAUDE_MODEL = "claude-sonnet-4-5-20250929"
+CLAUDE_MODEL = "claude-opus-4-7"
 CLAUDE_TIMEOUT_SECONDS = 30.0
 
 SYSTEM_PROMPT = """\

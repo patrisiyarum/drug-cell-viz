@@ -314,6 +314,7 @@ export interface HRDetectResponse {
 export interface WalkthroughResponse {
   reply: string;
   citations: { url: string; title: string }[];
+  followups: string[];
   model: string;
   duration_ms: number;
 }
