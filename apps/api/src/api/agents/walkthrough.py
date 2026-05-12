@@ -1,7 +1,7 @@
 """Conversational walkthrough agent.
 
-Talks the patient through their pharmacogenomic analysis results in
-plain English. Has access to:
+Talks the patient through her pharmacogenomic analysis results in plain
+English. Has access to:
     - The structured analysis result (HRD score + label, drug + target,
       variants, patient indication, lab tile outputs the frontend has
       already computed).
@@ -9,10 +9,25 @@ plain English. Has access to:
       information (e.g. recent guideline changes, ongoing trials) and
       cite the source URLs back to the patient.
 
-This agent is multi-turn: the frontend persists the message history
-client-side and re-sends it on every turn. The system prompt is locked
-to a "explain, don't prescribe" stance and tells Claude to cite the
-analysis context when it can rather than re-searching for known facts.
+Implemented as a LangGraph state machine so the per-turn pipeline is
+explicit and extensible:
+
+    START
+      |
+      v
+    build_context        — assembles the system prompt + context JSON
+      |
+      v
+    call_claude          — invokes Anthropic with the web_search tool,
+      |                    retries transient 5xx/529 with exp backoff
+      v
+    parse_response       — splits the FOLLOWUPS block out of the text
+      |                    and dedupes web_search citations
+      v
+    END
+
+Adding a new step later (custom tool node, indication-router, etc.)
+just means wiring another node into the graph — see build_graph().
 
 We keep this agent separate from `variant_evidence` because the two
 have very different jobs:
@@ -29,7 +44,9 @@ import json
 import logging
 import os
 import time
-from typing import Any
+from typing import Any, TypedDict
+
+from langgraph.graph import END, START, StateGraph
 
 logger = logging.getLogger(__name__)
 
@@ -110,92 +127,89 @@ not number or punctuate the items differently.
 FOLLOWUPS_MARKER = "FOLLOWUPS:"
 
 
-def _parse_followups(text: str) -> tuple[str, list[str]]:
-    """Split the model's text into (reply_without_block, followups list).
+# ----------------------------------------------------------------------
+# State definition
+# ----------------------------------------------------------------------
 
-    Looks for the literal "FOLLOWUPS:" marker at the start of a line.
-    Everything before becomes the visible reply; everything after is
-    parsed as a hyphenated list. Defensive: if the block is missing or
-    malformed we just return ([], full_text) so the user still sees the
-    reply.
+
+class WalkthroughState(TypedDict, total=False):
+    """LangGraph state for one turn of the chat.
+
+    Inputs (set before invoke):
+        messages: chat history (latest user turn last).
+        context: structured analysis context (drug, HRD, lab_results, ...).
+
+    Mutated through the graph:
+        system_prompt: SYSTEM_PROMPT + the context JSON.
+        raw_text: Claude's full assistant text BEFORE follow-up parsing.
+        citations: web_search citations extracted from Claude's blocks.
+        reply: visible text after the FOLLOWUPS block is stripped.
+        followups: parsed list of suggested next questions.
+        model: model id used (or "stub" when API key missing).
+        duration_ms: wall-clock for the turn.
+        error: human-readable error string when the turn could not be
+            completed; takes the place of `reply` in the response.
     """
-    if FOLLOWUPS_MARKER not in text:
-        return text.strip(), []
-    body, _, raw_block = text.partition(FOLLOWUPS_MARKER)
-    items: list[str] = []
-    for line in raw_block.splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        # Strip leading "- ", "* ", or "1. " style markers.
-        if line.startswith(("-", "*", "•")):
-            line = line[1:].strip()
-        elif len(line) > 2 and line[0].isdigit() and line[1] in (".", ")"):
-            line = line[2:].strip()
-        if line:
-            items.append(line)
-    # Cap at 4 to keep the UI tidy.
-    return body.strip(), items[:4]
+
+    messages: list[dict[str, str]]
+    context: dict[str, Any]
+
+    system_prompt: str
+    raw_text: str
+    citations: list[dict[str, str]]
+    reply: str
+    followups: list[str]
+    model: str
+    duration_ms: int
+    error: str
+    _start_time: float
 
 
-def _format_context(context: dict[str, Any]) -> str:
-    """Serialize the analysis context into a compact JSON block the
-    model can read without us having to flatten it into prose."""
-    return json.dumps(context, indent=2, default=str)
+# ----------------------------------------------------------------------
+# Nodes
+# ----------------------------------------------------------------------
 
 
-async def reply(
-    messages: list[dict[str, str]],
-    context: dict[str, Any],
-) -> dict[str, Any]:
-    """Run one turn of the walkthrough conversation.
+def build_context(state: WalkthroughState) -> dict[str, Any]:
+    """Assemble the system prompt: base instructions + analysis JSON.
 
-    Args:
-        messages: chat history. Each entry is {"role": "user"|"assistant",
-            "content": str}. The latest user message is the prompt
-            being responded to; everything before it is history.
-        context: structured analysis result + indication. Passed verbatim
-            into the system prompt as JSON so the model has the full
-            picture without needing tool calls to retrieve it.
-
-    Returns:
-        {
-            "reply": str,            # assistant's text response
-            "citations": [{url, title}, ...],  # web_search citations
-            "model": str,            # the model id used
-            "duration_ms": int,
-        }
-
-    Falls back to a stub response if ANTHROPIC_API_KEY is missing so the
-    UI still works in dev / offline.
+    Pure transformation — no I/O. Keeps the prompt-construction logic
+    inspectable as a discrete graph step instead of inlined into the
+    LLM call.
     """
-    t0 = time.time()
+    context_json = json.dumps(state.get("context", {}), indent=2, default=str)
+    return {
+        "system_prompt": (
+            SYSTEM_PROMPT + "\n\n--- ANALYSIS CONTEXT (JSON) ---\n" + context_json
+        ),
+        "_start_time": time.time(),
+    }
+
+
+async def call_claude(state: WalkthroughState) -> dict[str, Any]:
+    """Call Anthropic with the web_search tool and retry transient errors.
+
+    Returns either {raw_text, citations, model} on success or {error}
+    on terminal failure. Parsing of follow-ups happens in the next node.
+    """
     api_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
     if not api_key:
         return {
-            "reply": (
+            "raw_text": "",
+            "citations": [],
+            "model": "stub",
+            "error": (
                 "The chat agent is offline because no ANTHROPIC_API_KEY "
                 "is set on this server. Once it's configured, this is "
                 "where I'd walk you through your results in plain English "
                 "and answer your questions."
             ),
-            "citations": [],
-            "followups": [],
-            "model": "stub",
-            "duration_ms": int((time.time() - t0) * 1000),
         }
 
     import anthropic
 
-    system = (
-        SYSTEM_PROMPT
-        + "\n\n--- ANALYSIS CONTEXT (JSON) ---\n"
-        + _format_context(context)
-    )
-
-    # Anthropic's native web_search server-side tool. The `max_uses`
-    # cap keeps a chatty model from burning the API budget on trivial
-    # questions; if it needs more it can ask the user to be specific.
+    # Anthropic's native server-side web_search tool. max_uses keeps a
+    # chatty model from burning the API budget on trivial questions.
     tools = [
         {
             "type": "web_search_20250305",
@@ -206,9 +220,6 @@ async def reply(
 
     client = anthropic.AsyncAnthropic(api_key=api_key, timeout=CLAUDE_TIMEOUT_SECONDS)
 
-    # Retry transient overloaded / rate-limit errors with exponential
-    # backoff. Anthropic returns 529 ("Overloaded") during capacity
-    # spikes; retrying after a short pause is the documented mitigation.
     msg = None
     last_exc: Exception | None = None
     for attempt in range(MAX_RETRIES):
@@ -216,9 +227,9 @@ async def reply(
             msg = await client.messages.create(
                 model=CLAUDE_MODEL,
                 max_tokens=MAX_TOKENS,
-                system=system,
+                system=state["system_prompt"],
                 tools=tools,
-                messages=messages,
+                messages=state["messages"],
             )
             break
         except Exception as exc:  # noqa: BLE001
@@ -243,27 +254,26 @@ async def reply(
             else f"Something went wrong reaching the chat agent: {last_exc}. Try again in a moment."
         )
         return {
-            "reply": friendly,
+            "raw_text": "",
             "citations": [],
-            "followups": [],
             "model": CLAUDE_MODEL,
-            "duration_ms": int((time.time() - t0) * 1000),
+            "error": friendly,
         }
 
-    # Extract the assistant's text and any web-search citations the
-    # model attached. The web_search tool emits citation objects inside
-    # text blocks when it grounds a sentence on a source.
-    reply_parts: list[str] = []
+    # Pull every text block + each block's web_search citations. The
+    # web_search server-side tool emits citation objects inside text
+    # blocks when it grounds a sentence on a source.
+    text_parts: list[str] = []
     citations: list[dict[str, str]] = []
     for block in msg.content:
-        block_type = getattr(block, "type", None)
-        if block_type == "text":
-            reply_parts.append(getattr(block, "text", ""))
-            for cite in getattr(block, "citations", None) or []:
-                url = getattr(cite, "url", None)
-                title = getattr(cite, "title", None) or url
-                if url:
-                    citations.append({"url": url, "title": title})
+        if getattr(block, "type", None) != "text":
+            continue
+        text_parts.append(getattr(block, "text", ""))
+        for cite in getattr(block, "citations", None) or []:
+            url = getattr(cite, "url", None)
+            title = getattr(cite, "title", None) or url
+            if url:
+                citations.append({"url": url, "title": title})
 
     # Dedupe citations by URL while preserving order.
     seen: set[str] = set()
@@ -274,13 +284,137 @@ async def reply(
         seen.add(c["url"])
         unique_citations.append(c)
 
-    full_text = "".join(reply_parts)
-    visible_reply, followups = _parse_followups(full_text)
-
     return {
-        "reply": visible_reply,
+        "raw_text": "".join(text_parts),
         "citations": unique_citations,
-        "followups": followups,
         "model": CLAUDE_MODEL,
+    }
+
+
+def parse_response(state: WalkthroughState) -> dict[str, Any]:
+    """Split the FOLLOWUPS block out of the raw text. Pure transformation.
+
+    If the model didn't include a FOLLOWUPS block, `followups` ends up
+    empty and the entire raw text becomes the visible reply. If an
+    earlier node populated `error`, we surface that as the reply.
+    """
+    t0 = state.get("_start_time", time.time())
+    if state.get("error"):
+        return {
+            "reply": state["error"],
+            "followups": [],
+            "duration_ms": int((time.time() - t0) * 1000),
+        }
+
+    raw = state.get("raw_text", "")
+    visible, followups = _parse_followups(raw)
+    return {
+        "reply": visible,
+        "followups": followups,
         "duration_ms": int((time.time() - t0) * 1000),
+    }
+
+
+def _parse_followups(text: str) -> tuple[str, list[str]]:
+    """Split the model's text into (reply_without_block, followups list).
+
+    Looks for the literal "FOLLOWUPS:" marker. Everything before becomes
+    the visible reply; everything after is parsed as a hyphenated list.
+    Defensive: if the block is missing or malformed we just return the
+    full text + empty list so the user still sees the reply.
+    """
+    if FOLLOWUPS_MARKER not in text:
+        return text.strip(), []
+    body, _, raw_block = text.partition(FOLLOWUPS_MARKER)
+    items: list[str] = []
+    for line in raw_block.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        if line.startswith(("-", "*", "•")):
+            line = line[1:].strip()
+        elif len(line) > 2 and line[0].isdigit() and line[1] in (".", ")"):
+            line = line[2:].strip()
+        if line:
+            items.append(line)
+    return body.strip(), items[:4]
+
+
+# ----------------------------------------------------------------------
+# Graph wiring
+# ----------------------------------------------------------------------
+
+
+def build_graph() -> Any:
+    """Compile the linear LangGraph pipeline.
+
+    START -> build_context -> call_claude -> parse_response -> END.
+
+    The graph is intentionally shallow today — the value of using
+    LangGraph here is making each stage swappable. To add e.g. an
+    indication-router node that picks a different model for trial
+    questions vs. general explainer questions, insert a new node
+    between build_context and call_claude with conditional edges.
+    """
+    g = StateGraph(WalkthroughState)
+    g.add_node("build_context", build_context)
+    g.add_node("call_claude", call_claude)
+    g.add_node("parse_response", parse_response)
+
+    g.add_edge(START, "build_context")
+    g.add_edge("build_context", "call_claude")
+    g.add_edge("call_claude", "parse_response")
+    g.add_edge("parse_response", END)
+    return g.compile()
+
+
+_GRAPH = None
+
+
+def graph() -> Any:
+    """Lazy-compile the graph once at first use (cheap, but no need to
+    pay the cost at import time when the module is loaded for tests)."""
+    global _GRAPH
+    if _GRAPH is None:
+        _GRAPH = build_graph()
+    return _GRAPH
+
+
+# ----------------------------------------------------------------------
+# Public entrypoint
+# ----------------------------------------------------------------------
+
+
+async def reply(
+    messages: list[dict[str, str]],
+    context: dict[str, Any],
+) -> dict[str, Any]:
+    """Run one turn of the walkthrough conversation through the graph.
+
+    Args:
+        messages: chat history with the latest user turn last.
+        context: structured analysis result + indication. Passed into
+            the system prompt as JSON so the model can reason over it
+            without separate tool calls to fetch it.
+
+    Returns:
+        {
+            "reply": str,
+            "citations": [{url, title}, ...],
+            "followups": [str, ...],
+            "model": str,
+            "duration_ms": int,
+        }
+    """
+    initial: WalkthroughState = {
+        "messages": messages,
+        "context": context,
+    }
+    result = await graph().ainvoke(initial)
+    return {
+        "reply": result.get("reply", ""),
+        "citations": result.get("citations", []),
+        "followups": result.get("followups", []),
+        "model": result.get("model", "unknown"),
+        "duration_ms": result.get("duration_ms", 0),
     }
