@@ -100,10 +100,14 @@ Hard rules:
      redirect those questions back to her oncologist.
   - Don't invent results. If something isn't in the analysis context
      or the web search results, say you don't know.
-  - Translate medical terms on first use ("pathogenic — meaning harmful").
+  - Translate medical terms on first use ("pathogenic, meaning harmful").
   - Short replies. Two short paragraphs is usually enough.
   - When you cite a source, say where it's from (e.g. "according to
      the FDA label for olaparib") so she knows it's real.
+  - DO NOT use any markdown formatting. No **bold**, no *italics*,
+     no # headers, no `code`, no bullet points in the body of your
+     reply. The chat renders text plain, so asterisks would show up
+     as literal characters. Write everything as normal prose.
 
 If the patient asks about something outside her cancer (e.g. a different
 disease, a different drug class), politely note the tool is built for
@@ -324,7 +328,7 @@ def _parse_followups(text: str) -> tuple[str, list[str]]:
     full text + empty list so the user still sees the reply.
     """
     if FOLLOWUPS_MARKER not in text:
-        return text.strip(), []
+        return _strip_markdown(text.strip()), []
     body, _, raw_block = text.partition(FOLLOWUPS_MARKER)
     items: list[str] = []
     for line in raw_block.splitlines():
@@ -336,8 +340,38 @@ def _parse_followups(text: str) -> tuple[str, list[str]]:
         elif len(line) > 2 and line[0].isdigit() and line[1] in (".", ")"):
             line = line[2:].strip()
         if line:
-            items.append(line)
-    return body.strip(), items[:4]
+            items.append(_strip_markdown(line))
+    return _strip_markdown(body.strip()), items[:4]
+
+
+# Bold / italic markers we strip from the visible reply because the
+# chat bubble renders text plain (no markdown), so the literal
+# asterisks would show up to the patient as characters.
+_MARKDOWN_BOLD_RE = None
+_MARKDOWN_ITALIC_RE = None
+
+
+def _strip_markdown(text: str) -> str:
+    """Remove markdown bold/italic markers from text. The chat renders
+    with whitespace-pre-wrap, so anything like **word** would render as
+    literal asterisks. We unwrap them rather than letting them through.
+    """
+    import re
+
+    global _MARKDOWN_BOLD_RE, _MARKDOWN_ITALIC_RE
+    if _MARKDOWN_BOLD_RE is None:
+        # **bold** or __bold__, including across spaces but not newlines.
+        _MARKDOWN_BOLD_RE = re.compile(r"\*\*(.+?)\*\*|__(.+?)__", re.DOTALL)
+        # *italic* or _italic_, only single markers, no newlines, and
+        # only when not adjacent to word chars on the outside (so we
+        # don't munge things like 5*10 = 50 or snake_case identifiers).
+        _MARKDOWN_ITALIC_RE = re.compile(
+            r"(?<![\w*])\*([^*\n]+)\*(?!\w)|(?<![\w_])_([^_\n]+)_(?!\w)"
+        )
+
+    text = _MARKDOWN_BOLD_RE.sub(lambda m: m.group(1) or m.group(2) or "", text)
+    text = _MARKDOWN_ITALIC_RE.sub(lambda m: m.group(1) or m.group(2) or "", text)
+    return text
 
 
 # ----------------------------------------------------------------------
