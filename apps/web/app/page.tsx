@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, Eye, Dna, MessageCircle, Sparkles } from "lucide-react";
+import { ArrowRight, Eye, Dna, MessageCircle } from "lucide-react";
 
 /**
  * Landing page.
@@ -43,10 +43,6 @@ export default function LandingPage() {
         {/* Hero */}
         <section className="flex-1 flex items-center justify-center px-6 py-20 md:py-28">
           <div className="max-w-3xl mx-auto text-center space-y-8">
-            <span className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-white/70 backdrop-blur-sm px-3 py-1 text-xs font-medium tracking-wide text-amber-800 shadow-sm">
-              <Sparkles className="w-3 h-3" aria-hidden />
-              For women navigating cancer treatment
-            </span>
             <h1 className="text-4xl md:text-6xl leading-[1.1] font-semibold tracking-tight">
               Turn your diagnosis into{" "}
               <span

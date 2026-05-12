@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { CheckCircle2, FileUp } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { CheckCircle2, FileUp, Trash2 } from "lucide-react";
 
 import {
   DrugPickerSection,
@@ -11,7 +12,12 @@ import {
   useBCAnalysisForm,
 } from "@/components/BCAnalysisForm";
 import { ResultsReport } from "@/components/ResultsReport";
-import { api, type CtScanResponse } from "@/lib/api";
+import {
+  api,
+  type CtScanResponse,
+  type PatientFullProfile,
+  type SymptomRead,
+} from "@/lib/api";
 import type { AnalysisResult, VariantInput, Zygosity } from "@/lib/bc-types";
 import {
   countSupportedSnps,
@@ -197,6 +203,7 @@ export default function BuildPage() {
             subtitle="Optional. Adds your cancer type so the clinical evidence agent frames its summary for your disease."
           >
             <ProfileCreator
+              activePatientId={profileName ? patientId : null}
               activeName={profileName}
               activeIndication={profileIndication}
               onCreated={(p) => {
@@ -343,11 +350,13 @@ function StepNumber({ n }: { n: number }) {
  * agent so its synthesis is framed for the correct disease.
  */
 function ProfileCreator({
+  activePatientId,
   activeName,
   activeIndication,
   onCreated,
   onClear,
 }: {
+  activePatientId: string | null;
   activeName: string | null;
   activeIndication: string | null;
   onCreated: (p: { id: string; name: string; indication: string }) => void;
@@ -359,24 +368,27 @@ function ProfileCreator({
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  if (activeName) {
+  if (activeName && activePatientId) {
     return (
-      <div className="rounded-xl border bg-amber-50/60 border-amber-200 p-4 flex items-center justify-between gap-3 flex-wrap">
-        <div className="text-sm leading-snug">
-          <div className="font-medium">{activeName}</div>
-          {activeIndication ? (
-            <div className="text-xs text-muted-foreground">
-              Cancer type: {activeIndication}
-            </div>
-          ) : null}
+      <div className="space-y-3">
+        <div className="rounded-xl border bg-amber-50/60 border-amber-200 p-4 flex items-center justify-between gap-3 flex-wrap">
+          <div className="text-sm leading-snug">
+            <div className="font-medium">{activeName}</div>
+            {activeIndication ? (
+              <div className="text-xs text-muted-foreground">
+                Cancer type: {activeIndication}
+              </div>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            onClick={onClear}
+            className="text-xs text-muted-foreground hover:text-foreground underline"
+          >
+            Clear profile
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={onClear}
-          className="text-xs text-muted-foreground hover:text-foreground underline"
-        >
-          Clear profile
-        </button>
+        <SymptomsSection patientId={activePatientId} />
       </div>
     );
   }
@@ -860,5 +872,187 @@ function CtScanSummary({ resp: _resp }: { resp: CtScanResponse }) {
         Ready for the radiogenomics model.
       </span>
     </div>
+  );
+}
+
+/**
+ * Symptoms list + add form for the active profile. Reads the patient's
+ * symptoms via getPatientProfile, posts new ones via addSymptom, and
+ * invalidates the cache so the list refreshes on save. Lives inside the
+ * ProfileCreator's post-create state so the user can capture symptoms
+ * without leaving /build to go to /patient/<id>.
+ */
+function SymptomsSection({ patientId }: { patientId: string }) {
+  const qc = useQueryClient();
+  const profile = useQuery<PatientFullProfile>({
+    queryKey: ["patient", patientId],
+    queryFn: () => api.getPatientProfile(patientId),
+    enabled: !!patientId,
+  });
+
+  const [label, setLabel] = useState("");
+  const [occurred, setOccurred] = useState(() =>
+    new Date().toISOString().slice(0, 10),
+  );
+  const [severity, setSeverity] = useState(5);
+  const [notes, setNotes] = useState("");
+
+  const add = useMutation({
+    mutationFn: () =>
+      api.addSymptom(patientId, {
+        occurred_on: occurred,
+        label: label.trim(),
+        severity,
+        notes: notes.trim() || null,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["patient", patientId] });
+      setLabel("");
+      setNotes("");
+      setSeverity(5);
+    },
+  });
+
+  const remove = useMutation({
+    mutationFn: (id: number) => api.deleteSymptom(patientId, id),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["patient", patientId] }),
+  });
+
+  const symptoms = profile.data?.symptoms ?? [];
+
+  return (
+    <div className="rounded-xl border bg-white p-4 space-y-3">
+      <div className="flex items-baseline justify-between">
+        <h3 className="text-sm font-semibold">Symptoms</h3>
+        <span className="text-[11px] text-muted-foreground">
+          {symptoms.length} logged
+        </span>
+      </div>
+
+      {symptoms.length > 0 ? (
+        <ul className="space-y-1.5 max-h-48 overflow-y-auto">
+          {symptoms.map((s) => (
+            <SymptomRow
+              key={s.id}
+              sym={s}
+              onRemove={() => remove.mutate(s.id)}
+              removing={remove.isPending}
+            />
+          ))}
+        </ul>
+      ) : (
+        <p className="text-xs text-muted-foreground italic">
+          No symptoms yet. Add one below.
+        </p>
+      )}
+
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (label.trim()) add.mutate();
+        }}
+        className="space-y-2 pt-2 border-t"
+      >
+        <input
+          type="text"
+          value={label}
+          onChange={(e) => setLabel(e.target.value)}
+          placeholder="What happened? (e.g. fatigue, nausea)"
+          className="w-full rounded-lg border px-3 py-2 text-sm"
+        />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <label className="text-xs text-muted-foreground space-y-1">
+            <span className="uppercase tracking-wide font-semibold">Date</span>
+            <input
+              type="date"
+              value={occurred}
+              onChange={(e) => setOccurred(e.target.value)}
+              className="w-full rounded-lg border px-2 py-1.5 text-sm"
+            />
+          </label>
+          <label className="text-xs text-muted-foreground space-y-1">
+            <span className="uppercase tracking-wide font-semibold">
+              Severity ({severity}/10)
+            </span>
+            <input
+              type="range"
+              min={1}
+              max={10}
+              value={severity}
+              onChange={(e) => setSeverity(Number(e.target.value))}
+              className="w-full"
+            />
+          </label>
+        </div>
+        <input
+          type="text"
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          placeholder="Notes (optional)"
+          className="w-full rounded-lg border px-3 py-2 text-sm"
+        />
+        {add.isError ? (
+          <p className="text-xs text-red-600">
+            Could not save: {(add.error as Error).message}
+          </p>
+        ) : null}
+        <button
+          type="submit"
+          disabled={!label.trim() || add.isPending}
+          className="rounded-lg bg-primary text-primary-foreground px-3 py-1.5 text-xs font-medium hover:opacity-90 disabled:opacity-60"
+        >
+          {add.isPending ? "Saving..." : "Add symptom"}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+function SymptomRow({
+  sym,
+  onRemove,
+  removing,
+}: {
+  sym: SymptomRead;
+  onRemove: () => void;
+  removing: boolean;
+}) {
+  const tone =
+    sym.severity >= 7
+      ? "bg-red-100 text-red-800"
+      : sym.severity >= 4
+        ? "bg-amber-100 text-amber-800"
+        : "bg-emerald-100 text-emerald-800";
+  return (
+    <li className="flex items-center justify-between gap-2 rounded-lg border bg-amber-50/30 px-3 py-1.5">
+      <div className="min-w-0 flex-1">
+        <div className="flex items-baseline gap-2 flex-wrap">
+          <span className="text-sm font-medium truncate">{sym.label}</span>
+          <span
+            className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${tone}`}
+          >
+            {sym.severity}/10
+          </span>
+          <span className="text-[11px] text-muted-foreground">
+            {sym.occurred_on}
+          </span>
+        </div>
+        {sym.notes ? (
+          <p className="text-[11px] text-muted-foreground truncate">
+            {sym.notes}
+          </p>
+        ) : null}
+      </div>
+      <button
+        type="button"
+        onClick={onRemove}
+        disabled={removing}
+        className="p-1 rounded text-muted-foreground hover:text-red-600 disabled:opacity-50"
+        aria-label="Remove symptom"
+      >
+        <Trash2 className="w-3.5 h-3.5" aria-hidden />
+      </button>
+    </li>
   );
 }
